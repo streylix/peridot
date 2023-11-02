@@ -1,6 +1,4 @@
 body {
-    display: flex;
-    justify-content: center;
     align-items: center;
 }
 
@@ -9,6 +7,10 @@ body {
     width: 100%;
     max-width: 1200px;
     padding-bottom: 2vw;
+}
+
+body header {
+    text-align: center !important;
 }
 
 blockquote {
