@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notes App</title>
+    <link rel="stylesheet" href="../assets/styles/app.css">
+
+</head>
+<body>
+    <!-- Top Bar -->
+    <header>
+        <div class="top-bar">
+            <button type="button" id="move-menu" class="menu-btn">☰</button>
+            <span>mynotes.io</span>
+            <a href="../index.html">sign out</a>
+        </div>
+    </header>
+    <div class="main-container">
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar" >
+            <div class="search">
+                <input type="search" id="note-search" placeholder="Search...">
+            </div>
+            <button type="button" class="new-note-btn">+ New Note</button>
+            <ul class="note-list">
+            </ul>
+            <button type="button" id="debug-button">Clear All Notes (Debug)</button>
+        </div>
+        <!-- Main Content -->
+        <div class="main-content" id="main-content">
+            <div class="note-toolbar">
+                <button type="button" id="blob-export-btn">⬇️</button>
+                <button type="button" id="gif-note-btn">🎁</button>
+                <button type="button" disabled id="lock-note-btn">🔐</button>
+                <button type="button" id="embed-link-btn">🔗</button>
+                <button type="button" id="pin-note-btn">📌</button>
+                <button type="button" id="delete-selected-note-btn">🗑</button>
+            </div>
+            <div class="editable" id="editable"
+            placeholder="Select a note to start editing...">
+        </div>
+    </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
