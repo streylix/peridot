@@ -15,7 +15,7 @@ body {
     margin: auto;
 }
 
-.main-title {
+.main-title h1 {
     padding-top: 3vw;
     font-size: clamp(2.5vw, 7.5vw, 144px);
     font-weight: bold;
