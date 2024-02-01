@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>343 Final</title>
+    <style>
+        * {
+            color: #450084;
+        }
+
+        @media (max-width: 256px){
+            *{
+                background-color: #450084;
+                color: #8EE4d7;
+            }
+
+        }
+    </style>
+</head>
+<body>
+    <button type="button" id="button">Begin</button>
+    <ol id="result">
+
+    </ol>
+    <script>
+        document.getElementById('button').addEventListener('click', async function(){
+            const queryResults = await (await getQuery()).json();
+
+            for (let i = 0; i < queryResults.length; i++){
+                const list = document.getElementById('result');
+                const entry = document.createElement('li');
+
+                // 1
+                const content = document.createElement('h2');
+
+                // 2
+                const figure = document.createElement('figure');
+                const image = document.createElement('img');
+                const figcaption = document.createElement('figcaption');
+
+                // 3
+                const definitions = document.createElement('dl');
+                for (let j = 0; j < 3; j++){
+                    const dTerm = document.createElement('dt');
+                    const dDesc = document.createElement('dd');
+                    let dQuery = "";
+
+                    if (j == 0) {
+                        dTerm.textContent = "id";
+                        dQuery = queryResults[i].id;
+                    }
+                    else if (j == 1){ 
+                        dTerm.textContent = "description";
+                        dQuery = queryResults[i].description;
+                    }
+                    dDesc.textContent = dQuery;
+                    if (j == 2){
+                        dTerm.textContent = "tags";
+                        const uList = document.createElement('ul');
+                        
+                        for (let k = 0; k < queryResults[i].tags.length; k++){
+                            let uEntry = document.createElement('li');
+                            uEntry.textContent = queryResults[i].tags[k];
+                            uList.appendChild(uEntry);
+                        }
+
+                        dQuery = uList;
+                        dDesc.textContent = "";
+                        dDesc.appendChild(dQuery);
+                    }
+                    
+                    definitions.appendChild(dTerm);
+                    definitions.appendChild(dDesc);
+                }
+
+
+                let NUM = queryResults[i].prereq - 1;
+                
+                if (NUM === 346){
+                    NUM++;
+                }
+
+                content.textContent = queryResults[i].name;
+
+                image.src = `https://picsum.photos/id/${NUM}/200/200`;
+                figcaption.textContent = `image thanks to picsum ${NUM}`;
+
+                figure.appendChild(image);
+                figure.appendChild(figcaption);
+
+                entry.appendChild(content);
+                entry.appendChild(figure);
+                entry.appendChild(definitions);
+
+                list.appendChild(entry);
+            }
+        });
+
+        async function getQuery(){
+            return fetch('https://w3.cs.jmu.edu/stewarmc/343/tmp/projects.json');
+        }
+
+        async function addDefinitions(){
+            
+        }
+    </script>
+</body>
+</html>

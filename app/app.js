@@ -71,6 +71,42 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+$(document).ready(function() {
+    // Load dark mode from local storage
+    loadDarkModePreference();
+
+    // Toggle dark mode on switch change
+    $('#darkModeSwitch').on('change', function() {
+        $('body').toggleClass('dark-mode');
+        updateDarkModePreference();
+    });
+
+    // Sign out button in settings modal
+    $('#signOutButton').on('click', function() {
+        if (confirm('Are you sure?')) {
+            // Perform sign out actions here
+            console.log('Signed out');
+            // Redirect or refresh page after sign out
+            // window.location.href = 'sign-out-page-url';
+        }
+    });
+});
+
+function updateDarkModePreference() {
+    const isDarkMode = $('body').hasClass('dark-mode');
+    $('#darkModeSwitch').prop('checked', isDarkMode);
+    localStorage.setItem('darkMode', isDarkMode ? 'true' : 'false');
+}
+
+function loadDarkModePreference() {
+    const isDarkMode = localStorage.getItem('darkMode') === 'true';
+    $('#darkModeSwitch').prop('checked', isDarkMode);
+    if (isDarkMode) {
+        $('body').addClass('dark-mode');
+    }
+}
+
+
 // Everything else
 document.addEventListener('DOMContentLoaded', function() {
     // variables for buttons before I just decided to start being lazy about it
@@ -79,7 +115,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const noteContent = document.querySelector('.main-content .editable');
     const debugButton = document.getElementById('debug-button');
 
-    let passwordEntered = ''; // for content updating.. do I even use this?
     let noteCounter = JSON.parse(localStorage.getItem('noteCounter')) || 1; // Counting notes for new note incrementation
     let notesArray = JSON.parse(localStorage.getItem('notes')) || []; // for listing the notes
     let selectedNoteIndex = -1; // for universal note indexing
@@ -112,6 +147,7 @@ document.addEventListener('DOMContentLoaded', function() {
             saveNotes();
         }
     }
+
 
     // Search for a rhyme using the users query
     async function searchForRhymes(query){
@@ -149,7 +185,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load existing notes from local storage
     notesArray.forEach((note, index) => addNewNoteToList(note.title, index));
     if (notesArray.length > 0) {
-        selectNote(0);
+        let i = 0;
+        while (notesArray[i].locked){
+            i++;
+        }
+        selectNote(i);
     }
 
     // Delete note button functionality
@@ -240,6 +280,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Encrypt the note contents of locked note
     async function encryptNote(note, password){
+        console.log(`password: ${password}`);
+        console.log(`content: ${note.content}`);
+        console.log(`encrypted content: ${note.encryptedContent}`);
         const salt = window.crypto.getRandomValues(new Uint8Array(16));
         const iterations = 100;
         const key = await generateKey(password, salt, iterations);
@@ -258,17 +301,25 @@ document.addEventListener('DOMContentLoaded', function() {
         note.content = '';
         note.keyParams = { salt: Array.from(salt), iterations: iterations };
 
-        await rebuildNotesList();
-        await saveNotes();
+        console.log(`contentafter: ${note.content}`);
+        console.log(`encrypted content after: ${note.encryptedContent}`);
+
+        rebuildNotesList();
+        saveNotes();
     }
 
     // Decrypt the note contents of locked note
     async function decryptNote(note, password, temporary = false){
+        console.log(`password: ${password}`);
         const salt = new Uint8Array(note.keyParams.salt);
         const iterations = note.keyParams.iterations;
         const iv = new Uint8Array(note.iv);
 
         const key = await generateKey(password, salt, iterations);
+        console.log(salt);
+        console.log(note.keyParams.salt);
+        console.log(iterations);
+        console.log(note.keyParams.iterations);
         const decoder = new TextDecoder();
         const encryptedContent = new Uint8Array(note.encryptedContent);
 
@@ -281,9 +332,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // decrypt using subtle
         try {
+            console.log('trying')
             const decrypedContent = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv },
             key, encryptedContent
             );
+            console.log('passed')
 
         // decrypt the notes
         note.content = decoder.decode(decrypedContent);
@@ -327,12 +380,6 @@ document.addEventListener('DOMContentLoaded', function() {
             // Count the number of pinned notes
             const pinnedNotesCount = notesArray.reduce((count, note) => count + (note.pinned ? 1 : 0), 0);
 
-            if (pinnedNotesCount > 3) {
-                // Can only have 3 notes pinned at a time
-                noteToPin.pinned = false;
-                alert('You can only pin up to 3 notes.');
-            }
-
             rebuildNotesList(); // Rebuild list
             saveNotes();
         }
@@ -343,7 +390,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const noteTitle = getUniqueNoteTitle();
         const newNote = { id: Date.now(), title: noteTitle, content: '' ,
         iv: null, encryptedContent: null,
-        locked: false, keyParams: { salt: null, iterations: 100000 }};
+        locked: false, keyParams: { salt: null, iterations: 100000 }, tempPass: ''};
 
         // Add new note after pinned notes
         const firstUnpinnedIndex = notesArray.findIndex(note => !note.pinned);
@@ -391,7 +438,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         listItem.addEventListener('click', async function() {
-            await reEncryptNoteContent(notesArray[index], passwordEntered)
             await selectNote(index);
         });
         noteList.appendChild(listItem);
@@ -405,7 +451,9 @@ document.addEventListener('DOMContentLoaded', function() {
         rebuildNotesList();
 
         if (notesArray.length > 0) {
+            console.log("selecting note");
             selectNote(Math.min(index, notesArray.length - 1)); // Select an appropriate note
+            console.log(Math.min(index, notesArray.length - 1));
         } else {
             noteContent.innerHTML = '';
             selectedNoteIndex = -1;
@@ -421,6 +469,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Selecting a note for configuration
     async function selectNote(index) {
+        document.getElementById("main-content").style.visibility= "visible";
+        const prevNote = notesArray[selectedNoteIndex];
+
+        // User selected the same note
+        if (selectedNoteIndex == index){
+            return;
+        }
+
         const notes = document.querySelectorAll('.note-item');
 
         let isUnlocked = true;
@@ -428,23 +484,33 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Check for locked note
         if (note.locked) {
+            console.log(note.tempPass);
             let password = prompt("Enter password to unlock this note:");
             if (password) {
                 isUnlocked = await decryptNote(note, password, true);
-                passwordEntered = password;
+                console.log(password);
+                note.tempPass = password;
+                console.log(note.tempPass);
             } else {
+                note.tempPass = '';
                 isUnlocked = false;
             }
         }
 
-        notes.forEach(note => note.classList.remove('active'));
-        notes[index].classList.add('active');
-        selectedNoteIndex = index;
-        selectedId = notesArray[index].id;
-
-
-
         if (isUnlocked){
+            // Delete temppass after note usage
+            if (selectedNoteIndex != -1){
+                if (prevNote.locked){
+                    prevNote.tempPass = '';
+                }
+                saveNotes()
+            }
+
+            notes.forEach(note => note.classList.remove('active'));
+            notes[index].classList.add('active');
+            selectedNoteIndex = index;
+            selectedId = notesArray[index].id;
+
             // Clear note content
             noteContent.innerHTML = '';
 
@@ -507,7 +573,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const contentDiv = noteContent.querySelector('div');
             if (contentDiv) {
                 notesArray[selectedNoteIndex].content = contentDiv.innerHTML;
-                reEncryptNoteContent(notesArray[selectedNoteIndex], passwordEntered);
+                reEncryptNoteContent(notesArray[selectedNoteIndex], notesArray[selectedNoteIndex].tempPass);
                 moveNoteToTop(selectedNoteIndex);
                 saveNotes();
             }
@@ -524,13 +590,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // For saving the notes to localStorage
     function saveNotes() {
-        localStorage.setItem('notes', JSON.stringify(notesArray));
-        localStorage.setItem('noteCounter', noteCounter.toString());
+        if (notesArray.length > 0){
+            document.getElementById("main-content").style.visibility= "visible";
+            localStorage.setItem('notes', JSON.stringify(notesArray));
+            localStorage.setItem('noteCounter', noteCounter.toString());
+        } else {
+            document.getElementById("main-content").style.visibility= "hidden";
+        }
     }
 
     // Startup selection
     if (notesArray.length > 0) {
         selectNote(0); // Might change to where it remembers your last note but too late for that rn
+    } else {
+        console.log("no notes");
+        document.getElementById("main-content").style.visibility= "hidden";
     }
 
     // ----=====SEARCH FUNCTIONALITY====----
@@ -590,8 +664,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const note = notesArray[index];
         notesArray.splice(index, 1);
         const firstUnpinnedIndex = notesArray.findIndex(note => !note.pinned);
-        if (firstUnpinnedIndex === -1 || note.pinned) {
-            notesArray.push(note);
+        if (note.pinned) {
+            notesArray.splice(0, 0, note);
         } else {
             notesArray.splice(firstUnpinnedIndex, 0, note);
         }

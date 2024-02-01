@@ -19,6 +19,10 @@ body {
 #move-menu{
     font-size: 24px;
     padding: 3px;
+    margin-left: 10px;
+    margin-bottom: 5px;
+    border: none;
+
 }
 
 /* Sidebar styles */
@@ -34,7 +38,8 @@ body {
 /* Top bar styles */
 .top-bar {
     background-color: #ddd;
-    padding: 10px;
+    height: 50px;
+    padding: 5px, 10px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -43,7 +48,7 @@ body {
 /* Main content area styles */
 .main-content {
     flex-grow: 2;
-    padding: 5px;
+    padding: 0px 5px 5px 5px;
     background-color: #fff;
     transition: margin-left .1s ease-in-out;
 }
@@ -108,6 +113,14 @@ body {
     height: 93%;
 }
 
+#inner-note:focus{
+    outline: none;
+}
+
+.editable h1:focus{
+    outline: none;
+}
+
 /* Styles for note content */
 .editable div {
     flex: 1;
@@ -127,6 +140,13 @@ body {
     color: #888;
 }
 
+/* Adjust the search box size */
+.sidebar .search input[type="search"] {
+    width: 100%; /* or a specific pixel value smaller than the original */
+    height: 75%;
+    padding: 5px; /* Adjust padding to reduce size */
+}
+
 .note-item.active {
     background-color: #add8e6;
 }
@@ -141,7 +161,6 @@ body {
 .note-toolbar {
     display: flex;
     justify-content: flex-end;
-    padding: 8px;
     border-bottom: 1px solid #ccc;
 }
 
@@ -149,7 +168,7 @@ body {
     background-color: transparent;
     border: none;
     cursor: pointer;
-    font-size: 32px;
+    font-size: 24px;
     margin-left: 20px;
 }
 
@@ -186,9 +205,10 @@ body {
 /* Mobile styles */
 @media (max-width: 600px) {
 
-/* Adjust styles for the top bar */
+/* Top bar adjustments for mobile */
 .top-bar {
-    height: 50px;
+    height: 40px; /* Even thinner on mobile */
+    padding: 2px 5px;
 }
 
 /* Adjust sidebar styles for mobile */
@@ -199,6 +219,17 @@ body {
     width: 100vw;
     transform: translateX(-100%);
     transition: transform 0.1s ease-in-out;
+}
+
+/* Search box adjustments for mobile */
+.sidebar .search input[type="search"] {
+    padding: 2px 5px; /* Further reduce padding on smaller screens */
+}
+
+/* Note settings button adjustments for mobile */
+.note-toolbar button {
+    font-size: 14px; /* Smaller font size on mobile */
+    padding: 2px 5px;
 }
 
 
@@ -232,4 +263,94 @@ body {
 /* Sidebar scrolling */
 .sidebar.active {
 transform: translateX(0);
+}
+
+/* Dark mode styles adjustments */
+body.dark-mode {
+    background-color: #1e1e1e; /* Slightly lighter than pitch black for the body */
+    color: #c7c7c7; /* Lighter text for better readability */
+}
+
+.dark-mode .sidebar {
+    background-color: #252526; /* Dark grey similar to VS Code sidebar */
+    border-right: 1px solid #3c3c3c; /* Distinct border color */
+}
+
+.dark-mode .top-bar {
+    background-color: #333333; /* Slightly lighter dark for the top bar */
+    border-bottom: 1px solid #3c3c3c; /* Distinct border color */
+}
+
+.dark-mode .main-content {
+    background-color: #1e1e1e; /* Same as body to maintain consistency */
+    border-left: 1px solid #3c3c3c; /* Distinct border color for separation */
+}
+
+.dark-mode .note-list li {
+    background-color: #2d2d2d; /* Darker background for list items */
+    color: #c7c7c7; /* Lighter text for better readability */
+    border-bottom: 1px solid #3c3c3c; /* Distinct border color */
+}
+
+.dark-mode .note-list li:hover {
+    background-color: #3c3c3c; /* Hover color for list items */
+}
+
+.dark-mode .note-item.active {
+    background-color: #007acc; /* Vibrant selection color similar to VS Code */
+    color: #ffffff; /* White text for selected item */
+}
+
+.dark-mode .editable {
+    background-color: #1e1e1e; /* Same as body to maintain consistency */
+    border-color: #1e1e1e;
+    color: #c7c7c7; /* Lighter text for better readability */
+}
+
+.dark-mode .editable[contenteditable="true"]:empty:before {
+    color: #555; /* Placeholder color */
+}
+
+/* Adjust search input, new note, and debug button styles for dark mode */
+.dark-mode .search input, .dark-mode .new-note-btn, .dark-mode #debug-button {
+    background-color: #333333; /* Dark background for inputs and buttons */
+    color: #c7c7c7; /* Lighter text for better readability */
+    border: 1px solid #3c3c3c; /* Distinct border color */
+}
+
+/* Adjust focus color for inputs and buttons */
+.dark-mode .search input:focus, .dark-mode .new-note-btn:focus, .dark-mode #debug-button:focus {
+    outline-color: #007acc; /* Vibrant focus color similar to VS Code */
+}
+
+/* Update the selected note outline */
+.dark-mode .note-item.active {
+    border: 1px solid #007acc; /* Vibrant blue border for the selected note */
+}
+
+/* Update the list button to be visible in dark mode */
+.dark-mode .menu-btn {
+    color: #c7c7c7; /* Lighter color for better visibility */
+    background-color: #333333; /* Dark background to match the dark mode theme */
+}
+
+/* Update the 'sign out' button to bright purple when dark mode is enabled */
+.dark-mode .top-bar a {
+    color: #7d5b99; /* Bright purple color for better readability */
+}
+
+.dark-mode .note-toolbar{
+    border-color: #2d2d2d;
+}
+
+.dark-mode .modal-content{
+    background-color: #1e1e1e;
+}
+
+.dark-mode .modal-header, .dark-mode .modal-footer{
+    border-color: #252526;
+}
+
+.dark-mode .modal-content span{
+    color: #c7c7c7;
 }
