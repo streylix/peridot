@@ -1,7 +1,0 @@
-❌ Notes that are locked fail to re-encrypt images and gifs
-❌ When deleting a note, it fails to move from the deleted note to another
-❌ If the note at the top of the list is locked, the page will be blocked with the prompt asking for the note's password upon revisiting the page
-❌ Textarea expands horizontally if window is not 100% expanded and user enters too much text
-❌ Vertical spacing is expanded when resizing the window on notes with embedded images
-❌ List of notes when closed plays the animation of it closing when refreshing the page
-❌ Settings modal is poorly styled
