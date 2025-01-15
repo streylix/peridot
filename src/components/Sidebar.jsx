@@ -94,9 +94,6 @@ function Sidebar({ selectedId, onNoteSelect }) {
     <>
       <div className="sidebar" id="sidebar">
         <div className="search">
-          <label htmlFor="note-search">
-            <Search size={24} />
-          </label>
           <input
             type="search"
             id="note-search"
@@ -104,36 +101,36 @@ function Sidebar({ selectedId, onNoteSelect }) {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+          <button 
+            type="button" 
+            className="new-note-btn"
+            onClick={createNewNote}
+            title="New Note"
+          >
+            ✚
+          </button>
         </div>
-        
-        <button 
-          type="button" 
-          className="new-note-btn"
-          onClick={createNewNote}
-        >
-          + New Note
-        </button>
 
         <ul className="note-list">
-          {filteredNotes.map(note => (
-            <li
-              key={note.id}
-              className={`note-item ${note.id === selectedId ? 'active' : ''}`}
-              onClick={() => onNoteSelect(note.id)}
+        {filteredNotes.map(note => (
+          <li
+            key={note.id}
+            className={`note-item ${note.id === selectedId ? 'active' : ''}`}
+            onClick={() => onNoteSelect(note.id)}
+          >
+            {note.pinned && <span className="pin-indicator">📌</span>}
+            <span className="note-title">{note.title}</span>
+            <button
+              className="pin-button"
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePin(note.id);
+              }}
             >
-              <span>{note.title}</span>
-              {note.pinned && <span className="pin-indicator">📌</span>}
-              <button
-                className="pin-button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  togglePin(note.id);
-                }}
-              >
-                {note.pinned ? '📌' : '📍'}
-              </button>
-            </li>
-          ))}
+              {note.pinned ? '📌' : '📍'}
+            </button>
+          </li>
+        ))}
         </ul>
 
         <button 

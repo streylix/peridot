@@ -11,7 +11,7 @@ function SettingsModal({ isOpen, onClose }) {
       <div className="modal-dialog">
         <div className="modal-content">
           <div className="modal-header">
-            <h5 className="modal-title">Settings</h5>
+            <h5 className="modal-title">Other Settings</h5>
             <button 
               type="button" 
               className="close" 
@@ -21,28 +21,7 @@ function SettingsModal({ isOpen, onClose }) {
             </button>
           </div>
           <div className="modal-body">
-            <ul className="nav nav-pills flex-column">
-              <li className="nav-item">
-                <a className="nav-link active">Appearance</a>
-              </li>
-            </ul>
-            <div className="tab-content">
-              <div className="tab-pane fade show active">
-                <div className="custom-control custom-switch">
-                  <input 
-                    type="checkbox" 
-                    className="custom-control-input" 
-                    id="darkModeSwitch" 
-                  />
-                  <label 
-                    className="custom-control-label" 
-                    htmlFor="darkModeSwitch"
-                  >
-                    Dark Mode
-                  </label>
-                </div>
-              </div>
-            </div>
+            <p>More settings coming soon!</p>
           </div>
           <div className="modal-footer">
             <button 

@@ -1,6 +1,6 @@
 import React from 'react'
 
-function Header({ onSettingsClick }) {
+function Header({ onSettingsClick, onDarkModeClick }) {
   const toggleSidebar = () => {
     const sidebar = document.querySelector('.sidebar');
     const mainContent = document.querySelector('.main-content');
@@ -15,21 +15,23 @@ function Header({ onSettingsClick }) {
     <header>
       <div className="top-bar">
         <button 
-        type="button"
-        id="move-menu"
-        className="menu-btn"
-        onClick={toggleSidebar}
+          type="button"
+          id="move-menu"
+          className="menu-btn"
+          onClick={toggleSidebar}
         >
           ☰
         </button>
         <h1>peridot</h1>
-        <button 
-          type="button" 
-          className="btn btn-settings"
-          onClick={onSettingsClick}
-        >
-          ⚙️
-        </button>
+        <div className="header-buttons">
+          <button 
+            type="button" 
+            className="btn btn-settings"
+            onClick={onSettingsClick}
+          >
+            ⚙️
+          </button>
+        </div>
       </div>
     </header>
   )

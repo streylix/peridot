@@ -1,0 +1,115 @@
+body.dark-mode {
+    background-color: #1e1e1e;
+    color: #c7c7c7;
+  }
+  
+  .dark-mode .sidebar {
+    background-color: #252526;
+    border-right: 1px solid #3c3c3c;
+  }
+  
+  .dark-mode .top-bar {
+    background-color: #333333;
+    border-bottom: 1px solid #3c3c3c;
+  }
+  
+  .dark-mode .main-content {
+    background-color: #1e1e1e;
+    border-left: 1px solid #3c3c3c;
+  }
+  
+  .dark-mode .editable {
+    border: 1px solid rgba(204, 204, 204, 0.15);
+  }
+  
+  .dark-mode .note-list li {
+    background-color: #2d2d2d;
+    color: #c7c7c7;
+    border-bottom: 1px solid #3c3c3c;
+  }
+  
+  .dark-mode .note-list li:hover {
+    background-color: #3c3c3c;
+  }
+  
+  .dark-mode .note-item.active {
+    background-color: #062c06;
+    border-bottom: 1px solid #083d08;
+    color: #ffffff;
+  }
+  
+  .dark-mode .editable {
+    background-color: #1e1e1e;
+    border-color: 1px solid rgba(204, 204, 204, 0.15);
+    color: #c7c7c7;
+  }
+  
+  .dark-mode .editable[contenteditable="true"]:empty:before {
+    color: #555;
+  }
+  
+  .dark-mode .search input,
+  .dark-mode .new-note-btn,
+  .dark-mode #debug-button {
+    background-color: #333333;
+    color: #c7c7c7;
+    border: 1px solid #3c3c3c;
+  }
+  
+  .dark-mode .search input:focus,
+  .dark-mode .new-note-btn:focus,
+  .dark-mode #debug-button:focus {
+    outline-color: #007acc;
+  }
+  
+  .dark-mode .menu-btn {
+    color: #c7c7c7;
+    background-color: #333333;
+  }
+  
+  .dark-mode .top-bar a {
+    color: #7d5b99;
+  }
+  
+  .dark-mode .note-toolbar {
+    border-color: #2d2d2d;
+  }
+  
+  .dark-mode .modal-content {
+    background-color: #1e1e1e;
+  }
+  
+  .dark-mode .modal-header,
+  .dark-mode .modal-footer {
+    border-color: #252526;
+  }
+  
+  .dark-mode .modal-content span {
+    color: #c7c7c7;
+  }
+  
+  .dark-mode .dark-mode-modal-content {
+    background-color: #2d2d2d;
+    color: #c7c7c7;
+  }
+  
+  .dark-mode .dark-mode-modal-close {
+    color: #c7c7c7;
+  }
+  
+  .dark-mode .slider {
+    background-color: #555;
+  }
+  
+  .dark-mode .slider:before {
+    background-color: #f1f1f1;
+  }
+  
+  .dark-mode .btn-danger {
+    background-color: #721c24;
+    color: #f8d7da;
+  }
+
+  .dark-mode .settings-section {
+    border-color: #3c3c3c;
+  }
