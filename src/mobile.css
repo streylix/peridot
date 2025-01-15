@@ -1,0 +1,70 @@
+/* Mobile styles - All styles under 600px viewport width */
+@media (max-width: 600px) {
+    /* Top bar adjustments */
+    .top-bar {
+      height: 40px;
+      padding: 2px 5px;
+    }
+  
+    /* Sidebar adjustments */
+    .sidebar {
+      position: fixed;
+      height: calc(100vh - 45px);
+      top: 45px;
+      left: 0;
+      z-index: 1000;
+      width: 100vw;
+    }
+  
+    /* Search box adjustments */
+    .sidebar .search input[type="search"] {
+      padding: 2px 5px;
+    }
+  
+    /* Note toolbar adjustments */
+    .note-toolbar button {
+      font-size: 14px;
+      padding: 2px 5px;
+    }
+  
+    /* Main content adjustments */
+    .main-content {
+      width: 100%;
+      max-width: 100%;
+      padding-left: 5px;
+      padding-right: 5px;
+    }
+  
+    /* Editable area adjustments */
+    .editable {
+      height: calc(100% - 35px);
+    }
+  
+    .editable h1 {
+      margin-bottom: 10px;
+    }
+  
+    .editable div {
+      height: calc(100% - 12vh);
+      overflow-y: auto;
+    }
+  
+    /* Animation classes */
+    .animate-right {
+      animation: moveRight .1s forwards ease-in-out;
+    }
+  
+    .animate-left {
+      animation: moveLeft .1s forwards ease-in-out;
+    }
+  
+    @keyframes moveRight {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(0%); }
+    }
+  
+    @keyframes moveLeft {
+      from { transform: translateX(0%); }
+      to { transform: translateX(-100%); }
+    }
+  }
