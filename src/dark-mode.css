@@ -15,11 +15,10 @@ body.dark-mode {
   
   .dark-mode .main-content {
     background-color: #1e1e1e;
-    border-left: 1px solid #3c3c3c;
   }
-  
-  .dark-mode .editable {
-    border: 1px solid rgba(204, 204, 204, 0.15);
+
+  .dark-mode #move-menu{
+    background-color: #333333;
   }
   
   .dark-mode .note-list li {
@@ -112,4 +111,8 @@ body.dark-mode {
 
   .dark-mode .settings-section {
     border-color: #3c3c3c;
+  }
+
+  .dark-mode #settings{
+    background-color: #333;
   }

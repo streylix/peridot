@@ -1,7 +1,7 @@
 // components/Sidebar.jsx
 import React, { useState, useEffect } from 'react';
-import { Search } from 'lucide-react';
 import MainContent from './MainContent';
+import logo from '../assets/logo.png';
 
 function Sidebar({ selectedId, onNoteSelect }) {
   const [notes, setNotes] = useState(() => {
@@ -93,6 +93,10 @@ function Sidebar({ selectedId, onNoteSelect }) {
   return (
     <>
       <div className="sidebar" id="sidebar">
+        <div className="logo">
+          <img src={logo} alt="biz logo" width="50" height="50"></img>
+          <h1>peridot.</h1>
+        </div>
         <div className="search">
           <input
             type="search"

@@ -1,4 +1,3 @@
-// components/MainContent.jsx
 import React, { useRef, useEffect } from 'react';
 
 function MainContent({ note, onUpdateNote }) {
@@ -44,7 +43,7 @@ function MainContent({ note, onUpdateNote }) {
 
   return (
     <div className="main-content">
-      <div className="editable" style={{ height: 'calc(100vh - 85px)' }}>
+      <div className="editable" style={{ height: '100%' }}>
         <h1
           ref={titleRef}
           contentEditable

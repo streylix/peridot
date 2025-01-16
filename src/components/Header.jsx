@@ -4,10 +4,14 @@ function Header({ onSettingsClick, onDarkModeClick }) {
   const toggleSidebar = () => {
     const sidebar = document.querySelector('.sidebar');
     const mainContent = document.querySelector('.main-content');
+    const topBar = document.querySelector('.top-bar');
+    const header = document.querySelector('header')
     
-    if (sidebar && mainContent) {
+    if (sidebar && mainContent && header && topBar) {
       sidebar.classList.toggle('hidden');
       mainContent.classList.toggle('full-width');
+      topBar.classList.toggle('full-width');
+      header.classList.toggle('full-width')
     }
   };
 
@@ -22,10 +26,10 @@ function Header({ onSettingsClick, onDarkModeClick }) {
         >
           ☰
         </button>
-        <h1>peridot</h1>
         <div className="header-buttons">
           <button 
             type="button" 
+            id="settings"
             className="btn btn-settings"
             onClick={onSettingsClick}
           >

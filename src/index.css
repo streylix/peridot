@@ -17,26 +17,62 @@ body {
 /* Header and top bar */
 header {
   height: 45px;
-  min-height: 45px;
-  max-height: 45px;
   width: 100%;
+  position: fixed;
+  top: 0;
+  left: 280px; /* Adjust the left position to account for the sidebar width */
+  z-index: 3;
+  transition: left 0.3s ease-out;
 }
 
 .top-bar {
   background-color: #ddd;
   height: 45px;
-  min-height: 45px;
-  max-height: 45px;
   padding: 0 10px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  width: 100%;
-  flex-shrink: 0;
+  width: calc(100% - 280px); /* Adjust the width to account for the sidebar */
+  transition: width 0.3s ease-out;
+}
+
+.top-bar.full-width {
+  width: calc(100%);
+}
+
+header.full-width{
+  left: 0px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.logo h1 {
+  font-weight: bold;
+  text-align: left;
+  flex-grow: 1;
 }
 
 /* Move Menu */
 #move-menu {
+  font-size: 25px;
+  padding: 4px 4px 8px 0px;
+  margin: 0;
+  height: 30px;
+  width: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+  background-color: #ddd
+}
+
+#settings{
   font-size: 20px;
   padding: 4px;
   margin: 0;
@@ -45,6 +81,18 @@ header {
   display: flex;
   align-items: center;
   justify-content: center;
+  border: none;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+  background-color: #ddd
+}
+
+#move-menu:hover {
+  opacity: 1;
+}
+
+#settings:hover {
+  opacity: 1;
 }
 
 /* Sidebar */
@@ -54,13 +102,14 @@ header {
   min-width: 280px;
   display: flex;
   flex-direction: column;
-  padding: 20px;
+  padding: 5px 10px 10px 10px;
   overflow-y: auto;
-  height: 100%;
-  transform: translateX(0);
-  transition: transform 0.3s ease-out;
-  position: relative;
+  height: 100vh;
+  position: fixed;
+  left: 0;
+  top: 0;
   z-index: 2;
+  transition: transform 0.3s ease-out;
 }
 
 .sidebar.hidden {
@@ -80,6 +129,10 @@ header {
   padding: 4px 8px;
   border: 1px solid #ccc;
   border-radius: 4px;
+}
+
+#note-search{
+  outline: none;
 }
 
 /* New note button styling */
@@ -123,20 +176,20 @@ header {
 .main-container {
   display: flex;
   flex-grow: 1;
-  height: calc(100vh - 45px);
+  height: calc(100vh);
   overflow: hidden;
   position: relative;
 }
 
 .main-content {
   flex: 1;
-  padding: 0px 5px 5px 5px;
+  padding: 5px 5px 5px 5px;
   background-color: #fff;
   transition: width 0.3s ease-out;
   width: calc(100% - 280px);
   position: absolute;
   right: 0;
-  top: 0;
+  top: 40px;
   bottom: 0;
 }
 
@@ -149,11 +202,17 @@ header {
 .editable {
   word-wrap: break-word;
   width: 100%;
-  border: 1px solid rgba(204, 204, 204, 0.1);
   padding: 10px;
-  height: calc(100% - 40px);
-  overflow-y: auto;
+  overflow-y: hidden;
   overflow-x: hidden;
+}
+
+#inner-note:focus{
+  outline: none;
+}
+
+.editable h1:focus{
+  outline: none;
 }
 
 /* Note item styles */
