@@ -207,6 +207,17 @@ header.full-width{
   overflow-x: hidden;
 }
 
+.editable > div > div:first-child {
+  font-size: 1.5em;
+  font-weight: bold;
+  padding-bottom: 5px;
+}
+
+.editable > div > div:not(:first-child) {
+  font-size: 1rem;
+  font-weight: normal;
+}
+
 .editable h1.note-title {
   font-size: 1.5em;
   font-weight: bold;
