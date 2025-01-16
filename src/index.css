@@ -223,14 +223,37 @@ header.full-width{
 /* Note item styles */
 .note-item {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px;
+  flex-direction: column;
+  padding: 12px;
   margin-bottom: 5px;
   cursor: pointer;
-  background-color: #f9f9f9;
+  background-color: #1e1e1e;
   border-radius: 4px;
   border-left: 3px solid transparent;
+  gap: 4px;
+}
+
+.note-item .note-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.note-item .note-title {
+  font-weight: 500;
+  color: #ffffff;
+  margin-right: 8px;
+  word-break: break-word;
+}
+
+.note-item .note-preview {
+  font-size: 0.85em;
+  color: #888;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
 }
 
 .note-item.active {

@@ -25,6 +25,28 @@ function getFirstLine(content) {
   return 'Untitled';
 }
 
+function getPreviewContent(content) {
+  if (!content) return '';
+  
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = content;
+
+  // Get all div elements
+  const divs = tempDiv.getElementsByTagName('div');
+  
+  if (divs.length > 1) {
+    // Skip the first div (title) and get content of remaining divs
+    const preview = Array.from(divs)
+      .slice(1)  // Skip first div
+      .map(div => div.textContent.trim())
+      .join(' ');
+    
+    return preview;
+  }
+  
+  return '';
+}
+
 function Sidebar({ selectedId, onNoteSelect }) {
   const [notes, setNotes] = useState(() => {
     const savedNotes = localStorage.getItem('notes');
@@ -134,20 +156,27 @@ function Sidebar({ selectedId, onNoteSelect }) {
             className={`note-item ${note.id === selectedId ? 'active' : ''}`}
             onClick={() => onNoteSelect(note.id)}
           >
-            {note.pinned && <span className="pin-indicator">📌</span>}
-            <span className="note-title">{getFirstLine(note.content)}</span>
-            <button
-              className="pin-button"
-              onClick={(e) => {
-                e.stopPropagation();
-                togglePin(note.id);
-              }}
-            >
-              {note.pinned ? '📌' : '📍'}
-            </button>
+            <div className="note-header">
+              <span className="note-title">
+                {note.pinned}
+                {getFirstLine(note.content) || 'Untitled'}
+              </span>
+              <button
+                className="pin-button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  togglePin(note.id);
+                }}
+              >
+                {note.pinned ? '📌' : '📍'}
+              </button>
+            </div>
+            <div className="note-preview">
+              {getPreviewContent(note.content)}
+            </div>
           </li>
         ))}
-        </ul>
+      </ul>
 
         <button 
           type="button" 

@@ -30,6 +30,10 @@ body.dark-mode {
   .dark-mode .note-list li:hover {
     background-color: #3c3c3c;
   }
+
+  .dark-mode .note-item {
+    background-color: #1e1e1e;
+  }
   
   .dark-mode .note-item.active {
     background-color: #062c06;
