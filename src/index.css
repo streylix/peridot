@@ -207,6 +207,11 @@ header.full-width{
   overflow-x: hidden;
 }
 
+.editable h1.note-title {
+  font-size: 1.5em;
+  font-weight: bold;
+}
+
 #inner-note:focus{
   outline: none;
 }
@@ -283,12 +288,14 @@ header.full-width{
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(0px);
+  transition: all 0.3s ease-in-out;
+  animation: overlayFadeIn 0.3s ease forwards;
 }
 
 .dark-mode-modal-content {
@@ -299,6 +306,9 @@ header.full-width{
   max-width: 90%;
   position: relative;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  opacity: 0;
+  transform: translateY(-20px);
+  animation: modalSlideIn 0.3s ease 0.1s forwards;
 }
 
 .dark-mode-modal-close {
@@ -310,6 +320,12 @@ header.full-width{
   font-size: 20px;
   cursor: pointer;
   color: #333;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.dark-mode-modal-close:hover {
+  opacity: 1;
 }
 
 .dark-mode-modal-content h2 {
@@ -327,6 +343,28 @@ header.full-width{
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+@keyframes overlayFadeIn {
+  from {
+    background-color: rgba(0, 0, 0, 0);
+    backdrop-filter: blur(0px);
+  }
+  to {
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+  }
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Toggle Switch Styles */

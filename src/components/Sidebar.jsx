@@ -3,6 +3,28 @@ import React, { useState, useEffect } from 'react';
 import MainContent from './MainContent';
 import logo from '../assets/logo.png';
 
+function getFirstLine(content) {
+  if (!content) return 'Untitled';
+  
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = content;
+  
+  const childNodes = Array.from(tempDiv.childNodes);
+  
+  for (const node of childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent.trim();
+      if (text) return text;
+    }
+    else if (node.nodeType === Node.ELEMENT_NODE) {
+      const text = node.textContent.trim();
+      if (text) return text;
+    }
+  }
+  
+  return 'Untitled';
+}
+
 function Sidebar({ selectedId, onNoteSelect }) {
   const [notes, setNotes] = useState(() => {
     const savedNotes = localStorage.getItem('notes');
@@ -11,7 +33,6 @@ function Sidebar({ selectedId, onNoteSelect }) {
   
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Save notes to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem('notes', JSON.stringify(notes));
   }, [notes]);
@@ -19,7 +40,7 @@ function Sidebar({ selectedId, onNoteSelect }) {
   const createNewNote = () => {
     const newNote = {
       id: Date.now(),
-      title: getUniqueTitle(),
+      title: '',
       content: '',
       dateModified: new Date().toISOString(),
       pinned: false
@@ -30,16 +51,6 @@ function Sidebar({ selectedId, onNoteSelect }) {
       return sortNotes(updatedNotes);
     });
     onNoteSelect(newNote.id);
-  };
-
-  const getUniqueTitle = () => {
-    let counter = 1;
-    let title = 'New Note';
-    while (notes.some(note => note.title === title)) {
-      title = `New Note ${counter}`;
-      counter++;
-    }
-    return title;
   };
 
   const sortNotes = (notesToSort) => {
@@ -57,6 +68,7 @@ function Sidebar({ selectedId, onNoteSelect }) {
           ? { 
               ...note, 
               ...updates, 
+              title: getFirstLine(updates.content || note.content),
               dateModified: new Date().toISOString() 
             }
           : note
@@ -83,10 +95,10 @@ function Sidebar({ selectedId, onNoteSelect }) {
     }
   };
 
-  const filteredNotes = notes.filter(note => 
-    note.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    note.content.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredNotes = notes.filter(note => {
+    const noteContent = note.content.toLowerCase();
+    return noteContent.includes(searchTerm.toLowerCase());
+  });
 
   const selectedNote = notes.find(note => note.id === selectedId);
 
@@ -123,7 +135,7 @@ function Sidebar({ selectedId, onNoteSelect }) {
             onClick={() => onNoteSelect(note.id)}
           >
             {note.pinned && <span className="pin-indicator">📌</span>}
-            <span className="note-title">{note.title}</span>
+            <span className="note-title">{getFirstLine(note.content)}</span>
             <button
               className="pin-button"
               onClick={(e) => {
