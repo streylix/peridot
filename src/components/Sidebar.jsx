@@ -1,6 +1,5 @@
-// components/Sidebar.jsx
-import React, { useState, useEffect } from 'react';
-import { SquarePen } from 'lucide-react'
+import React, { useState } from 'react';
+import { SquarePen, Pin } from 'lucide-react'
 import MainContent from './MainContent';
 import logo from '../assets/logo.png';
 
@@ -32,13 +31,11 @@ function getPreviewContent(content) {
   const tempDiv = document.createElement('div');
   tempDiv.innerHTML = content;
 
-  // Get all div elements
   const divs = tempDiv.getElementsByTagName('div');
   
   if (divs.length > 1) {
-    // Skip the first div (title) and get content of remaining divs
     const preview = Array.from(divs)
-      .slice(1)  // Skip first div
+      .slice(1)
       .map(div => div.textContent.trim())
       .join(' ');
     
@@ -48,17 +45,8 @@ function getPreviewContent(content) {
   return '';
 }
 
-function Sidebar({ selectedId, onNoteSelect }) {
-  const [notes, setNotes] = useState(() => {
-    const savedNotes = localStorage.getItem('notes');
-    return savedNotes ? JSON.parse(savedNotes) : [];
-  });
-  
+function Sidebar({ selectedId, onNoteSelect, notes, setNotes }) {
   const [searchTerm, setSearchTerm] = useState('');
-
-  useEffect(() => {
-    localStorage.setItem('notes', JSON.stringify(notes));
-  }, [notes]);
 
   const createNewNote = () => {
     const newNote = {
@@ -71,17 +59,13 @@ function Sidebar({ selectedId, onNoteSelect }) {
 
     setNotes(prevNotes => {
       const updatedNotes = [newNote, ...prevNotes];
-      return sortNotes(updatedNotes);
+      return updatedNotes.sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        return new Date(b.dateModified) - new Date(a.dateModified);
+      });
     });
     onNoteSelect(newNote.id);
-  };
-
-  const sortNotes = (notesToSort) => {
-    return notesToSort.sort((a, b) => {
-      if (a.pinned && !b.pinned) return -1;
-      if (!a.pinned && b.pinned) return 1;
-      return new Date(b.dateModified) - new Date(a.dateModified);
-    });
   };
 
   const updateNote = (id, updates) => {
@@ -96,20 +80,19 @@ function Sidebar({ selectedId, onNoteSelect }) {
             }
           : note
       );
-      return sortNotes(updatedNotes);
+      return updatedNotes.sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        return new Date(b.dateModified) - new Date(a.dateModified);
+      });
     });
-  };
-
-  const togglePin = (id) => {
-    const note = notes.find(n => n.id === id);
-    updateNote(id, { pinned: !note.pinned });
   };
 
   const deleteNote = (id) => {
     if (window.confirm('Are you sure you want to delete this note?')) {
       setNotes(prevNotes => {
         const filteredNotes = prevNotes.filter(note => note.id !== id);
-        return sortNotes(filteredNotes);
+        return filteredNotes;
       });
       
       if (id === selectedId) {
@@ -151,33 +134,28 @@ function Sidebar({ selectedId, onNoteSelect }) {
         </div>
 
         <ul className="note-list">
-        {filteredNotes.map(note => (
-          <li
-            key={note.id}
-            className={`note-item ${note.id === selectedId ? 'active' : ''}`}
-            onClick={() => onNoteSelect(note.id)}
-          >
-            <div className="note-header">
-              <span className="note-title">
-                {note.pinned}
-                {getFirstLine(note.content) || 'Untitled'}
-              </span>
-              <button
-                className="pin-button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  togglePin(note.id);
-                }}
-              >
-                {note.pinned ? '📌' : '📍'}
-              </button>
-            </div>
-            <div className="note-preview">
-              {getPreviewContent(note.content)}
-            </div>
-          </li>
-        ))}
-      </ul>
+          {filteredNotes.map(note => (
+            <li
+              key={note.id}
+              className={`note-item ${note.id === selectedId ? 'active' : ''}`}
+              onClick={() => onNoteSelect(note.id)}
+            >
+              <div className="note-header">
+                <span className="note-title">
+                  {getFirstLine(note.content) || 'Untitled'}
+                </span>
+                {note.pinned && (
+                  <div className="pin-indicator">
+                    <Pin size={20}className="h-4 w-4 text-gray-400" />
+                  </div>
+                )}
+              </div>
+              <div className="note-preview">
+                {getPreviewContent(note.content)}
+              </div>
+            </li>
+          ))}
+        </ul>
 
         <button 
           type="button" 

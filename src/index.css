@@ -281,11 +281,6 @@ header.full-width{
   flex: 1;
 }
 
-.pin-indicator {
-  margin-right: 8px;
-  font-size: 14px;
-}
-
 .pin-button {
   margin-left: auto;
   background: none;
@@ -480,4 +475,26 @@ input:checked + .slider:before {
 
 .header-buttons button:hover {
   opacity: 1;
+}
+
+.note-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.note-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pin-indicator {
+  flex-shrink: 0;
+  opacity: 0.3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }

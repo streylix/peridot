@@ -2,26 +2,39 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Info, Lock, Pin, Gift, Trash2 } from 'lucide-react';
 
-const InfoMenu = () => {
+const InfoMenu = ({ selectedId, notes, onTogglePin }) => {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
 
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (buttonRef.current && !buttonRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    };
+  const selectedNote = notes.find(note => note.id === selectedId);
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
+//   useEffect(() => {
+//     const handleClickOutside = (event) => {
+//       if (buttonRef.current && !buttonRef.current.contains(event.target)) {
+//         setIsOpen(false);
+//       }
+//     };
+
+//     document.addEventListener('mousedown', handleClickOutside);
+//     return () => {
+//       document.removeEventListener('mousedown', handleClickOutside);
+//     };
+//   }, []);
 
   const toggleMenu = () => {
     setIsOpen(!isOpen);
+  };
+
+  const handlePinClick = () => {
+    console.log('InfoMenu - handlePinClick called');
+    console.log('InfoMenu - selectedNote:', selectedNote);
+    console.log('InfoMenu - selectedId:', selectedId);
+    if (selectedNote) {
+      console.log('InfoMenu - Calling onTogglePin with id:', selectedId);
+      onTogglePin(selectedId);
+      setIsOpen(false);
+    }
   };
 
   useEffect(() => {
@@ -46,6 +59,12 @@ const InfoMenu = () => {
     width: '100%',
   };
 
+  const disabledStyle = {
+    ...buttonStyle,
+    opacity: '0.3',
+    cursor: 'not-allowed'
+  };
+
   const Menu = () => {
     if (!isOpen) return null;
 
@@ -56,7 +75,7 @@ const InfoMenu = () => {
           position: 'fixed',
           backgroundColor: '#1e1e1e',
           border: '1px solid #333',
-          width: '125px',
+          width: '200px',
           borderRadius: '4px',
           boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
           zIndex: 9999,
@@ -67,22 +86,37 @@ const InfoMenu = () => {
         }}
       >
         <button style={buttonStyle} onMouseEnter={e => e.target.style.opacity = '1'} onMouseLeave={e => e.target.style.opacity = '0.6'}>
-          <Lock className="mr-3 h-4 w-4" />
+          <Lock className="mr-6 h-4 w-4" />
           Lock Note
         </button>
 
-        <button style={buttonStyle} onMouseEnter={e => e.target.style.opacity = '1'} onMouseLeave={e => e.target.style.opacity = '0.6'}>
-          <Pin className="mr-3 h-4 w-4" />
-          Pin Note
+        <button 
+          style={selectedNote ? buttonStyle : disabledStyle} 
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent event bubbling
+            console.log('Pin button clicked');
+            console.log('Selected note:', selectedNote);
+            console.log('onTogglePin function exists:', !!onTogglePin);
+            if (selectedNote) {
+              onTogglePin(selectedNote.id);
+              setIsOpen(false);
+            }
+          }}
+          disabled={!selectedNote}
+          onMouseEnter={e => selectedNote && (e.target.style.opacity = '1')} 
+          onMouseLeave={e => selectedNote && (e.target.style.opacity = '0.6')}
+        >
+          <Pin className="mr-6 h-4 w-4" />
+          {selectedNote?.pinned ? 'Unpin Note' : 'Pin Note'}
         </button>
 
         <button style={buttonStyle} onMouseEnter={e => e.target.style.opacity = '1'} onMouseLeave={e => e.target.style.opacity = '0.6'}>
-          <Gift className="mr-3 h-4 w-4" />
+          <Gift className="mr-6 h-4 w-4" />
           Add GIF
         </button>
 
         <button style={buttonStyle} onMouseEnter={e => e.target.style.opacity = '1'} onMouseLeave={e => e.target.style.opacity = '0.6'}>
-          <Trash2 className="mr-3 h-4 w-4" />
+          <Trash2 className="mr-6 h-4 w-4" />
           Delete Note
         </button>
       </div>,
