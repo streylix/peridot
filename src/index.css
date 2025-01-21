@@ -26,7 +26,7 @@ header {
 }
 
 .top-bar {
-  background-color: #ddd;
+  background-color: #fff;
   height: 45px;
   padding: 0 10px;
   display: flex;
@@ -59,7 +59,7 @@ header.full-width{
 /* Move Menu */
 #move-menu {
   font-size: 25px;
-  padding: 4px 4px 8px 0px;
+  padding: 4px 4px 4px 0px;
   margin: 0;
   height: 30px;
   width: 30px;
@@ -69,7 +69,7 @@ header.full-width{
   border: none;
   opacity: 0.6;
   transition: opacity 0.2s ease;
-  background-color: #ddd
+  background-color: none;
 }
 
 #settings{
@@ -140,10 +140,11 @@ header.full-width{
   background: none;
   border: none;
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 4px 4px;
   font-size: 18px;
-  opacity: 0.7;
+  opacity: 0.3;
   transition: opacity 0.2s ease;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -207,7 +208,7 @@ header.full-width{
   overflow-x: hidden;
 }
 
-.editable > div > div:first-child {
+.editable > div {
   font-size: 1.5em;
   font-weight: bold;
   padding-bottom: 5px;
@@ -456,4 +457,27 @@ input:checked + .slider:before {
   border-radius: 5px;
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+.header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-buttons button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.header-buttons button:hover {
+  opacity: 1;
 }

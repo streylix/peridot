@@ -9,16 +9,12 @@ body.dark-mode {
   }
   
   .dark-mode .top-bar {
-    background-color: #333333;
-    border-bottom: 1px solid #3c3c3c;
+    background-color: #1e1e1e;
+    border-bottom: 1px solid #3c3c3c24;
   }
   
   .dark-mode .main-content {
     background-color: #1e1e1e;
-  }
-
-  .dark-mode #move-menu{
-    background-color: #333333;
   }
   
   .dark-mode .note-list li {
@@ -50,9 +46,13 @@ body.dark-mode {
   .dark-mode .editable[contenteditable="true"]:empty:before {
     color: #555;
   }
+
+  .dark-mode .new-note-btn{
+    color: #c7c7c7; 
+  }
   
   .dark-mode .search input,
-  .dark-mode .new-note-btn,
+  .dark-mode,
   .dark-mode #debug-button {
     background-color: #333333;
     color: #c7c7c7;
@@ -67,7 +67,7 @@ body.dark-mode {
   
   .dark-mode .menu-btn {
     color: #c7c7c7;
-    background-color: #333333;
+    background-color: #1e1e1e;
   }
   
   .dark-mode .top-bar a {
@@ -118,5 +118,10 @@ body.dark-mode {
   }
 
   .dark-mode #settings{
-    background-color: #333;
+    background-color: #1e1e1e;
+    color: #c7c7c7;
+  }
+
+  .dark-mode .header-buttons button {
+    color: #c7c7c7;
   }

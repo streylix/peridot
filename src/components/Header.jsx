@@ -1,4 +1,6 @@
 import React from 'react'
+import { SlidersHorizontal, PanelLeft } from 'lucide-react'
+import InfoMenu from './InfoMenu';
 
 function Header({ onSettingsClick, onDarkModeClick }) {
   const toggleSidebar = () => {
@@ -24,16 +26,17 @@ function Header({ onSettingsClick, onDarkModeClick }) {
           className="menu-btn"
           onClick={toggleSidebar}
         >
-          ☰
+        <PanelLeft />
         </button>
         <div className="header-buttons">
+          <InfoMenu />
           <button 
             type="button" 
             id="settings"
             className="btn btn-settings"
             onClick={onSettingsClick}
           >
-            ⚙️
+            <SlidersHorizontal />
           </button>
         </div>
       </div>

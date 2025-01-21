@@ -1,5 +1,6 @@
 // components/Sidebar.jsx
 import React, { useState, useEffect } from 'react';
+import { SquarePen } from 'lucide-react'
 import MainContent from './MainContent';
 import logo from '../assets/logo.png';
 
@@ -145,7 +146,7 @@ function Sidebar({ selectedId, onNoteSelect }) {
             onClick={createNewNote}
             title="New Note"
           >
-            ✚
+            <SquarePen />
           </button>
         </div>
 
