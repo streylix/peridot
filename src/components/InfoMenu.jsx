@@ -9,18 +9,21 @@ const InfoMenu = ({ selectedId, notes, onTogglePin }) => {
 
   const selectedNote = notes.find(note => note.id === selectedId);
 
-//   useEffect(() => {
-//     const handleClickOutside = (event) => {
-//       if (buttonRef.current && !buttonRef.current.contains(event.target)) {
-//         setIsOpen(false);
-//       }
-//     };
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const isClickInsideButton = buttonRef.current?.contains(event.target);
+      const isClickInsideMenu = menuRef.current?.contains(event.target);
+      
+      if (!isClickInsideButton && !isClickInsideMenu) {
+        setIsOpen(false);
+      }
+    };
 
-//     document.addEventListener('mousedown', handleClickOutside);
-//     return () => {
-//       document.removeEventListener('mousedown', handleClickOutside);
-//     };
-//   }, []);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const toggleMenu = () => {
     setIsOpen(!isOpen);
