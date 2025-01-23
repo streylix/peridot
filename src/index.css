@@ -106,7 +106,7 @@ header.full-width{
   min-width: 280px;
   display: flex;
   flex-direction: column;
-  padding: 5px 10px 10px 10px;
+  padding: 5px 0px 10px 10px;
   overflow-y: auto;
   height: 100vh;
   position: fixed;
@@ -125,6 +125,7 @@ header.full-width{
   display: flex;
   align-items: center;
   gap: 8px;
+  padding-right: 4px;
 }
 
 .search input {
@@ -246,7 +247,7 @@ header.full-width{
 .note-item {
   display: flex;
   flex-direction: column;
-  padding: 12px;
+  margin-right: 10px;
   margin-bottom: 5px;
   cursor: pointer;
   border-radius: 4px;
@@ -507,4 +508,39 @@ input:checked + .slider:before {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+
+
+/* Customize scrollbar for note list */
+.note-list::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.note-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.note-list::-webkit-scrollbar-thumb {
+  background: rgba(155, 155, 155, 0.2);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.note-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(155, 155, 155, 0.3);
+  background-clip: padding-box;
+}
+
+/* For Firefox */
+.note-list {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(155, 155, 155, 0.2) transparent;
+}
+
+/* Hide scrollbar by default but show on hover */
+.note-list {
+  overflow-y: overlay; /* Creates a layered scrollbar */
 }

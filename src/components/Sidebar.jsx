@@ -111,26 +111,28 @@ function Sidebar({ selectedId, onNoteSelect, notes, setNotes }) {
   return (
     <>
       <div className="sidebar" id="sidebar">
-        <div className="logo">
-          <img src={logo} alt="biz logo" width="50" height="50"></img>
-          <h1>peridot.</h1>
-        </div>
-        <div className="search">
-          <input
-            type="search"
-            id="note-search"
-            placeholder="Search..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <button 
-            type="button" 
-            className="new-note-btn"
-            onClick={createNewNote}
-            title="New Note"
-          >
-            <SquarePen />
-          </button>
+        <div className="sidebar-header">
+          <div className="logo">
+            <img src={logo} alt="biz logo" width="50" height="50"></img>
+            <h1>peridot.</h1>
+          </div>
+          <div className="search">
+            <input
+              type="search"
+              id="note-search"
+              placeholder="Search..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <button 
+              type="button" 
+              className="new-note-btn"
+              onClick={createNewNote}
+              title="New Note"
+            >
+              <SquarePen />
+            </button>
+          </div>
         </div>
 
         <ul className="note-list">
