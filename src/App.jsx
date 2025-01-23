@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import Settings from './components/Settings';
+import NavigationHistory from './utils/NavigationHistory';
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -10,6 +11,7 @@ function App() {
     const savedNotes = localStorage.getItem('notes');
     return savedNotes ? JSON.parse(savedNotes) : [];
   });
+  const [navigationHistory] = useState(() => new NavigationHistory());
 
   useEffect(() => {
     localStorage.setItem('notes', JSON.stringify(notes));
@@ -43,27 +45,33 @@ function App() {
     }
   };
 
-  const openSettings = () => {
-    setIsSettingsOpen(true);
+  const handleNoteSelect = (noteId) => {
+    navigationHistory.push(selectedId);
+    setSelectedId(noteId);
   };
 
-  const closeSettings = () => {
-    setIsSettingsOpen(false);
+  const handleBack = () => {
+    const previousState = navigationHistory.back();
+    if (previousState !== null) {
+      setSelectedId(previousState);
+    }
   };
 
   return (
     <div className="app">
       <Header 
-        onSettingsClick={openSettings}
+        onSettingsClick={() => setIsSettingsOpen(true)}
         selectedId={selectedId}
         notes={notes}
         onTogglePin={togglePin}
         onDeleteNote={deleteNote}
+        onBack={handleBack}
+        canGoBack={navigationHistory.canGoBack()}
       />
       <div className="main-container">
         <Sidebar 
           selectedId={selectedId}
-          onNoteSelect={setSelectedId}
+          onNoteSelect={handleNoteSelect}
           notes={notes}
           setNotes={setNotes}
           onDeleteNote={deleteNote}
@@ -71,7 +79,7 @@ function App() {
       </div>
       <Settings 
         isOpen={isSettingsOpen}
-        onClose={closeSettings}
+        onClose={() => setIsSettingsOpen(false)}
       />
     </div>
   );

@@ -559,3 +559,22 @@ input:checked + .slider:before {
 .note-list {
   overflow-y: overlay; /* Creates a layered scrollbar */
 }
+
+#back-btn {
+  font-size: 25px;
+  padding: 4px 4px 4px 0px;
+  margin: 0;
+  height: 30px;
+  width: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+  background: none;
+}
+
+#back-btn:hover {
+  opacity: 1;
+}

@@ -1,9 +1,9 @@
 import React from 'react';
-import { SlidersHorizontal, PanelLeft } from 'lucide-react';
+import { SlidersHorizontal, PanelLeft, ChevronLeft } from 'lucide-react';
 import InfoMenu from './InfoMenu';
 import StatsMenu from './StatsMenu';
 
-function Header({ onSettingsClick, selectedId, notes, onTogglePin, onDeleteNote }) {
+function Header({ onSettingsClick, selectedId, notes, onTogglePin, onDeleteNote, onBack, canGoBack }) {
   const toggleSidebar = () => {
     const sidebar = document.querySelector('.sidebar');
     const mainContent = document.querySelector('.main-content');
@@ -25,14 +25,33 @@ function Header({ onSettingsClick, selectedId, notes, onTogglePin, onDeleteNote 
   return (
     <header>
       <div className="top-bar">
-        <button 
-          type="button"
-          id="move-menu"
-          className="menu-btn"
-          onClick={toggleSidebar}
-          >
-          <PanelLeft />
-        </button>
+        <div 
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <button 
+            type="button"
+            id="move-menu"
+            className="menu-btn"
+            onClick={toggleSidebar}
+            style={{cursor: 'pointer'}}
+            >
+            <PanelLeft />
+          </button>
+          <button
+              type="button"
+              id="back-btn"
+              onClick={onBack}
+              disabled={!canGoBack}
+              onMouseEnter={e => canGoBack && (e.target.style.opacity = '1')} 
+              onMouseLeave={e => canGoBack && (e.target.style.opacity = '0.6')}
+              style={{ opacity: canGoBack ? 0.6 : 0.3, cursor: canGoBack ? 'pointer' : 'not-allowed' }}
+            >
+              <ChevronLeft />
+            </button>
+          </div>
         <div className="header-buttons">
           <StatsMenu 
             selectedId={selectedId}

@@ -115,9 +115,12 @@ const StatsMenu = ({ selectedId, notes }) => {
       <button
         ref={buttonRef}
         type="button"
+        id="info-btn"
         onClick={toggleMenu}
         className="flex items-center justify-center h-8 w-8 rounded hover:bg-gray-700"
-        style={{ opacity: selectedNote ? 0.6 : 0.3, cursor: selectedNote ? 'pointer' : 'not-allowed' }}
+        onMouseEnter={e => selectedNote && (e.target.style.opacity = '1')} 
+        onMouseLeave={e => selectedNote && (e.target.style.opacity = '0.6')}
+        style={{ opacity: selectedNote ? 0.6 : 0.2, cursor: selectedNote ? 'pointer' : 'not-allowed' }}
       >
         <Info className="h-5 w-5 text-gray-400" />
       </button>

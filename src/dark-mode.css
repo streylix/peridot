@@ -153,3 +153,7 @@ body.dark-mode {
   .dark-mode .header-buttons button {
     color: #c7c7c7;
   }
+
+  .dark-mode #back-btn{
+    color: #c7c7c7;
+  }
