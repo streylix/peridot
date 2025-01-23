@@ -225,7 +225,7 @@ header.full-width{
 }
 
 #inner-note{
-  height: calc(100vh - 40px);
+  min-height: calc(100vh - 40px);
 }
 
 .title-spacer {
