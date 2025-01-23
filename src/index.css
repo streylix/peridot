@@ -20,21 +20,24 @@ header {
   width: 100%;
   position: fixed;
   top: 0;
-  left: 280px; /* Adjust the left position to account for the sidebar width */
-  z-index: 3;
+  left: 280px;
+  z-index: 1000;
   transition: left 0.3s ease-out;
+  background: none;
 }
 
 .top-bar {
-  background-color: #fff;
+  backdrop-filter: blur(100px);
   height: 45px;
   padding: 0 10px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  width: calc(100% - 280px); /* Adjust the width to account for the sidebar */
+  width: calc(100% - 280px);
   transition: width 0.3s ease-out;
+  background: linear-gradient(to bottom, rgba(30, 30, 30, 0.2), transparent);
 }
+
 
 .top-bar.full-width {
   width: calc(100%);
@@ -69,7 +72,11 @@ header.full-width{
   border: none;
   opacity: 0.6;
   transition: opacity 0.2s ease;
-  background-color: none;
+  background: none;
+}
+
+#move-menu:hover {
+  opacity: 1;
 }
 
 #settings{
@@ -84,12 +91,9 @@ header.full-width{
   border: none;
   opacity: 0.6;
   transition: opacity 0.2s ease;
-  background-color: #ddd
+  background: none;
 }
 
-#move-menu:hover {
-  opacity: 1;
-}
 
 #settings:hover {
   opacity: 1;
@@ -184,14 +188,15 @@ header.full-width{
 
 .main-content {
   flex: 1;
-  padding: 5px 5px 5px 5px;
-  background-color: #fff;
+  padding: 0 5px;
+  background-color: white;
   transition: width 0.3s ease-out;
   width: calc(100% - 280px);
   position: absolute;
   right: 0;
-  top: 40px;
+  top: 0;
   bottom: 0;
+  overflow: auto;
 }
 
 .main-content.full-width {
@@ -206,6 +211,11 @@ header.full-width{
   padding: 10px;
   overflow-y: hidden;
   overflow-x: hidden;
+}
+
+.title-spacer {
+  flex-shrink: 0;
+  pointer-events: none;
 }
 
 .editable > div {

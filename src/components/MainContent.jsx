@@ -27,14 +27,14 @@ function MainContent({ note, onUpdateNote }) {
 
   return (
     <div className="main-content">
-      <div className="editable" style={{ height: '100%' }}>
+      <div className="title-spacer" style={{ height: '40px' }} />
+      <div className="editable">
         <div
           ref={contentRef}
           id="inner-note"
           contentEditable
           onInput={handleContentInput}
           suppressContentEditableWarning
-          style={{ height: '100%', overflow: 'auto' }}
         />
       </div>
     </div>

@@ -8,11 +8,6 @@ body.dark-mode {
     border-right: 1px solid #3c3c3c;
   }
   
-  .dark-mode .top-bar {
-    background-color: #1e1e1e;
-    border-bottom: 1px solid #3c3c3c24;
-  }
-  
   .dark-mode .main-content {
     background-color: #1e1e1e;
   }
@@ -69,6 +64,11 @@ body.dark-mode {
     color: #c7c7c7;
     background-color: #1e1e1e;
   }
+
+  .dark-mode .top-bar {
+    background-color: rgba(30, 30, 30, 0.8);
+    background: linear-gradient(to bottom, rgba(73, 73, 73, 0.2), transparent);
+  }
   
   .dark-mode .top-bar a {
     color: #7d5b99;
@@ -118,7 +118,6 @@ body.dark-mode {
   }
 
   .dark-mode #settings{
-    background-color: #1e1e1e;
     color: #c7c7c7;
   }
 
