@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Info, Lock, Pin, Gift, Trash2 } from 'lucide-react';
+import { CircleEllipsis, Lock, Pin, Gift, Trash2 } from 'lucide-react';
 
 const InfoMenu = ({ selectedId, notes, onTogglePin }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -135,7 +135,7 @@ const InfoMenu = ({ selectedId, notes, onTogglePin }) => {
         onClick={toggleMenu}
         className="flex items-center justify-center h-8 w-8 rounded hover:bg-gray-700"
       >
-        <Info className="h-5 w-5 text-gray-400" />
+        <CircleEllipsis className="h-5 w-5 text-gray-400" />
       </button>
       <Menu />
     </>
