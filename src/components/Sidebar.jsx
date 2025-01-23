@@ -134,7 +134,6 @@ function Sidebar({ selectedId, onNoteSelect, notes, setNotes }) {
             </button>
           </div>
         </div>
-
         <ul className="note-list">
           {filteredNotes.map(note => (
             <li

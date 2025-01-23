@@ -106,14 +106,21 @@ header.full-width{
   min-width: 280px;
   display: flex;
   flex-direction: column;
-  padding: 5px 0px 10px 10px;
-  overflow-y: auto;
   height: 100vh;
   position: fixed;
   left: 0;
   top: 0;
   z-index: 2;
   transition: transform 0.3s ease-out;
+  background: linear-gradient(to left, rgba(30, 30, 30, 0.1), transparent);
+}
+
+.sidebar-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 10px 10px;
+  padding-right: 2px;
 }
 
 .sidebar.hidden {
@@ -162,9 +169,12 @@ header.full-width{
 /* Note list */
 .note-list {
   list-style: none;
-  overflow-y: auto;
-  margin: 10px 0;
+  margin: 0;
+  padding: 0px 0px 0px 10px;
   flex-grow: 1;
+  overflow-y: auto;
+  width: 100%;
+  height: 100vh;
 }
 
 .note-list li {

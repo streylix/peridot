@@ -94,6 +94,10 @@ body.dark-mode {
     background: linear-gradient(to left, #1e1e1e, transparent);
     pointer-events: none;
   }
+
+  .dark-mode .sidebar-header {
+    background: linear-gradient(to bottom, rgba(20, 20, 20, 0.5), transparent);
+  }
   
   .dark-mode .top-bar a {
     color: #7d5b99;
