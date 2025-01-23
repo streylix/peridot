@@ -3,7 +3,7 @@ import { SlidersHorizontal, PanelLeft } from 'lucide-react';
 import InfoMenu from './InfoMenu';
 import StatsMenu from './StatsMenu';
 
-function Header({ onSettingsClick, selectedId, notes, onTogglePin }) {
+function Header({ onSettingsClick, selectedId, notes, onTogglePin, onDeleteNote }) {
   const toggleSidebar = () => {
     const sidebar = document.querySelector('.sidebar');
     const mainContent = document.querySelector('.main-content');
@@ -38,6 +38,7 @@ function Header({ onSettingsClick, selectedId, notes, onTogglePin }) {
             selectedId={selectedId}
             notes={notes}
             onTogglePin={onTogglePin}
+            onDeleteNote={onDeleteNote}
           />
           <button 
             type="button" 

@@ -11,32 +11,36 @@ function App() {
     return savedNotes ? JSON.parse(savedNotes) : [];
   });
 
-  // Save notes to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem('notes', JSON.stringify(notes));
   }, [notes]);
 
-  const togglePin = (noteId) => {
-    console.log('App - togglePin called with noteId:', noteId);
-    setNotes(prevNotes => {
-      console.log('App - Current notes:', prevNotes);
-      const updatedNotes = prevNotes.map(note => {
-        if (note.id === noteId) {
-          console.log('App - Toggling note:', note);
-          return { ...note, pinned: !note.pinned };
-        }
-        return note;
-      });
-      console.log('App - Notes after toggle:', updatedNotes);
-      // Sort notes with pinned at top
-      const sortedNotes = updatedNotes.sort((a, b) => {
-        if (a.pinned && !b.pinned) return -1;
-        if (!a.pinned && b.pinned) return 1;
-        return new Date(b.dateModified) - new Date(a.dateModified);
-      });
-      console.log('App - Final sorted notes:', sortedNotes);
-      return sortedNotes;
+  const sortNotes = (notesToSort) => {
+    return notesToSort.sort((a, b) => {
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+      return new Date(b.dateModified) - new Date(a.dateModified);
     });
+  };
+
+  const togglePin = (noteId) => {
+    setNotes(prevNotes => {
+      const updatedNotes = prevNotes.map(note => 
+        note.id === noteId 
+          ? { ...note, pinned: !note.pinned }
+          : note
+      );
+      return sortNotes(updatedNotes);
+    });
+  };
+
+  const deleteNote = (noteId) => {
+    if (window.confirm('Are you sure you want to delete this note?')) {
+      setNotes(prevNotes => prevNotes.filter(note => note.id !== noteId));
+      if (noteId === selectedId) {
+        setSelectedId(null);
+      }
+    }
   };
 
   const openSettings = () => {
@@ -54,6 +58,7 @@ function App() {
         selectedId={selectedId}
         notes={notes}
         onTogglePin={togglePin}
+        onDeleteNote={deleteNote}
       />
       <div className="main-container">
         <Sidebar 
@@ -61,6 +66,7 @@ function App() {
           onNoteSelect={setSelectedId}
           notes={notes}
           setNotes={setNotes}
+          onDeleteNote={deleteNote}
         />
       </div>
       <Settings 

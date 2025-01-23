@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { CircleEllipsis, Lock, Pin, Gift, Trash2 } from 'lucide-react';
 
-const InfoMenu = ({ selectedId, notes, onTogglePin }) => {
+const InfoMenu = ({ selectedId, notes, onTogglePin, onDeleteNote }) => {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
@@ -118,7 +118,18 @@ const InfoMenu = ({ selectedId, notes, onTogglePin }) => {
           Add GIF
         </button>
 
-        <button style={buttonStyle} onMouseEnter={e => e.target.style.opacity = '1'} onMouseLeave={e => e.target.style.opacity = '0.6'}>
+        <button 
+          style={selectedNote ? buttonStyle : disabledStyle}
+          onClick={() => {
+            if (selectedNote) {
+              onDeleteNote(selectedNote.id);
+              setIsOpen(false);
+            }
+          }}
+          disabled={!selectedNote}
+          onMouseEnter={e => selectedNote && (e.target.style.opacity = '1')} 
+          onMouseLeave={e => selectedNote && (e.target.style.opacity = '0.6')}
+        >
           <Trash2 className="mr-6 h-4 w-4" />
           Delete Note
         </button>
