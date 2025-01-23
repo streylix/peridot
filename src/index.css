@@ -219,9 +219,13 @@ header.full-width{
 .editable {
   word-wrap: break-word;
   width: 100%;
-  padding: 10px;
+  padding-left: 10px;
   overflow-y: hidden;
   overflow-x: hidden;
+}
+
+#inner-note{
+  height: calc(100vh - 40px);
 }
 
 .title-spacer {
