@@ -54,7 +54,8 @@ function Sidebar({ selectedId, onNoteSelect, notes, setNotes }) {
       title: '',
       content: '',
       dateModified: new Date().toISOString(),
-      pinned: false
+      pinned: false,
+      caretPosition: 0
     };
 
     setNotes(prevNotes => {
@@ -68,37 +69,30 @@ function Sidebar({ selectedId, onNoteSelect, notes, setNotes }) {
     onNoteSelect(newNote.id);
   };
 
-  const updateNote = (id, updates) => {
+  const sortNotes = (notesToSort) => {
+    return notesToSort.sort((a, b) => {
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+      return new Date(b.dateModified) - new Date(a.dateModified);
+    });
+  };
+
+  const updateNote = (id, updates, updateModified) => {
+    console.log("id:", id)
+    console.log("updates:", updates)
+    console.log("modified:", updateModified)
     setNotes(prevNotes => {
       const updatedNotes = prevNotes.map(note => 
         note.id === id 
           ? { 
               ...note, 
-              ...updates, 
-              title: getFirstLine(updates.content || note.content),
-              dateModified: new Date().toISOString() 
+              ...updates,
+              dateModified: updateModified ? new Date().toISOString() : note.dateModified 
             }
           : note
       );
-      return updatedNotes.sort((a, b) => {
-        if (a.pinned && !b.pinned) return -1;
-        if (!a.pinned && b.pinned) return 1;
-        return new Date(b.dateModified) - new Date(a.dateModified);
-      });
+      return updateModified ? sortNotes(updatedNotes) : updatedNotes;
     });
-  };
-
-  const deleteNote = (id) => {
-    if (window.confirm('Are you sure you want to delete this note?')) {
-      setNotes(prevNotes => {
-        const filteredNotes = prevNotes.filter(note => note.id !== id);
-        return filteredNotes;
-      });
-      
-      if (id === selectedId) {
-        onNoteSelect(null);
-      }
-    }
   };
 
   const filteredNotes = notes.filter(note => {
@@ -174,7 +168,7 @@ function Sidebar({ selectedId, onNoteSelect, notes, setNotes }) {
       </div>
       <MainContent 
         note={selectedNote} 
-        onUpdateNote={(updates) => updateNote(selectedId, updates)} 
+        onUpdateNote={(updates, updateModified = true) => updateNote(selectedId, updates, updateModified)}
       />
     </>
   );
