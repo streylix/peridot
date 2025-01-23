@@ -208,6 +208,7 @@ header.full-width{
   top: 0;
   bottom: 0;
   overflow: auto;
+  transition: width 0.3s ease-out;
 }
 
 .main-content.full-width {

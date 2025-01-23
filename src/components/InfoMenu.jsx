@@ -29,17 +29,6 @@ const InfoMenu = ({ selectedId, notes, onTogglePin, onDeleteNote }) => {
     setIsOpen(!isOpen);
   };
 
-  const handlePinClick = () => {
-    console.log('InfoMenu - handlePinClick called');
-    console.log('InfoMenu - selectedNote:', selectedNote);
-    console.log('InfoMenu - selectedId:', selectedId);
-    if (selectedNote) {
-      console.log('InfoMenu - Calling onTogglePin with id:', selectedId);
-      onTogglePin(selectedId);
-      setIsOpen(false);
-    }
-  };
-
   useEffect(() => {
     if (isOpen && buttonRef.current && menuRef.current) {
       const buttonRect = buttonRef.current.getBoundingClientRect();

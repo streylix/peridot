@@ -9,6 +9,10 @@ function Header({ onSettingsClick, selectedId, notes, onTogglePin, onDeleteNote 
     const mainContent = document.querySelector('.main-content');
     const topBar = document.querySelector('.top-bar');
     const header = document.querySelector('header');
+    console.log("sidebar: ", sidebar)
+    console.log("mainContent: ", mainContent)
+    console.log("header: ", header)
+    console.log("topBar: ", topBar)
     
     if (sidebar && mainContent && header && topBar) {
       sidebar.classList.toggle('hidden');
@@ -26,7 +30,7 @@ function Header({ onSettingsClick, selectedId, notes, onTogglePin, onDeleteNote 
           id="move-menu"
           className="menu-btn"
           onClick={toggleSidebar}
-        >
+          >
           <PanelLeft />
         </button>
         <div className="header-buttons">
