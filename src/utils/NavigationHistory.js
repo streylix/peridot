@@ -1,6 +1,6 @@
 class NavigationHistory {
   constructor() {
-    this.history = [];
+    this.history = [null];
   }
 
   push(state) {
