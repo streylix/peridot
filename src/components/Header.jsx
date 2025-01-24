@@ -1,9 +1,9 @@
 import React from 'react';
-import { SlidersHorizontal, PanelLeft, ChevronLeft } from 'lucide-react';
+import { SlidersHorizontal, PanelLeft, ChevronLeft, Bug } from 'lucide-react';
 import InfoMenu from './InfoMenu';
 import StatsMenu from './StatsMenu';
 
-function Header({ onSettingsClick, selectedId, notes, onTogglePin, onDeleteNote, onBack, canGoBack }) {
+function Header({ onSettingsClick, selectedId, notes, onTogglePin, onDeleteNote, onBack, canGoBack, onDebugClick }) {
   const toggleSidebar = () => {
     const sidebar = document.querySelector('.sidebar');
     const mainContent = document.querySelector('.main-content');
@@ -53,6 +53,11 @@ function Header({ onSettingsClick, selectedId, notes, onTogglePin, onDeleteNote,
             </button>
           </div>
         <div className="header-buttons">
+          <button 
+            onClick={onDebugClick}
+          >
+            <Bug />
+          </button>
           <StatsMenu 
             selectedId={selectedId}
             notes={notes}

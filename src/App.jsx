@@ -3,15 +3,26 @@ import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import Settings from './components/Settings';
 import NavigationHistory from './utils/NavigationHistory';
+import ModalDebug from './components/DebugModal';
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [currentModal, setCurrentModal] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [notes, setNotes] = useState(() => {
     const savedNotes = localStorage.getItem('notes');
     return savedNotes ? JSON.parse(savedNotes) : [];
   });
   const [navigationHistory] = useState(() => new NavigationHistory());
+
+  const handleDebugModalClose = () => {
+    const nextModal = {
+      small: 'default',
+      default: 'large',
+      large: null
+    }[currentModal];
+    setCurrentModal(nextModal);
+  };
 
   useEffect(() => {
     localStorage.setItem('notes', JSON.stringify(notes));
@@ -52,14 +63,12 @@ function App() {
 
   const handleBack = () => {
     const previousState = navigationHistory.back();
-    if (previousState !== null) {
-      setSelectedId(previousState);
-    }
+    setSelectedId(previousState);
   };
 
   return (
     <div className="app">
-      <Header 
+      <Header
         onSettingsClick={() => setIsSettingsOpen(true)}
         selectedId={selectedId}
         notes={notes}
@@ -67,9 +76,10 @@ function App() {
         onDeleteNote={deleteNote}
         onBack={handleBack}
         canGoBack={navigationHistory.canGoBack()}
+        onDebugClick={() => setCurrentModal('small')}
       />
       <div className="main-container">
-        <Sidebar 
+        <Sidebar
           selectedId={selectedId}
           onNoteSelect={handleNoteSelect}
           notes={notes}
@@ -77,9 +87,13 @@ function App() {
           onDeleteNote={deleteNote}
         />
       </div>
-      <Settings 
+      <Settings
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+      />
+      <ModalDebug
+        currentModal={currentModal}
+        onClose={handleDebugModalClose}
       />
     </div>
   );
