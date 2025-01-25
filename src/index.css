@@ -435,38 +435,6 @@ header.full-width{
   height: 0;
 }
 
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #ccc;
-  transition: 0.4s;
-  border-radius: 34px;
-}
-
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 26px;
-  width: 26px;
-  left: 4px;
-  bottom: 4px;
-  background-color: white;
-  transition: 0.4s;
-  border-radius: 50%;
-}
-
-input:checked + .slider {
-  background-color: #1c7a43;
-}
-
-input:checked + .slider:before {
-  transform: translateX(26px);
-}
-
 /* Sign Out Button */
 .btn-danger {
   width: 100%;
@@ -586,11 +554,12 @@ input:checked + .slider:before {
     color: #ffffff;
     border: 1px solid #404040;
     padding: 8px 12px;
+    padding-right: 32px;
     border-radius: 4px;
     cursor: pointer;
     font-size: 14px;
+    min-width: 120px;
     appearance: none;
-    position: relative;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23808080' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 8px center;

@@ -11,49 +11,86 @@ const Section = ({ label, isActive, onClick }) => (
   </button>
 );
 
-const ItemPresets = {
-  TEXT_BUTTON: ({ label, buttonText, onClick }) => (
-    <div className="item-preset text-button">
-      <span>{label}</span>
-      <button onClick={onClick}>{buttonText}</button>
-    </div>
-  ),
-  
-  TEXT_SWITCH: ({ label, value, onChange }) => (
-    <div className="item-preset text-switch">
-      <span>{label}</span>
+const ItemComponents = {
+    CONTAINER: ({ children, className }) => {
+        const [left, ...right] = React.Children.toArray(children);
+        return (
+          <div className="modal-side-split">
+            <div className="modal-side-split-left">{left}</div>
+            <div className="modal-side-split-right">{right}</div>
+          </div>
+        );
+      },
+    
+    BUTTON: ({ onClick, primary, children }) => (
+      <div className="spacer">
+        <button className={primary ? 'primary' : ''} onClick={onClick}>{children}</button>
+      </div>
+    ),
+    
+    SWITCH: ({ value, onChange = () => {} }) => (
       <label className="switch">
         <input type="checkbox" checked={value} onChange={onChange} />
         <span className="slider" />
       </label>
-    </div>
-  ),
-  
-  TEXT_DROPDOWN: ({ label, value, options, onChange }) => (
-    <div className="item-preset text-dropdown">
-      <span>{label}</span>
+    ),
+    
+    DROPDOWN: ({ value, options, onChange = () => {} }) => (
       <select value={value} onChange={onChange}>
         {options.map(opt => (
           <option key={opt.value} value={opt.value}>{opt.label}</option>
         ))}
       </select>
-    </div>
-  ),
+    ),
+    
+    TEXT: ({ label, subtext }) => (
+      <div className="item-text">
+        <span className="item-text-primary">{label}</span>
+        {subtext && <span className="item-text-secondary">{subtext}</span>}
+      </div>
+    ),
+    
+    ICON: ({ icon: Icon, size = 20 }) => <Icon size={size} />,
+    
+    SUBSECTION: ({ title, children }) => (
+      <div className="item-subsection">
+        <h3 className="item-subsection-title">{title}</h3>
+        {children}
+      </div>
+    )
+  };
   
-  ICON_TEXT: ({ icon: Icon, label }) => (
-    <div className="item-preset icon-text">
-      <Icon />
-      <span>{label}</span>
-    </div>
-  ),
-
-  SUBSECTION: ({ title, children }) => (
-    <div className="item-subsection">
-      <h3 className="item-subsection-title">{title}</h3>
-      {children}
-    </div>
-  )
-};
+  const ItemPresets = {
+    TEXT_BUTTON: ({ label, subtext, buttonText, onClick, primary }) => (
+      <ItemComponents.CONTAINER>
+        <ItemComponents.TEXT label={label} subtext={subtext} />
+        <ItemComponents.BUTTON onClick={onClick} primary={primary}>{buttonText}</ItemComponents.BUTTON>
+      </ItemComponents.CONTAINER>
+    ),
+  
+    TEXT_SWITCH: ({ label, subtext, value, onChange = () => {} }) => (
+      <ItemComponents.CONTAINER>
+        <ItemComponents.TEXT label={label} subtext={subtext} />
+        <ItemComponents.SWITCH value={value} onChange={onChange} />
+      </ItemComponents.CONTAINER>
+    ),
+  
+    TEXT_DROPDOWN: ({ label, value, options, onChange = () => {} }) => (
+      <ItemComponents.CONTAINER>
+        <ItemComponents.TEXT label={label} />
+        <ItemComponents.DROPDOWN value={value} options={options} onChange={onChange} />
+      </ItemComponents.CONTAINER>
+    ),
+  
+    ICON_TEXT: ({ icon, label, subtext }) => (
+      <ItemComponents.CONTAINER>
+        <ItemComponents.ICON icon={icon} />
+        <ItemComponents.TEXT label={label} subtext={subtext} />
+      </ItemComponents.CONTAINER>
+    ),
+  
+    SUBSECTION: ItemComponents.SUBSECTION
+  };
 
 const Modal = ({ isOpen, onClose, sections = [], title, size = 'default' }) => {
   const [activeSection, setActiveSection] = useState(0);
@@ -110,4 +147,4 @@ const Modal = ({ isOpen, onClose, sections = [], title, size = 'default' }) => {
   );
 };
 
-export { Modal, ItemPresets };
+export { Modal, ItemPresets, ItemComponents };

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, ItemPresets } from './Modal';
+import { Modal, ItemPresets, ItemComponents } from './Modal';
 import { Lock, Globe, Bell, Keyboard, Code, Database, Cloud } from 'lucide-react';
 
 function DebugModal({ currentModal, onClose }) {
@@ -102,68 +102,87 @@ function DebugModal({ currentModal, onClose }) {
 
   const largeModalSections = [
     {
-      label: 'Editor',
+      label: "General",
       items: [
-        { content: <ItemPresets.SUBSECTION title="Shortcuts">
-            <ItemPresets.ICON_TEXT icon={Keyboard} label="Keyboard Shortcuts" />
-            <ItemPresets.TEXT_SWITCH
-              label="Vim Mode"
-              value={switches.vim}
-              onChange={() => setSwitches(prev => ({ ...prev, vim: !prev.vim }))}
-            />
-            <ItemPresets.TEXT_SWITCH
-              label="Auto-complete"
-              value={switches.autocomplete}
-              onChange={() => setSwitches(prev => ({ ...prev, autocomplete: !prev.autocomplete }))}
-            />
-          </ItemPresets.SUBSECTION>
-        }
-      ]
-    },
-    {
-      label: 'System',
-      items: [
-        { content: <ItemPresets.SUBSECTION title="Performance">
-            <ItemPresets.TEXT_SWITCH
-              label="Hardware Acceleration"
-              value={switches.hardware}
-              onChange={() => setSwitches(prev => ({ ...prev, hardware: !prev.hardware }))}
-            />
-            <ItemPresets.TEXT_SWITCH
-              label="Background Processing"
-              value={switches.background}
-              onChange={() => setSwitches(prev => ({ ...prev, background: !prev.background }))}
-            />
-            <ItemPresets.TEXT_DROPDOWN
-              label="Process Priority"
-              value="normal"
-              options={[
-                { value: 'low', label: 'Low' },
-                { value: 'normal', label: 'Normal' },
-                { value: 'high', label: 'High' }
-              ]}
-              onChange={() => {}}
-            />
-          </ItemPresets.SUBSECTION>
-        }
-      ]
-    },
-    {
-      label: 'Storage',
-      items: [
-        { content: <ItemPresets.SUBSECTION title="Storage Management">
-            <ItemPresets.ICON_TEXT icon={Database} label="Local Storage: 2.1 GB" />
-            <ItemPresets.ICON_TEXT icon={Cloud} label="Cloud Sync: Enabled" />
+        {
+          content: <ItemPresets.SUBSECTION title="App">
             <ItemPresets.TEXT_BUTTON
-              label="Clear Cache"
-              buttonText="Clear"
-              onClick={() => {}}
+              label="Current version: v1.7.7"
+              subtext="(Installer version: v1.7.7)&#10;Obsidian is up to date!&#10;Read the changelog."
+              buttonText="Check for updates"
+              primary
             />
           </ItemPresets.SUBSECTION>
+        },
+        {
+          content: <ItemPresets.TEXT_SWITCH
+            label="Automatic updates"
+            subtext="Turn this off to prevent the app from checking for updates."
+            value={true}
+          />
+        },
+        {
+          content: <ItemPresets.SUBSECTION title="Language">
+            <ItemPresets.TEXT_DROPDOWN
+              label="Change the display language."
+              subtext="Learn how to add a new language to Obsidian."
+              value="english"
+              options={[{ value: "english", label: "English" }]}
+            />
+          </ItemPresets.SUBSECTION>
+        },
+        {
+          content: <ItemPresets.SUBSECTION title="Help">
+            <ItemPresets.TEXT_BUTTON
+              label="Learn how to use Obsidian and get help from the community."
+              buttonText="Open"
+            />
+          </ItemPresets.SUBSECTION>
+        }
+      ]
+    },
+    {
+      label: "Account",
+      items: [
+        {
+          content: <ItemPresets.SUBSECTION title="Your account">
+            <ItemComponents.CONTAINER>
+              <ItemComponents.TEXT
+                label="You're not logged in right now."
+                subtext="An account is only needed for Obsidian Sync, Obsidian Publish, and early access versions."
+              />
+                <ItemComponents.BUTTON>Log in</ItemComponents.BUTTON>
+                <ItemComponents.BUTTON>Sign up</ItemComponents.BUTTON>
+            </ItemComponents.CONTAINER>
+          </ItemPresets.SUBSECTION>
+        },
+        {
+          content: <ItemPresets.SUBSECTION title="Commercial license">
+            <ItemComponents.CONTAINER>
+              <ItemComponents.TEXT
+                label="A commercial license is required if you use Obsidian for work within a for-profit company of two or more people."
+                subtext="Learn more"
+              />
+                <ItemComponents.BUTTON primary='True'>Activate</ItemComponents.BUTTON>
+                <ItemComponents.BUTTON>Purchase</ItemComponents.BUTTON>
+            </ItemComponents.CONTAINER>
+          </ItemPresets.SUBSECTION>
+        }
+      ]
+    },
+    {
+      label: "Advanced",
+      items: [
+        {
+          content: <ItemPresets.TEXT_SWITCH
+            label="Notify if startup takes longer than expected"
+            subtext="Diagnose issues with your app by seeing what is causing the app to load slowly."
+            value={false}
+          />
         }
       ]
     }
-  ];
+   ];
 
   const modalProps = {
     small: {
