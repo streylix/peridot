@@ -45,6 +45,13 @@ const ItemPresets = {
       <Icon />
       <span>{label}</span>
     </div>
+  ),
+
+  SUBSECTION: ({ title, children }) => (
+    <div className="item-subsection">
+      <h3 className="item-subsection-title">{title}</h3>
+      {children}
+    </div>
   )
 };
 
@@ -72,15 +79,11 @@ const Modal = ({ isOpen, onClose, sections = [], title, size = 'default' }) => {
 
   return (
       <div className="modal-overlay">
+        <button className="modal-close" onClick={onClose}>
+            <X />
+        </button>
         <div className={`modal-content ${size}`} ref={modalRef}>
-          <div className="modal-header">
-            <h2 className="modal-title">{title}</h2>
-            <button className="modal-close" onClick={onClose}>
-              <X />
-            </button>
-          </div>
-          
-          <div className="modal-body">
+          <div className="modal-main">
             {showSections && (
               <div className="modal-sections">
                 {sections.map((section, index) => (
@@ -94,7 +97,7 @@ const Modal = ({ isOpen, onClose, sections = [], title, size = 'default' }) => {
               </div>
             )}
             
-            <div className="modal-items">
+            <div className="modal-body">
               {activeItems.map((item, index) => (
                 <div key={index} className="modal-item">
                   {item.content}

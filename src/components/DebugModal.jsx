@@ -88,7 +88,7 @@ function DebugModal({ currentModal, onClose }) {
 
   const modalProps = {
     small: {
-      title: "Small Modal Example",
+      title: "",
       sections: smallModalSections,
       size: "small"
     },
