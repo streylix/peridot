@@ -118,7 +118,8 @@ function DebugModal({ currentModal, onClose }) {
           content: <ItemPresets.TEXT_SWITCH
             label="Automatic updates"
             subtext="Turn this off to prevent the app from checking for updates."
-            value={true}
+            value={switches.updates}
+            onChange={() => setSwitches(prev => ({ ...prev, updates: !prev.updates }))}
           />
         },
         {
@@ -177,7 +178,8 @@ function DebugModal({ currentModal, onClose }) {
           content: <ItemPresets.TEXT_SWITCH
             label="Notify if startup takes longer than expected"
             subtext="Diagnose issues with your app by seeing what is causing the app to load slowly."
-            value={false}
+            value={switches.startup}
+            onChange={() => setSwitches(prev => ({ ...prev, startup: !prev.startup }))}
           />
         }
       ]

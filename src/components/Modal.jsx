@@ -35,13 +35,18 @@ const ItemComponents = {
       </label>
     ),
     
-    DROPDOWN: ({ value, options, onChange = () => {} }) => (
-      <select value={value} onChange={onChange}>
+    DROPDOWN: ({ value, options, defaultValue }) => {
+      const [selectedValue, setSelectedValue] = useState(defaultValue);
+      return(
+        <select 
+            value={selectedValue}
+            onChange={(e) => setSelectedValue(e.target.value)}
+        >
         {options.map(opt => (
           <option key={opt.value} value={opt.value}>{opt.label}</option>
         ))}
       </select>
-    ),
+    )},
     
     TEXT: ({ label, subtext }) => (
       <div className="item-text">
