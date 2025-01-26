@@ -1,9 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { CircleEllipsis, Lock, Pin, Gift, Trash2 } from 'lucide-react';
+import LockNoteModal from './LockNoteModal';
 
-const InfoMenu = ({ selectedId, notes, onTogglePin, onDeleteNote }) => {
+const InfoMenu = ({ selectedId, notes, onTogglePin, onDeleteNote, onLockModalOpen, onUnlockModalOpen }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [UnlockModalOpen, setUnlockModalOpen] = useState(false);
+  const [isLockModalOpen, setIsLockModalOpen] = useState(false);
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
 
@@ -27,6 +30,15 @@ const InfoMenu = ({ selectedId, notes, onTogglePin, onDeleteNote }) => {
 
   const toggleMenu = () => {
     setIsOpen(!isOpen);
+  };
+
+  const handleLockClick = () => {
+    if (selectedNote?.locked) {
+      onUnlockModalOpen();
+    } else {
+      onLockModalOpen();
+    }
+    setIsOpen(false);
   };
 
   useEffect(() => {
@@ -77,18 +89,20 @@ const InfoMenu = ({ selectedId, notes, onTogglePin, onDeleteNote }) => {
           padding: '4px'
         }}
       >
-        <button style={buttonStyle} onMouseEnter={e => e.target.style.opacity = '1'} onMouseLeave={e => e.target.style.opacity = '0.6'}>
+        <button 
+          style={selectedNote ? buttonStyle : disabledStyle}
+          onClick={handleLockClick}
+          disabled={!selectedNote}
+          onMouseEnter={e => selectedNote && (e.target.style.opacity = '1')} 
+          onMouseLeave={e => selectedNote && (e.target.style.opacity = '0.6')}
+        >
           <Lock className="mr-6 h-4 w-4" />
-          Lock Note
+          {selectedNote?.locked ? 'Unlock Note' : 'Lock Note'}
         </button>
 
         <button 
           style={selectedNote ? buttonStyle : disabledStyle} 
-          onClick={(e) => {
-            e.stopPropagation(); // Prevent event bubbling
-            console.log('Pin button clicked');
-            console.log('Selected note:', selectedNote);
-            console.log('onTogglePin function exists:', !!onTogglePin);
+          onClick={() => {
             if (selectedNote) {
               onTogglePin(selectedNote.id);
               setIsOpen(false);

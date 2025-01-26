@@ -493,7 +493,11 @@ header.full-width{
   justify-content: center;
 }
 
-
+.lock-indicator {
+  display: flex;
+  align-items: center;
+  opacity: 0.3;
+}
 
 /* Customize scrollbar for note list */
 .note-list::-webkit-scrollbar {

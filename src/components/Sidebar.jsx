@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SquarePen, Pin } from 'lucide-react'
+import { SquarePen, Pin, Lock } from 'lucide-react'
 import MainContent from './MainContent';
 import logo from '../assets/logo.png';
 
@@ -45,7 +45,7 @@ function getPreviewContent(content) {
   return '';
 }
 
-function Sidebar({ selectedId, onNoteSelect, notes, setNotes }) {
+function Sidebar({ selectedId, onNoteSelect, notes, setNotes, onUnlockNote }) {
   const [searchTerm, setSearchTerm] = useState('');
 
   const createNewNote = () => {
@@ -130,24 +130,25 @@ function Sidebar({ selectedId, onNoteSelect, notes, setNotes }) {
         </div>
         <ul className="note-list">
           {filteredNotes.map(note => (
-            <li
+              <li
               key={note.id}
               className={`note-item ${note.id === selectedId ? 'active' : ''}`}
               onClick={() => onNoteSelect(note.id)}
             >
-              <div className="note-header">
+            <div className="note-header" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span className="note-title">
                   {getFirstLine(note.content) || 'Untitled'}
                 </span>
-                {note.pinned && (
-                  <div className="pin-indicator">
-                    <Pin size={20}className="h-4 w-4 text-gray-400" />
-                  </div>
-                )}
+                <div className="note-preview">
+                  {note.locked ? 'Unlock to view' : getPreviewContent(note.content)}
+                </div>
               </div>
-              <div className="note-preview">
-                {getPreviewContent(note.content)}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                {note.pinned && <Pin size={20} className="pin-indicator" />}
+                {note.locked && <Lock size={20} className="lock-indicator" />}
               </div>
+            </div>
             </li>
           ))}
         </ul>
@@ -169,6 +170,7 @@ function Sidebar({ selectedId, onNoteSelect, notes, setNotes }) {
       <MainContent 
         note={selectedNote} 
         onUpdateNote={(updates, updateModified = true) => updateNote(selectedId, updates, updateModified)}
+        onUnlockNote={onUnlockNote}
       />
     </>
   );
