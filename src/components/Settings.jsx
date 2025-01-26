@@ -1,17 +1,104 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Modal, ItemPresets, ItemComponents } from './Modal';
+import { Sun, Moon, Bug, Save, Trash2, Upload } from 'lucide-react';
 
-function Settings({ isOpen, onClose }) {
+function Settings({ isOpen, onClose, setNotes }) {
+  const fileInputRef = useRef(null);
   const [isDarkMode, setIsDarkMode] = useState(() => {
-    // Check local storage for existing dark mode preference
     return localStorage.getItem('darkMode') === 'true';
   });
 
-  useEffect(() => {
-    console.log('Settings modal isOpen:', isOpen);
-  }, [isOpen]);
+  const handleClearNotes = () => {
+    if (window.confirm('Are you sure? This will delete all notes.')) {
+      localStorage.removeItem('notes');
+      setNotes([]);
+    }
+  };
+
+  const handleSaveNotes = () => {
+    const notes = localStorage.getItem('notes');
+    const blob = new Blob([notes], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'notes_backup.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const generateUniqueId = (() => {
+    let counter = 0;
+    return () => Date.now() + counter++;
+  })();
+
+  const normalizeNote = (note) => {
+    if (!note.content) return null;
+
+    const normalized = {
+      id: generateUniqueId(),
+      content: note.content,
+      dateModified: note.dateModified || new Date().toISOString(),
+      pinned: Boolean(note.pinned),
+      caretPosition: Number(note.caretPosition) || 0,
+      originalId: note.id
+    };
+
+    if (typeof note.id === 'number') {
+      normalized.originalId = note.id;
+    }
+
+    return normalized;
+  };
+
+  const handleImportNotes = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const importedNotes = JSON.parse(text);
+      
+      if (!Array.isArray(importedNotes)) {
+        throw new Error('Invalid format: Expected an array of notes');
+      }
+
+      const validNotes = importedNotes
+        .map(note => normalizeNote(note))
+        .filter(Boolean);
+
+      if (validNotes.length === 0) {
+        throw new Error('No valid notes found in import file');
+      }
+
+      const existingNotesStr = localStorage.getItem('notes');
+      const existingNotes = existingNotesStr ? JSON.parse(existingNotesStr) : [];
+      
+      const mergedNotes = [...existingNotes, ...validNotes];
+
+      const sortedNotes = mergedNotes.sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        return new Date(b.dateModified) - new Date(a.dateModified);
+      });
+
+      localStorage.setItem('notes', JSON.stringify(sortedNotes));
+      setNotes(sortedNotes);
+      
+      const skippedCount = importedNotes.length - validNotes.length;
+      if (skippedCount > 0) {
+        alert(`Import completed with warnings:\n${skippedCount} invalid notes were skipped.`);
+      } else {
+        alert('Import completed successfully!');
+      }
+    } catch (error) {
+      console.error('Error importing notes:', error);
+      alert(`Error importing notes: ${error.message}`);
+    }
+  };
 
   useEffect(() => {
-    // Apply dark mode when component mounts or isDarkMode changes
     if (isDarkMode) {
       document.body.classList.add('dark-mode');
       localStorage.setItem('darkMode', 'true');
@@ -21,45 +108,72 @@ function Settings({ isOpen, onClose }) {
     }
   }, [isDarkMode]);
 
-  const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
-  };
+  if (!isOpen) return null;
 
-  // Render nothing if not open
-  if (!isOpen) {
-    console.log('Settings modal not rendering due to !isOpen');
-    return null;
-  }
-
-  console.log('Settings modal rendering');
+  const settingsSections = [
+    {
+      label: 'General',
+      items: [
+        {
+          content: <ItemPresets.SUBSECTION title="Appearance">
+            <ItemPresets.TEXT_SWITCH
+              label="Dark Mode"
+              subtext="Toggle between light and dark theme"
+              value={isDarkMode}
+              onChange={() => setIsDarkMode(prev => !prev)}
+            />
+          </ItemPresets.SUBSECTION>
+        }
+      ]
+    },
+    {
+      label: 'Developer',
+      items: [
+        {
+          content: <ItemPresets.SUBSECTION title="Debug">
+            <ItemPresets.TEXT_BUTTON
+              label="Backup Notes"
+              subtext="Download all notes as a JSON file"
+              buttonText="Backup"
+              primary="primary"
+              onClick={handleSaveNotes}
+            />
+            <ItemPresets.TEXT_BUTTON
+              label="Import Notes"
+              subtext="Import notes from a backup JSON file"
+              buttonText="Import"
+              onClick={() => fileInputRef.current?.click()}
+            />
+            <ItemPresets.TEXT_BUTTON
+              label="Note Cleanup"
+              subtext="Clears all notes from the sidebar (CANNOT BE UNDONE)"
+              buttonText="Clear Notes"
+              primary="warning"
+              onClick={handleClearNotes}
+            />
+            <input
+              type="file"
+              ref={fileInputRef}
+              style={{ display: 'none' }}
+              accept=".json"
+              onChange={handleImportNotes}
+            />
+          </ItemPresets.SUBSECTION>
+        }
+      ]
+    }
+  ];
 
   return (
-    <div className="dark-mode-modal-overlay">
-      <div className="dark-mode-modal-content">
-        <button className="dark-mode-modal-close" onClick={onClose}>
-          ✕
-        </button>
-        <h2>Settings</h2>
-        <div className="settings-section">
-          <div className="dark-mode-switch-container">
-            <span>Dark Mode</span>
-            <label className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={isDarkMode}
-                onChange={toggleDarkMode}
-              />
-              <span className="slider"></span>
-            </label>
-          </div>
-        </div>
-        <div className="settings-section">
-          <button className="btn btn-danger" disabled>
-            Sign Out
-          </button>
-        </div>
-      </div>
-    </div>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      {...{
+        title: "Settings",
+        sections: settingsSections,
+        size: "large"
+      }}
+    />
   );
 }
 

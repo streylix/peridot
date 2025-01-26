@@ -3,6 +3,7 @@ import { Modal, ItemPresets, ItemComponents } from './Modal';
 import { Lock, Globe, Bell, Keyboard, Code, Database, Cloud } from 'lucide-react';
 
 function DebugModal({ currentModal, onClose }) {
+  const [theme, setTheme] = useState("dark");
   const [switches, setSwitches] = useState({
     switch1: false,
     switch2: true,
@@ -39,13 +40,14 @@ function DebugModal({ currentModal, onClose }) {
             <ItemPresets.ICON_TEXT icon={Globe} label="Language Settings" />
             <ItemPresets.TEXT_DROPDOWN
               label="Theme"
-              value="dark"
+              value={theme}
               options={[
                 { value: 'light', label: 'Light' },
                 { value: 'dark', label: 'Dark' },
                 { value: 'system', label: 'System' }
               ]}
-              onChange={() => {}}
+              onChange={setTheme}
+              onSelect={(theme) => document.body.className = theme}
             />
             <ItemPresets.TEXT_DROPDOWN
               label="Date Format"

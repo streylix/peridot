@@ -11,6 +11,8 @@ const Section = ({ label, isActive, onClick }) => (
   </button>
 );
 
+
+
 const ItemComponents = {
     CONTAINER: ({ children, className }) => {
         const [left, ...right] = React.Children.toArray(children);
@@ -24,7 +26,7 @@ const ItemComponents = {
     
     BUTTON: ({ onClick, primary, children }) => (
       <div className="spacer">
-        <button className={primary ? 'primary' : ''} onClick={onClick}>{children}</button>
+        <button className={primary} onClick={onClick}>{children}</button>
       </div>
     ),
     
@@ -35,18 +37,16 @@ const ItemComponents = {
       </label>
     ),
     
-    DROPDOWN: ({ value, options, defaultValue }) => {
-      const [selectedValue, setSelectedValue] = useState(defaultValue);
-      return(
+    DROPDOWN: ({ value, options, onChange = () => {} }) => (
         <select 
-            value={selectedValue}
-            onChange={(e) => setSelectedValue(e.target.value)}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
         >
-        {options.map(opt => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
-    )},
+          {options.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      ),
     
     TEXT: ({ label, subtext }) => (
       <div className="item-text">

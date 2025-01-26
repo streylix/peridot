@@ -90,6 +90,7 @@ function App() {
       <Settings
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+        setNotes={setNotes}
       />
       <ModalDebug
         currentModal={currentModal}

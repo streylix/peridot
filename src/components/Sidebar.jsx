@@ -152,7 +152,7 @@ function Sidebar({ selectedId, onNoteSelect, notes, setNotes }) {
           ))}
         </ul>
 
-        <button 
+        {/* <button 
           type="button" 
           id="debug-button"
           onClick={() => {
@@ -164,7 +164,7 @@ function Sidebar({ selectedId, onNoteSelect, notes, setNotes }) {
           }}
         >
           Clear All Notes (Debug)
-        </button>
+        </button> */}
       </div>
       <MainContent 
         note={selectedNote} 

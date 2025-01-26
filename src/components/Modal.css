@@ -283,6 +283,14 @@
     background-color: #208f4e;
   }
 
+  button.warning{
+    background-color: rgb(168, 0, 0);
+  }
+
+  button.warning:hover{
+    background-color: rgb(202, 0, 0);
+  }
+
   .spacer{
     padding: 4px;
   }
