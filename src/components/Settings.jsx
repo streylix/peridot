@@ -21,7 +21,7 @@ function Settings({ isOpen, onClose, setNotes }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'notes_backup.json';
+    a.download = `notes_backup_${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -33,20 +33,23 @@ function Settings({ isOpen, onClose, setNotes }) {
     return () => Date.now() + counter++;
   })();
 
-  const normalizeNote = (note) => {
+
+  const normalizeNote = (note, existingNotes) => {
     if (!note.content) return null;
 
     const normalized = {
-      id: generateUniqueId(),
       content: note.content,
       dateModified: note.dateModified || new Date().toISOString(),
       pinned: Boolean(note.pinned),
-      caretPosition: Number(note.caretPosition) || 0,
-      originalId: note.id
+      caretPosition: Number(note.caretPosition) || 0
     };
 
-    if (typeof note.id === 'number') {
-      normalized.originalId = note.id;
+    // Keep original ID if it's a number and not already taken
+    if (typeof note.id === 'number' && !existingNotes.some(n => n.id === note.id)) {
+      normalized.id = note.id;
+    } else {
+      normalized.id = generateUniqueId();
+      normalized.originalId = note.id; // Store original ID if needed
     }
 
     return normalized;
@@ -64,16 +67,16 @@ function Settings({ isOpen, onClose, setNotes }) {
         throw new Error('Invalid format: Expected an array of notes');
       }
 
+      const existingNotesStr = localStorage.getItem('notes');
+      const existingNotes = existingNotesStr ? JSON.parse(existingNotesStr) : [];
+
       const validNotes = importedNotes
-        .map(note => normalizeNote(note))
+        .map(note => normalizeNote(note, existingNotes))
         .filter(Boolean);
 
       if (validNotes.length === 0) {
         throw new Error('No valid notes found in import file');
       }
-
-      const existingNotesStr = localStorage.getItem('notes');
-      const existingNotes = existingNotesStr ? JSON.parse(existingNotesStr) : [];
       
       const mergedNotes = [...existingNotes, ...validNotes];
 
