@@ -5,9 +5,17 @@ import LockedWindow from './LockedWindow';
 
 function MainContent({ note, onUpdateNote }) {
   const [showLocked, setIsUnlocked] = useState(true);
+  const [showContent, setTempUnlock] = useState(false);
+
+  const handleUnlock = (password) => {
+    if (password === note.tempPass) {
+      console.log("correct password")
+      setTempUnlock(true);
+    }
+  };
 
   useEffect(() => {
-    setIsUnlocked(false);
+    setTempUnlock(false);
   }, [note?.id]);
 
   if (!note) {
@@ -23,14 +31,8 @@ function MainContent({ note, onUpdateNote }) {
   return (
     <div className="main-content">
       <div className="title-spacer" style={{ height: '40px' }} />
-      {note.locked && showLocked ? (
-        <LockedWindow 
-          onUnlock={(password) => {
-            if (password === note.tempPass) {
-              setIsUnlocked(true);
-            }
-          }} 
-        />
+      {note.locked && !showContent ? (
+        <LockedWindow onUnlock={handleUnlock}/>
       ) : (
         <NoteEditor note={note} onUpdateNote={onUpdateNote} />
       )}

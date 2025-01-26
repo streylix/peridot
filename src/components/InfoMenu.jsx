@@ -5,8 +5,6 @@ import LockNoteModal from './LockNoteModal';
 
 const InfoMenu = ({ selectedId, notes, onTogglePin, onDeleteNote, onLockModalOpen, onUnlockModalOpen }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [UnlockModalOpen, setUnlockModalOpen] = useState(false);
-  const [isLockModalOpen, setIsLockModalOpen] = useState(false);
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
 
@@ -36,6 +34,7 @@ const InfoMenu = ({ selectedId, notes, onTogglePin, onDeleteNote, onLockModalOpe
     if (selectedNote?.locked) {
       onUnlockModalOpen();
     } else {
+      console.log("opening lock")
       onLockModalOpen();
     }
     setIsOpen(false);

@@ -3,7 +3,7 @@ import { SlidersHorizontal, PanelLeft, ChevronLeft, Bug } from 'lucide-react';
 import InfoMenu from './InfoMenu';
 import StatsMenu from './StatsMenu';
 
-function Header({ onSettingsClick, selectedId, notes, onTogglePin, onDeleteNote, onBack, canGoBack, onDebugClick, onLockNote, onLockModalOpen, onUnlockModalOpen }) {
+function Header({ onSettingsClick, selectedId, notes, onTogglePin, onDeleteNote, onBack, canGoBack, onDebugClick, onLockModalOpen, onUnlockModalOpen }) {
   const toggleSidebar = () => {
     const sidebar = document.querySelector('.sidebar');
     const mainContent = document.querySelector('.main-content');
@@ -67,7 +67,6 @@ function Header({ onSettingsClick, selectedId, notes, onTogglePin, onDeleteNote,
             notes={notes}
             onTogglePin={onTogglePin}
             onDeleteNote={onDeleteNote}
-            onLockNote={onLockNote}
             onLockModalOpen={onLockModalOpen}
             onUnlockModalOpen={onUnlockModalOpen}
           />

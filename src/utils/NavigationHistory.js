@@ -19,7 +19,6 @@ class NavigationHistory {
 
   canGoBack() {
     const canGo = this.history.length > 1 || (this.history.length === 1 && this.history[0] !== null);
-    console.log('Can go back?', canGo, 'History length:', this.history.length, 'History:', this.history);
     return canGo;
   }
 

@@ -30,7 +30,7 @@ function LockedWindow({ onUnlock }) {
     title: {
       fontSize: '1.25rem',
       fontWeight: 600,
-      marginBottom: '0.5rem'
+      marginBottom: '0.1rem'
     },
     subtitle: {
       color: '#6b7280',
@@ -64,6 +64,7 @@ function LockedWindow({ onUnlock }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter password"
+              autoFocus
             />
             {error && <div style={{ color: '#ff4444', fontSize: '14px' }}>{error}</div>}
             <button type="submit" className="w-full primary">

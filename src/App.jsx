@@ -24,6 +24,7 @@ function App() {
   const selectedNote = notes.find(note => note.id === selectedId);
 
   const handleLockModalOpen = () => {
+    console.log("in app locking")
     setIsLockModalOpen(true);
   };
 
