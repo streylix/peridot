@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Lock } from 'lucide-react';
+import { ItemComponents } from './Modal';
 
 function LockedWindow({ onUnlock }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const styles = {
     container: {
@@ -37,17 +39,32 @@ function LockedWindow({ onUnlock }) {
       marginBottom: '2rem'
     },
     form: {
-      width: '100%'
-    }
+      width: '100%',
+      maxWidth: '300px'
+      },
+    showPasswordContainer: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        fontSize: '12px',
+        color: '#6b7280',
+      },
+      switch: {
+        transform: 'scale(0.0) !important',
+        marginRight: '4px !important'
+      }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!password) {
+    if (!password.trim()) {
       setError('Please enter a password');
       return;
     }
-    onUnlock(password);
+    const result = onUnlock(password);
+    if (!result) {
+      setError('Invalid password');
+    }
   };
 
   return (
@@ -60,14 +77,25 @@ function LockedWindow({ onUnlock }) {
         <div className="outer-small" style={styles.form}>
           <form onSubmit={handleSubmit} className="inner-small">
             <input
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter password"
               autoFocus
             />
-            {error && <div style={{ color: '#ff4444', fontSize: '14px' }}>{error}</div>}
-            <button type="submit" className="w-full primary">
+            {error && <div style={{ color: '#ff4444', fontSize: '12px', marginTop: '4px' }}>{error}</div>}
+            
+            <div style={styles.showPasswordContainer}>
+              <div className="locked-window-switch">
+                <ItemComponents.SWITCH
+                value={showPassword}
+                onChange={() => setShowPassword(!showPassword)}
+                />
+              </div>
+              <span>Show password</span>
+            </div>
+            
+            <button type="submit" className="w-full primary" style={{ marginTop: '16px' }}>
               Unlock
             </button>
           </form>
@@ -75,6 +103,6 @@ function LockedWindow({ onUnlock }) {
       </div>
     </div>
   );
-}
+ }
 
 export default LockedWindow;

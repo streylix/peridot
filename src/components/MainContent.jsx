@@ -9,9 +9,10 @@ function MainContent({ note, onUpdateNote }) {
 
   const handleUnlock = (password) => {
     if (password === note.tempPass) {
-      console.log("correct password")
       setTempUnlock(true);
+      return true;
     }
+    return false;
   };
 
   useEffect(() => {

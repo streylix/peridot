@@ -221,7 +221,7 @@
     flex-direction: column;
     gap: 8px;
   }
-  
+
   .inner-small input {
     padding: 8px 12px;
     border-radius: 4px;
@@ -315,6 +315,24 @@
     align-items: center;
     min-width: fit-content;
     justify-content: flex-end;
+  }
+
+  .locked-window-switch {
+    transform: scale(0.8) !important;
+  }
+  
+  .locked-window-switch .switch {
+    width: 36px !important;
+    height: 20px !important;
+  }
+  
+  .locked-window-switch .slider:before {
+    height: 16px !important;
+    width: 16px !important;
+  }
+  
+  .locked-window-switch input:checked + .slider:before {
+    transform: translateX(16px) !important;
   }
 
 
