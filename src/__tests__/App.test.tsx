@@ -110,88 +110,88 @@ describe('App', () => {
     })
   })
 
-  // describe('Pin Functionality', () => {
-  //   it('pins and unpins notes correctly', async () => {
-  //     render(<App />)
-  //     const user = userEvent.setup()
+  describe('Pin Functionality', () => {
+    it('pins and unpins notes correctly', async () => {
+      render(<App />)
+      const user = userEvent.setup()
       
-  //     // Select first note
-  //     await user.click(screen.getByText('Test Note 1'))
+      // Select first note
+      await user.click(screen.getByText('Test Note 1'))
       
-  //     const infoButton = document.getElementById('info-btn') as HTMLButtonElement
+      const infoButton = document.getElementById('info-menu-btn') as HTMLButtonElement
       
-  //     if (!infoButton) {
-  //       throw new Error('Info button not found')
-  //     }
+      if (!infoButton) {
+        throw new Error('Info button not found')
+      }
       
-  //     // Open info menu and click pin
-  //     await user.click(infoButton)
-  //     await user.click(screen.getByText('Pin Note'))
+      // Open info menu and click pin
+      await user.click(infoButton)
+      await user.click(screen.getByText('Pin Note'))
       
-  //     // Verify localStorage was called with updated notes
-  //     expect(localStorage.setItem).toHaveBeenCalledWith(
-  //       'notes',
-  //       expect.stringContaining('"pinned":true')
-  //     )
-  //   })
-  // })
+      // Verify localStorage was called with updated notes
+      expect(localStorage.setItem).toHaveBeenCalledWith(
+        'notes',
+        expect.stringContaining('"pinned":true')
+      )
+    })
+  })
 
-  // describe('Note Lock Functionality', () => {
-  //   it('locks and unlocks notes with password', async () => {
-  //     render(<App />)
-  //     const user = userEvent.setup()
+  describe('Note Lock Functionality', () => {
+    it('locks and unlocks notes with password', async () => {
+      render(<App />)
+      const user = userEvent.setup()
       
-  //     // Select a note
-  //     await user.click(screen.getByText('Test Note 1'))
+      // Select a note
+      await user.click(screen.getByText('Test Note 1'))
       
-  //     const infoButton = document.getElementById('info-btn') as HTMLButtonElement
+      const infoButton = document.getElementById('info-menu-btn') as HTMLButtonElement
       
-  //     if (!infoButton) {
-  //       throw new Error('Info button not found')
-  //     }
+      if (!infoButton) {
+        throw new Error('Info button not found')
+      }
       
-  //     // Open info menu and lock note
-  //     await user.click(infoButton)
-  //     await user.click(screen.getByText('Lock Note'))
+      // Open info menu and lock note
+      await user.click(infoButton)
+      await user.click(screen.getByText('Lock Note'))
       
-  //     // Enter password in modal
-  //     const passwordInput = screen.getByPlaceholderText(/enter password/i)
-  //     await user.type(passwordInput, 'test123')
-  //     await user.click(screen.getByRole('button', { name: /ok/i }))
+      // Enter password in modal
+      const passwordInput = screen.getByPlaceholderText(/enter password/i)
+      await user.type(passwordInput, 'test123')
+      await user.click(screen.getByRole('button', { name: /ok/i }))
       
-  //     // Verify note is locked
-  //     expect(localStorage.setItem).toHaveBeenCalledWith(
-  //       'notes',
-  //       expect.stringContaining('"locked":true')
-  //     )
-  //   })
-  // })
+      // Verify note is locked
+      expect(localStorage.setItem).toHaveBeenCalledWith(
+        'notes',
+        expect.stringContaining('"locked":true')
+      )
+    })
+  })
 
-  // describe('Download Note Functionality', () => {
-  //   it('downloads note as JSON when clicked', async () => {
-  //     render(<App />)
-  //     const user = userEvent.setup()
+  describe('Download Note Functionality', () => {
+    it('downloads note as JSON when clicked', async () => {
+      render(<App />)
+      const user = userEvent.setup()
       
-  //     // Select a note
-  //     await user.click(screen.getByText('Test Note 1'))
+      // Select a note
+      await user.click(screen.getByText('Test Note 1'))
       
-  //     const infoButton = document.getElementById('info-btn') as HTMLButtonElement
+      const infoButton = document.getElementById('info-menu-btn') as HTMLButtonElement
       
-  //     if (!infoButton) {
-  //       throw new Error('Info button not found')
-  //     }
+      if (!infoButton) {
+        throw new Error('Info button not found')
+      }
       
-  //     // Open info menu and click download
-  //     await user.click(infoButton)
-  //     await user.click(screen.getByText('Download Note'))
+      // Open info menu and click download
+      await user.click(infoButton)
+      await user.click(screen.getByText('Download Note'))
       
-  //     // Verify URL.createObjectURL was called
-  //     expect(URL.createObjectURL).toHaveBeenCalledWith(
-  //       expect.any(Blob)
-  //     )
+      // Verify URL.createObjectURL was called
+      expect(URL.createObjectURL).toHaveBeenCalledWith(
+        expect.any(Blob)
+      )
       
-  //     // Verify URL.revokeObjectURL was called for cleanup
-  //     expect(URL.revokeObjectURL).toHaveBeenCalled()
-  //   })
-  // })
+      // Verify URL.revokeObjectURL was called for cleanup
+      expect(URL.revokeObjectURL).toHaveBeenCalled()
+    })
+  })
 })

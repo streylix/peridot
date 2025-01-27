@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { CircleEllipsis, Lock, Pin, Gift, Trash2, Download } from 'lucide-react';
+import { getFirstLine } from '../utils/contentUtils';
 
 const InfoMenu = ({
   selectedId,
@@ -141,6 +142,7 @@ const InfoMenu = ({
           className={`info-menu-button ${selectedNote ? '' : 'disabled'}`}
           onClick={handleDownloadNote}
           disabled={!selectedNote}
+          aria-label="Download Note"
         >
           <Download className="info-menu-icon" />
           Download Note
@@ -174,6 +176,7 @@ const InfoMenu = ({
       <button
         ref={buttonRef}
         type="button"
+        id="info-menu-btn"
         onClick={toggleMenu}
         className="info-menu-toggle"
       >
