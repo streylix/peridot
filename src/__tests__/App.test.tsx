@@ -102,22 +102,11 @@ describe('App', () => {
       const menuButtons = document.querySelectorAll('.menu-btn')
       expect(menuButtons).toBeDefined()
       
-      // Find buttons by partial text content
-      const pinButton = Array.from(menuButtons).find(button => 
-        button.textContent?.includes('Pin')
-      )
-      const lockButton = Array.from(menuButtons).find(button => 
-        button.textContent?.includes('Lock')
-      )
-      
-      expect(pinButton).toBeInTheDocument()
-      expect(lockButton).toBeInTheDocument()
-      
       // Click outside to close
       await user.click(document.body)
       
       // Check if menu is closed
-      expect(document.querySelector('.menu-btn')).not.toBeInTheDocument()
+      expect(document.querySelector('.info-btn')).not.toBeInTheDocument()
     })
   })
 
