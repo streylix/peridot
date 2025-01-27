@@ -63,46 +63,38 @@ const StatsMenu = ({ selectedId, notes }) => {
     return createPortal(
       <div
         ref={menuRef}
+        className="stats-menu"
         style={{
           position: 'fixed',
-          backgroundColor: '#1e1e1e',
-          border: '1px solid #333',
           width: '300px',
           borderRadius: '4px',
-          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
           zIndex: 9999,
           padding: '16px',
-          color: '#c7c7c7'
         }}
       >
-        <h3 style={{ 
-          marginBottom: '16px', 
-          fontSize: '16px', 
-          fontWeight: 'bold',
-          color: '#c7c7c7' 
-        }}>
+        <h3 className="stats-menu-title">
           Information
         </h3>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <div className="stats-menu-content">
+          <div className="stats-menu-item">
             <span>Modified</span>
-            <span style={{ color: '#888' }}>{formatDate(selectedNote.dateModified)}</span>
+            <span className="stats-menu-value">{formatDate(selectedNote.dateModified)}</span>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div className="stats-menu-item">
             <span>Created</span>
-            <span style={{ color: '#888' }}>{formatDate(selectedNote.id)}</span>
+            <span className="stats-menu-value">{formatDate(selectedNote.id)}</span>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div className="stats-menu-item">
             <span>Words</span>
-            <span style={{ color: '#888' }}>{stats.words}</span>
+            <span className="stats-menu-value">{stats.words}</span>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div className="stats-menu-item">
             <span>Characters</span>
-            <span style={{ color: '#888' }}>{stats.chars}</span>
+            <span className="stats-menu-value">{stats.chars}</span>
           </div>
         </div>
       </div>,
@@ -117,12 +109,9 @@ const StatsMenu = ({ selectedId, notes }) => {
         type="button"
         id="info-btn"
         onClick={toggleMenu}
-        className="flex items-center justify-center h-8 w-8 rounded hover:bg-gray-700"
-        onMouseEnter={e => selectedNote && (e.target.style.opacity = '1')} 
-        onMouseLeave={e => selectedNote && (e.target.style.opacity = '0.6')}
-        style={{ opacity: selectedNote ? 0.6 : 0.2, cursor: selectedNote ? 'pointer' : 'not-allowed' }}
+        className="stat-btn"
       >
-        <Info className="h-5 w-5 text-gray-400" />
+        <Info />
       </button>
       <Menu />
     </>
