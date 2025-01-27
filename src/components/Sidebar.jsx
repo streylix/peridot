@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { SquarePen, Pin, Lock } from 'lucide-react'
+import { SquarePen, Pin, Lock } from 'lucide-react';
 import MainContent from './MainContent';
+import InfoMenu from './InfoMenu';
 import logo from '../assets/logo.png';
 
 function getFirstLine(content) {
@@ -45,8 +46,19 @@ function getPreviewContent(content) {
   return '';
 }
 
-function Sidebar({ selectedId, onNoteSelect, notes, setNotes, onUnlockNote }) {
+function Sidebar({ 
+  selectedId, 
+  onNoteSelect, 
+  notes, 
+  setNotes, 
+  onUnlockNote,
+  onTogglePin,
+  onDeleteNote,
+  onLockModalOpen,
+  onUnlockModalOpen
+}) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [contextMenu, setContextMenu] = useState(null);
 
   const createNewNote = () => {
     const newNote = {
@@ -94,20 +106,28 @@ function Sidebar({ selectedId, onNoteSelect, notes, setNotes, onUnlockNote }) {
       return updateModified ? sortNotes(updatedNotes) : updatedNotes;
     });
   };
+  
+
+  const handleContextMenu = (e, noteId) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      noteId
+    });
+  };
 
   const filteredNotes = notes.filter(note => {
     const noteContent = note.content.toLowerCase();
     return noteContent.includes(searchTerm.toLowerCase());
   });
 
-  const selectedNote = notes.find(note => note.id === selectedId);
-
   return (
     <>
       <div className="sidebar" id="sidebar">
         <div className="sidebar-header">
           <div className="logo">
-            <img src={logo} alt="biz logo" width="50" height="50"></img>
+            <img src={logo} alt="biz logo" width="50" height="50" />
             <h1>peridot.</h1>
           </div>
           <div className="search">
@@ -130,48 +150,60 @@ function Sidebar({ selectedId, onNoteSelect, notes, setNotes, onUnlockNote }) {
         </div>
         <ul className="note-list">
           {filteredNotes.map(note => (
-              <li
+            <li
               key={note.id}
               className={`note-item ${note.id === selectedId ? 'active' : ''}`}
               onClick={() => onNoteSelect(note.id)}
+              onContextMenu={(e) => handleContextMenu(e, note.id)}
             >
-            <div className="note-header" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span className="note-title">
-                  {getFirstLine(note.content) || 'Untitled'}
-                </span>
-                <div className="note-preview">
-                  {note.locked ? 'Unlock to view' : getPreviewContent(note.content)}
+              <div className="note-header" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span className="note-title">
+                    {getFirstLine(note.content) || 'Untitled'}
+                  </span>
+                  <div className="note-preview">
+                    {note.locked ? 'Unlock to view' : getPreviewContent(note.content)}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                  {note.pinned && <Pin size={20} className="pin-indicator" />}
+                  {note.locked && <Lock size={20} className="lock-indicator" />}
                 </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                {note.pinned && <Pin size={20} className="pin-indicator" />}
-                {note.locked && <Lock size={20} className="lock-indicator" />}
-              </div>
-            </div>
             </li>
           ))}
         </ul>
-
-        {/* <button 
-          type="button" 
-          id="debug-button"
-          onClick={() => {
-            if (window.confirm('Are you sure? This will delete all notes.')) {
-              setNotes([]);
-              localStorage.removeItem('notes');
-              onNoteSelect(null);
-            }
-          }}
-        >
-          Clear All Notes (Debug)
-        </button> */}
       </div>
       <MainContent 
-        note={selectedNote} 
-        onUpdateNote={(updates, updateModified = true) => updateNote(selectedId, updates, updateModified)}
+        note={notes.find(note => note.id === selectedId)} 
+        onUpdateNote={(updates, updateModified = true) => {
+          setNotes(prevNotes => {
+            const updatedNotes = prevNotes.map(note => 
+              note.id === selectedId 
+                ? { 
+                    ...note, 
+                    ...updates,
+                    dateModified: updateModified ? new Date().toISOString() : note.dateModified 
+                  }
+                : note
+            );
+            return updateModified ? sortNotes(updatedNotes) : updatedNotes;
+          });
+        }}
         onUnlockNote={onUnlockNote}
       />
+      {contextMenu && (
+        <InfoMenu
+          selectedId={contextMenu.noteId}
+          notes={notes}
+          onTogglePin={onTogglePin}
+          onDeleteNote={onDeleteNote}
+          onLockModalOpen={onLockModalOpen}
+          onUnlockModalOpen={onUnlockModalOpen}
+          position={contextMenu}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </>
   );
 }

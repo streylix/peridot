@@ -1,9 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { CircleEllipsis, Lock, Pin, Gift, Trash2 } from 'lucide-react';
-import LockNoteModal from './LockNoteModal';
 
-const InfoMenu = ({ selectedId, notes, onTogglePin, onDeleteNote, onLockModalOpen, onUnlockModalOpen }) => {
+const InfoMenu = ({ 
+  selectedId, 
+  notes, 
+  onTogglePin, 
+  onDeleteNote, 
+  onLockModalOpen, 
+  onUnlockModalOpen,
+  position = null, // New prop for custom positioning
+  onClose // New prop for closing the menu
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
@@ -17,6 +25,7 @@ const InfoMenu = ({ selectedId, notes, onTogglePin, onDeleteNote, onLockModalOpe
       
       if (!isClickInsideButton && !isClickInsideMenu) {
         setIsOpen(false);
+        if (onClose) onClose();
       }
     };
 
@@ -24,7 +33,14 @@ const InfoMenu = ({ selectedId, notes, onTogglePin, onDeleteNote, onLockModalOpe
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+  }, [onClose]);
+
+  // When position prop changes, open the menu
+  useEffect(() => {
+    if (position) {
+      setIsOpen(true);
+    }
+  }, [position]);
 
   const toggleMenu = () => {
     setIsOpen(!isOpen);
@@ -34,19 +50,26 @@ const InfoMenu = ({ selectedId, notes, onTogglePin, onDeleteNote, onLockModalOpe
     if (selectedNote?.locked) {
       onUnlockModalOpen();
     } else {
-      console.log("opening lock")
       onLockModalOpen();
     }
     setIsOpen(false);
+    if (onClose) onClose();
   };
 
   useEffect(() => {
-    if (isOpen && buttonRef.current && menuRef.current) {
-      const buttonRect = buttonRef.current.getBoundingClientRect();
-      menuRef.current.style.top = `${buttonRect.bottom + 5}px`;
-      menuRef.current.style.left = `${buttonRect.left - 100 + buttonRect.width / 2}px`;
+    if (isOpen && menuRef.current) {
+      if (position) {
+        // Use provided position for context menu
+        menuRef.current.style.top = `${position.y}px`;
+        menuRef.current.style.left = `${position.x}px`;
+      } else if (buttonRef.current) {
+        // Use button position for header menu
+        const buttonRect = buttonRef.current.getBoundingClientRect();
+        menuRef.current.style.top = `${buttonRect.bottom + 5}px`;
+        menuRef.current.style.left = `${buttonRect.left - 100 + buttonRect.width / 2}px`;
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, position]);
 
   const buttonStyle = {
     display: 'flex',
@@ -105,6 +128,7 @@ const InfoMenu = ({ selectedId, notes, onTogglePin, onDeleteNote, onLockModalOpe
             if (selectedNote) {
               onTogglePin(selectedNote.id);
               setIsOpen(false);
+              if (onClose) onClose();
             }
           }}
           disabled={!selectedNote}
@@ -115,7 +139,11 @@ const InfoMenu = ({ selectedId, notes, onTogglePin, onDeleteNote, onLockModalOpe
           {selectedNote?.pinned ? 'Unpin Note' : 'Pin Note'}
         </button>
 
-        <button style={buttonStyle} onMouseEnter={e => e.target.style.opacity = '1'} onMouseLeave={e => e.target.style.opacity = '0.6'}>
+        <button 
+          style={buttonStyle} 
+          onMouseEnter={e => e.target.style.opacity = '1'} 
+          onMouseLeave={e => e.target.style.opacity = '0.6'}
+        >
           <Gift className="mr-6 h-4 w-4" />
           Add GIF
         </button>
@@ -126,6 +154,7 @@ const InfoMenu = ({ selectedId, notes, onTogglePin, onDeleteNote, onLockModalOpe
             if (selectedNote) {
               onDeleteNote(selectedNote.id);
               setIsOpen(false);
+              if (onClose) onClose();
             }
           }}
           disabled={!selectedNote}
@@ -140,6 +169,12 @@ const InfoMenu = ({ selectedId, notes, onTogglePin, onDeleteNote, onLockModalOpe
     );
   };
 
+  // If we're using position prop, only render the Menu
+  if (position) {
+    return <Menu />;
+  }
+
+  // Otherwise render the button and menu
   return (
     <>
       <button

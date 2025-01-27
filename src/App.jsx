@@ -15,7 +15,6 @@ function App() {
   const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
   const [navigationHistory] = useState(() => new NavigationHistory());
 
-  
   const [notes, setNotes] = useState(() => {
     const savedNotes = localStorage.getItem('notes');
     return savedNotes ? JSON.parse(savedNotes) : [];
@@ -24,7 +23,6 @@ function App() {
   const selectedNote = notes.find(note => note.id === selectedId);
 
   const handleLockModalOpen = () => {
-    console.log("in app locking")
     setIsLockModalOpen(true);
   };
 
@@ -42,7 +40,6 @@ function App() {
   };
 
   const handleLockNote = (noteId, password) => {
-    console.log('Locking note:', noteId, password); // Add logging
     setNotes(prevNotes => 
       prevNotes.map(note => 
         note.id === noteId 
@@ -127,6 +124,9 @@ function App() {
           setNotes={setNotes}
           onDeleteNote={deleteNote}
           onUnlockNote={handleUnlockNote}
+          onTogglePin={togglePin}
+          onLockModalOpen={handleLockModalOpen}
+          onUnlockModalOpen={handleUnlockModalOpen}
         />
       </div>
       <Settings
