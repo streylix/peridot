@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Modal, ItemPresets, ItemComponents } from './Modal';
-import { Sun, Moon, Bug, Save, Trash2, Upload } from 'lucide-react';
+import { Sun, Moon, Bug, Save, Trash2, Upload, Monitor } from 'lucide-react';
 
 function Settings({ isOpen, onClose, setNotes }) {
   const fileInputRef = useRef(null);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     return localStorage.getItem('darkMode') === 'true';
+  });
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('theme') || 'system';
   });
 
   const handleClearNotes = () => {
@@ -127,6 +130,34 @@ function Settings({ isOpen, onClose, setNotes }) {
     }
   }, [isDarkMode]);
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    
+    const handleChange = () => {
+      if (theme === 'system') {
+        applyTheme('system');
+      }
+    };
+
+    mediaQuery.addListener(handleChange);
+    
+    // Apply initial theme
+    applyTheme(theme);
+
+    return () => mediaQuery.removeListener(handleChange);
+  }, [theme]);
+
+  const applyTheme = (newTheme) => {
+    if (newTheme === 'system') {
+      // Check system preference
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.body.classList.toggle('dark-mode', prefersDark);
+    } else {
+      document.body.classList.toggle('dark-mode', newTheme === 'dark');
+    }
+    localStorage.setItem('theme', newTheme);
+  };
+
   if (!isOpen) return null;
 
   const settingsSections = [
@@ -135,11 +166,19 @@ function Settings({ isOpen, onClose, setNotes }) {
       items: [
         {
           content: <ItemPresets.SUBSECTION title="Appearance">
-            <ItemPresets.TEXT_SWITCH
-              label="Dark Mode"
-              subtext="Toggle between light and dark theme"
-              value={isDarkMode}
-              onChange={() => setIsDarkMode(prev => !prev)}
+            <ItemPresets.TEXT_DROPDOWN
+              label="Theme"
+              subtext="Choose your preferred appearance"
+              value={theme}
+              options={[
+                { value: 'light', label: 'Light' },
+                { value: 'dark', label: 'Dark' },
+                { value: 'system', label: 'System' }
+              ]}
+              onChange={(value) => {
+                setTheme(value);
+                applyTheme(value);
+              }}
             />
           </ItemPresets.SUBSECTION>
         }

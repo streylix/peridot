@@ -63,6 +63,17 @@ function App() {
     localStorage.setItem('notes', JSON.stringify(notes));
   }, [notes]);
 
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') || 'system';
+    
+    if (savedTheme === 'system') {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.body.classList.toggle('dark-mode', prefersDark);
+    } else {
+      document.body.classList.toggle('dark-mode', savedTheme === 'dark');
+    }
+  }, []);
+
   const sortNotes = (notesToSort) => {
     return notesToSort.sort((a, b) => {
       if (a.pinned && !b.pinned) return -1;
