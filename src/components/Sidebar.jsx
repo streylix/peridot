@@ -1,51 +1,104 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { SquarePen, Pin, Lock } from 'lucide-react';
 import MainContent from './MainContent';
 import InfoMenu from './InfoMenu';
+import { getFirstLine, getPreviewContent } from '../utils/contentUtils';
 import logo from '../assets/logo.png';
 
-function getFirstLine(content) {
-  if (!content) return 'Untitled';
-  
-  const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = content;
-  
-  const childNodes = Array.from(tempDiv.childNodes);
-  
-  for (const node of childNodes) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const text = node.textContent.trim();
-      if (text) return text;
-    }
-    else if (node.nodeType === Node.ELEMENT_NODE) {
-      const text = node.textContent.trim();
-      if (text) return text;
-    }
-  }
-  
-  return 'Untitled';
-}
+// Memoized individual note item component
+const NoteItem = React.memo(({ 
+  note, 
+  isSelected, 
+  onNoteSelect, 
+  onContextMenu 
+}) => {
+  const title = useMemo(() => getFirstLine(note.content), [note.content]);
+  const preview = useMemo(() => getPreviewContent(note.content), [note.content]);
 
-function getPreviewContent(content) {
-  if (!content) return '';
-  
-  const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = content;
+  const handleClick = useCallback(() => {
+    onNoteSelect(note.id);
+  }, [note.id, onNoteSelect]);
 
-  const divs = tempDiv.getElementsByTagName('div');
-  
-  if (divs.length > 1) {
-    const preview = Array.from(divs)
-      .slice(1)
-      .map(div => div.textContent.trim())
-      .join(' ');
-    
-    return preview;
-  }
-  
-  return '';
-}
+  const handleContextMenu = useCallback((e) => {
+    e.preventDefault();
+    onContextMenu(e, note.id);
+  }, [note.id, onContextMenu]);
 
+  return (
+    <li
+      className={`note-item ${isSelected ? 'active' : ''}`}
+      onClick={handleClick}
+      onContextMenu={handleContextMenu}
+    >
+      <div className="note-header">
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <span className="note-title">{title}</span>
+          <div className="note-preview">
+            {note.locked ? 'Unlock to view' : preview}
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+          {note.pinned && <Pin size={20} className="pin-indicator" />}
+          {note.locked && <Lock size={20} className="lock-indicator" />}
+        </div>
+      </div>
+    </li>
+  );
+});
+
+// Memoized note list component
+const NoteList = React.memo(({ 
+  notes, 
+  searchTerm, 
+  selectedId, 
+  onNoteSelect, 
+  onContextMenu 
+}) => {
+  // Memoize filtered and sorted notes
+  const filteredAndSortedNotes = useMemo(() => {
+    return notes
+      .filter(note => {
+        if (!searchTerm) return true;
+        const content = note.content.toLowerCase();
+        const search = searchTerm.toLowerCase();
+        return content.includes(search);
+      })
+      .sort((a, b) => {
+        // First sort by pinned status
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        // Then by modification date
+        return new Date(b.dateModified) - new Date(a.dateModified);
+      });
+  }, [notes, searchTerm]);
+
+  return (
+    <ul className="note-list">
+      {filteredAndSortedNotes.map(note => (
+        <NoteItem
+          key={note.id}
+          note={note}
+          isSelected={note.id === selectedId}
+          onNoteSelect={onNoteSelect}
+          onContextMenu={onContextMenu}
+        />
+      ))}
+    </ul>
+  );
+});
+
+// Hook for search functionality
+const useSearch = (initialValue = '') => {
+  const [searchTerm, setSearchTerm] = useState(initialValue);
+  
+  const handleSearchChange = useCallback((e) => {
+    setSearchTerm(e.target.value);
+  }, []);
+
+  return [searchTerm, handleSearchChange];
+};
+
+// Main sidebar component
 function Sidebar({ 
   selectedId, 
   onNoteSelect, 
@@ -57,45 +110,44 @@ function Sidebar({
   onLockModalOpen,
   onUnlockModalOpen
 }) {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, handleSearchChange] = useSearch('');
   const [contextMenu, setContextMenu] = useState(null);
 
-  const createNewNote = () => {
+  const handleContextMenu = useCallback((e, noteId) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      noteId
+    });
+  }, []);
+
+  const createNewNote = useCallback(() => {
     const newNote = {
       id: Date.now(),
-      title: '',
       content: '',
       dateModified: new Date().toISOString(),
       pinned: false,
       caretPosition: 0
     };
 
-    setNotes(prevNotes => {
-      const updatedNotes = [newNote, ...prevNotes];
-      return updatedNotes.sort((a, b) => {
-        if (a.pinned && !b.pinned) return -1;
-        if (!a.pinned && b.pinned) return 1;
-        return new Date(b.dateModified) - new Date(a.dateModified);
-      });
-    });
+    setNotes(prevNotes => [newNote, ...prevNotes]);
     onNoteSelect(newNote.id);
-  };
+  }, [setNotes, onNoteSelect]);
 
-  const sortNotes = (notesToSort) => {
+  const sortNotes = useCallback((notesToSort) => {
     return notesToSort.sort((a, b) => {
       if (a.pinned && !b.pinned) return -1;
       if (!a.pinned && b.pinned) return 1;
       return new Date(b.dateModified) - new Date(a.dateModified);
     });
-  };
+  }, []);
 
-  const updateNote = (id, updates, updateModified) => {
-    console.log("id:", id)
-    console.log("updates:", updates)
-    console.log("modified:", updateModified)
+  // Add this function inside the Sidebar component
+  const updateNote = useCallback((updates, updateModified = true) => {
     setNotes(prevNotes => {
       const updatedNotes = prevNotes.map(note => 
-        note.id === id 
+        note.id === selectedId 
           ? { 
               ...note, 
               ...updates,
@@ -105,22 +157,7 @@ function Sidebar({
       );
       return updateModified ? sortNotes(updatedNotes) : updatedNotes;
     });
-  };
-  
-
-  const handleContextMenu = (e, noteId) => {
-    e.preventDefault();
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      noteId
-    });
-  };
-
-  const filteredNotes = notes.filter(note => {
-    const noteContent = note.content.toLowerCase();
-    return noteContent.includes(searchTerm.toLowerCase());
-  });
+  }, [selectedId, sortNotes, setNotes]);
 
   return (
     <>
@@ -136,7 +173,7 @@ function Sidebar({
               id="note-search"
               placeholder="Search..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={handleSearchChange}
             />
             <button 
               type="button" 
@@ -148,64 +185,36 @@ function Sidebar({
             </button>
           </div>
         </div>
-        <ul className="note-list">
-          {filteredNotes.map(note => (
-            <li
-              key={note.id}
-              className={`note-item ${note.id === selectedId ? 'active' : ''}`}
-              onClick={() => onNoteSelect(note.id)}
-              onContextMenu={(e) => handleContextMenu(e, note.id)}
-            >
-              <div className="note-header" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span className="note-title">
-                    {getFirstLine(note.content) || 'Untitled'}
-                  </span>
-                  <div className="note-preview">
-                    {note.locked ? 'Unlock to view' : getPreviewContent(note.content)}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                  {note.pinned && <Pin size={20} className="pin-indicator" />}
-                  {note.locked && <Lock size={20} className="lock-indicator" />}
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
+        
+        <NoteList
+          notes={notes}
+          searchTerm={searchTerm}
+          selectedId={selectedId}
+          onNoteSelect={onNoteSelect}
+          onContextMenu={handleContextMenu}
+        />
+
+        {contextMenu && (
+          <InfoMenu
+            selectedId={contextMenu.noteId}
+            notes={notes}
+            onTogglePin={onTogglePin}
+            onDeleteNote={onDeleteNote}
+            onLockModalOpen={onLockModalOpen}
+            onUnlockModalOpen={onUnlockModalOpen}
+            position={contextMenu}
+            onClose={() => setContextMenu(null)}
+          />
+        )}
       </div>
+
       <MainContent 
-        note={notes.find(note => note.id === selectedId)} 
-        onUpdateNote={(updates, updateModified = true) => {
-          setNotes(prevNotes => {
-            const updatedNotes = prevNotes.map(note => 
-              note.id === selectedId 
-                ? { 
-                    ...note, 
-                    ...updates,
-                    dateModified: updateModified ? new Date().toISOString() : note.dateModified 
-                  }
-                : note
-            );
-            return updateModified ? sortNotes(updatedNotes) : updatedNotes;
-          });
-        }}
+        note={notes.find(note => note.id === selectedId)}
+        onUpdateNote={updateNote}
         onUnlockNote={onUnlockNote}
       />
-      {contextMenu && (
-        <InfoMenu
-          selectedId={contextMenu.noteId}
-          notes={notes}
-          onTogglePin={onTogglePin}
-          onDeleteNote={onDeleteNote}
-          onLockModalOpen={onLockModalOpen}
-          onUnlockModalOpen={onUnlockModalOpen}
-          position={contextMenu}
-          onClose={() => setContextMenu(null)}
-        />
-      )}
     </>
   );
 }
 
-export default Sidebar;
+export default React.memo(Sidebar);

@@ -1,29 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { SlidersHorizontal, PanelLeft, ChevronLeft, Bug } from 'lucide-react';
 import InfoMenu from './InfoMenu';
 import StatsMenu from './StatsMenu';
-
-function getFirstLine(content) {
-  if (!content) return 'Untitled';
-  
-  const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = content;
-  
-  const childNodes = Array.from(tempDiv.childNodes);
-  
-  for (const node of childNodes) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const text = node.textContent.trim();
-      if (text) return text;
-    }
-    else if (node.nodeType === Node.ELEMENT_NODE) {
-      const text = node.textContent.trim();
-      if (text) return text;
-    }
-  }
-  
-  return 'Untitled';
-}
+import { getFirstLine } from '../utils/contentUtils';
 
 function Header({ 
   onSettingsClick, 
@@ -52,7 +31,10 @@ function Header({
   };
 
   const selectedNote = notes.find(note => note.id === selectedId);
-  const noteTitle = selectedNote ? getFirstLine(selectedNote.content) : '';
+  const noteTitle = useMemo(() => 
+    selectedNote ? getFirstLine(selectedNote.content) : '',
+    [selectedNote?.content]
+  );
 
   return (
     <header>
@@ -120,4 +102,4 @@ function Header({
   );
 }
 
-export default Header;
+export default React.memo(Header);
