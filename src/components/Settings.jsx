@@ -33,7 +33,6 @@ function Settings({ isOpen, onClose, setNotes }) {
     return () => Date.now() + counter++;
   })();
 
-
   const normalizeNote = (note, existingNotes) => {
     if (!note.content) return null;
 
@@ -41,8 +40,14 @@ function Settings({ isOpen, onClose, setNotes }) {
       content: note.content,
       dateModified: note.dateModified || new Date().toISOString(),
       pinned: Boolean(note.pinned),
-      caretPosition: Number(note.caretPosition) || 0
+      caretPosition: Number(note.caretPosition) || 0,
+      locked: Boolean(note.locked)
     };
+
+    // Only include tempPass if the note is locked
+    if (normalized.locked && note.tempPass) {
+      normalized.tempPass = note.tempPass;
+    }
 
     // Keep original ID if it's a number and not already taken
     if (typeof note.id === 'number' && !existingNotes.some(n => n.id === note.id)) {
@@ -61,16 +66,21 @@ function Settings({ isOpen, onClose, setNotes }) {
 
     try {
       const text = await file.text();
-      const importedNotes = JSON.parse(text);
+      const importedData = JSON.parse(text);
       
-      if (!Array.isArray(importedNotes)) {
-        throw new Error('Invalid format: Expected an array of notes');
-      }
-
+      // Get existing notes
       const existingNotesStr = localStorage.getItem('notes');
       const existingNotes = existingNotesStr ? JSON.parse(existingNotesStr) : [];
 
-      const validNotes = importedNotes
+      // Handle both single note and array of notes
+      const notesToProcess = Array.isArray(importedData) ? importedData : [importedData];
+      
+      // Validate that we have note-like objects
+      if (!notesToProcess.every(note => typeof note === 'object' && note !== null && 'content' in note)) {
+        throw new Error('Invalid note format: Notes must have content');
+      }
+
+      const validNotes = notesToProcess
         .map(note => normalizeNote(note, existingNotes))
         .filter(Boolean);
 
@@ -80,6 +90,7 @@ function Settings({ isOpen, onClose, setNotes }) {
       
       const mergedNotes = [...existingNotes, ...validNotes];
 
+      // Sort notes by pinned status and date
       const sortedNotes = mergedNotes.sort((a, b) => {
         if (a.pinned && !b.pinned) return -1;
         if (!a.pinned && b.pinned) return 1;
@@ -89,7 +100,7 @@ function Settings({ isOpen, onClose, setNotes }) {
       localStorage.setItem('notes', JSON.stringify(sortedNotes));
       setNotes(sortedNotes);
       
-      const skippedCount = importedNotes.length - validNotes.length;
+      const skippedCount = notesToProcess.length - validNotes.length;
       if (skippedCount > 0) {
         alert(`Import completed with warnings:\n${skippedCount} invalid notes were skipped.`);
       } else {
@@ -98,6 +109,11 @@ function Settings({ isOpen, onClose, setNotes }) {
     } catch (error) {
       console.error('Error importing notes:', error);
       alert(`Error importing notes: ${error.message}`);
+    }
+
+    // Clear the file input for future imports
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -135,17 +151,17 @@ function Settings({ isOpen, onClose, setNotes }) {
         {
           content: <ItemPresets.SUBSECTION title="Debug">
             <ItemPresets.TEXT_BUTTON
+              label="Import Notes"
+              subtext="Import notes from JSON file"
+              buttonText="Import"
+              onClick={() => fileInputRef.current?.click()}
+            />
+            <ItemPresets.TEXT_BUTTON
               label="Backup Notes"
               subtext="Download all notes as a JSON file"
               buttonText="Backup"
               primary="primary"
               onClick={handleSaveNotes}
-            />
-            <ItemPresets.TEXT_BUTTON
-              label="Import Notes"
-              subtext="Import notes from a backup JSON file"
-              buttonText="Import"
-              onClick={() => fileInputRef.current?.click()}
             />
             <ItemPresets.TEXT_BUTTON
               label="Note Cleanup"

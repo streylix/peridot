@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 
+
 function getFirstLine(content) {
   if (!content) return 'untitled';
   
@@ -85,16 +86,17 @@ const InfoMenu = ({
       content: selectedNote.content,
       dateModified: selectedNote.dateModified,
       pinned: selectedNote.pinned,
-      locked: selectedNote.locked
+      locked: selectedNote.locked,
+      tempPass: selectedNote.tempPass
     };
 
     const blob = new Blob([JSON.stringify(noteForExport, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const noteTitle = getFirstLine(selectedNote.content)
-      .replace(/[^a-z0-9]/gi, '_')
+      .replace(/[^a-z0-9]/gi, '_') // Replace non-alphanumeric chars with underscore
       .toLowerCase()
-      .slice(0, 50);
+      .slice(0, 50); // Limit length
     const fileName = `${noteTitle}.json`;
     
     a.href = url;
