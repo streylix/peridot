@@ -1,6 +1,28 @@
 import React, { useState, useRef, useEffect } from 'react';
+
+function getFirstLine(content) {
+  if (!content) return 'untitled';
+  
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = content;
+  
+  const childNodes = Array.from(tempDiv.childNodes);
+  
+  for (const node of childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent.trim();
+      if (text) return text;
+    }
+    else if (node.nodeType === Node.ELEMENT_NODE) {
+      const text = node.textContent.trim();
+      if (text) return text;
+    }
+  }
+  
+  return 'untitled';
+}
 import { createPortal } from 'react-dom';
-import { CircleEllipsis, Lock, Pin, Gift, Trash2 } from 'lucide-react';
+import { CircleEllipsis, Lock, Pin, Gift, Trash2, Download } from 'lucide-react';
 
 const InfoMenu = ({ 
   selectedId, 
@@ -9,8 +31,8 @@ const InfoMenu = ({
   onDeleteNote, 
   onLockModalOpen, 
   onUnlockModalOpen,
-  position = null, // New prop for custom positioning
-  onClose // New prop for closing the menu
+  position = null,
+  onClose
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef(null);
@@ -35,7 +57,6 @@ const InfoMenu = ({
     };
   }, [onClose]);
 
-  // When position prop changes, open the menu
   useEffect(() => {
     if (position) {
       setIsOpen(true);
@@ -56,14 +77,43 @@ const InfoMenu = ({
     if (onClose) onClose();
   };
 
+  const handleDownloadNote = () => {
+    if (!selectedNote) return;
+
+    const noteForExport = {
+      id: selectedNote.id,
+      content: selectedNote.content,
+      dateModified: selectedNote.dateModified,
+      pinned: selectedNote.pinned,
+      locked: selectedNote.locked
+    };
+
+    const blob = new Blob([JSON.stringify(noteForExport, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const noteTitle = getFirstLine(selectedNote.content)
+      .replace(/[^a-z0-9]/gi, '_')
+      .toLowerCase()
+      .slice(0, 50);
+    const fileName = `${noteTitle}.json`;
+    
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    setIsOpen(false);
+    if (onClose) onClose();
+  };
+
   useEffect(() => {
     if (isOpen && menuRef.current) {
       if (position) {
-        // Use provided position for context menu
         menuRef.current.style.top = `${position.y}px`;
         menuRef.current.style.left = `${position.x}px`;
       } else if (buttonRef.current) {
-        // Use button position for header menu
         const buttonRect = buttonRef.current.getBoundingClientRect();
         menuRef.current.style.top = `${buttonRect.bottom + 5}px`;
         menuRef.current.style.left = `${buttonRect.left - 100 + buttonRect.width / 2}px`;
@@ -139,13 +189,20 @@ const InfoMenu = ({
           {selectedNote?.pinned ? 'Unpin Note' : 'Pin Note'}
         </button>
 
-        <button 
-          style={buttonStyle} 
-          onMouseEnter={e => e.target.style.opacity = '1'} 
-          onMouseLeave={e => e.target.style.opacity = '0.6'}
-        >
+        <button style={buttonStyle} onMouseEnter={e => e.target.style.opacity = '1'} onMouseLeave={e => e.target.style.opacity = '0.6'}>
           <Gift className="mr-6 h-4 w-4" />
           Add GIF
+        </button>
+
+        <button 
+          style={selectedNote ? buttonStyle : disabledStyle}
+          onClick={handleDownloadNote}
+          disabled={!selectedNote}
+          onMouseEnter={e => selectedNote && (e.target.style.opacity = '1')} 
+          onMouseLeave={e => selectedNote && (e.target.style.opacity = '0.6')}
+        >
+          <Download className="mr-6 h-4 w-4" />
+          Download Note
         </button>
 
         <button 
@@ -169,12 +226,10 @@ const InfoMenu = ({
     );
   };
 
-  // If we're using position prop, only render the Menu
   if (position) {
     return <Menu />;
   }
 
-  // Otherwise render the button and menu
   return (
     <>
       <button
