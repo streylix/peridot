@@ -580,3 +580,21 @@ header.full-width{
     color: #ffffff;
     padding: 8px;
   }
+
+  .note-tab {
+    display: flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 4px;
+    margin-left: 4px;
+  }
+  
+  .note-tab-title {
+    font-size: 14px;
+    color: #c7c7c7;
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+  }

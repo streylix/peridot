@@ -153,7 +153,7 @@ const InfoMenu = ({
           position: 'fixed',
           backgroundColor: '#1e1e1e',
           border: '1px solid #333',
-          width: '200px',
+          width: '150px',
           borderRadius: '4px',
           boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
           zIndex: 9999,

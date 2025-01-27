@@ -23,3 +23,4 @@
 ➕ Hover descriptions for buttons
 ➕ Notes are saved on cloud instead of localstorage
 ➕ Title of note is shown to the right of the back button in subtle text (for locked notes in fullscreen)
+➕ Fix performance issues when writing a note
