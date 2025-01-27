@@ -131,20 +131,21 @@ function Settings({ isOpen, onClose, setNotes }) {
   }, [isDarkMode]);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    
-    const handleChange = () => {
-      if (theme === 'system') {
-        applyTheme('system');
+    try {
+      const mediaQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
+      if (mediaQuery) {
+        const handleChange = () => {
+          if (theme === 'system') {
+            applyTheme('system');
+          }
+        };
+  
+        mediaQuery.addEventListener('change', handleChange);
+        return () => mediaQuery.removeEventListener('change', handleChange);
       }
-    };
-
-    mediaQuery.addListener(handleChange);
-    
-    // Apply initial theme
-    applyTheme(theme);
-
-    return () => mediaQuery.removeListener(handleChange);
+    } catch (e) {
+      console.warn('matchMedia not supported');
+    }
   }, [theme]);
 
   const applyTheme = (newTheme) => {
