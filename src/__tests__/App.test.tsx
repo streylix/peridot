@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, userEvent, within } from '../test/test-utils'
 import { mockNotes } from '../test/test-utils'
 import App from '../App'
+import React from 'react'
 
 // Mock localStorage
 const localStorageMock = {
   getItem: vi.fn(),
   setItem: vi.fn(),
   clear: vi.fn()
-}
+};
 global.localStorage = localStorageMock as any
 
 // Mock URL.createObjectURL and URL.revokeObjectURL
@@ -18,9 +19,9 @@ global.URL.revokeObjectURL = vi.fn()
 describe('App', () => {
   beforeEach(() => {
     // Reset mocks before each test
-    vi.clearAllMocks()
-    localStorage.getItem.mockReturnValue(JSON.stringify(mockNotes))
-  })
+    vi.clearAllMocks();
+    localStorageMock.getItem.mockReturnValue(JSON.stringify(mockNotes));
+  });
 
   describe('Sidebar Toggle', () => {
     it('hides and shows the sidebar when toggle button is clicked', async () => {
