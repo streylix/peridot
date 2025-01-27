@@ -130,23 +130,23 @@ function Settings({ isOpen, onClose, setNotes }) {
     }
   }, [isDarkMode]);
 
-  useEffect(() => {
-    try {
-      const mediaQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
-      if (mediaQuery) {
-        const handleChange = () => {
-          if (theme === 'system') {
-            applyTheme('system');
-          }
-        };
-  
-        mediaQuery.addEventListener('change', handleChange);
-        return () => mediaQuery.removeEventListener('change', handleChange);
-      }
-    } catch (e) {
-      console.warn('matchMedia not supported');
+useEffect(() => {
+  try {
+    const mediaQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
+    if (mediaQuery) {
+      const handleChange = () => {
+        if (theme === 'system') {
+          applyTheme('system');
+        }
+      };
+
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
     }
-  }, [theme]);
+  } catch (e) {
+    console.warn('matchMedia not supported');
+  }
+}, [theme]);
 
   const applyTheme = (newTheme) => {
     if (newTheme === 'system') {
