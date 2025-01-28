@@ -3,7 +3,7 @@ import NoteEditor from './NoteEditor';
 import EmptyState from './EmptyState';
 import LockedWindow from './LockedWindow';
 
-function MainContent({ note, onUpdateNote }) {
+function MainContent({ note, onUpdateNote, gifToAdd, onGifAdded }) {
   const [showLocked, setIsUnlocked] = useState(true);
   const [showContent, setTempUnlock] = useState(false);
 
@@ -35,7 +35,12 @@ function MainContent({ note, onUpdateNote }) {
       {note.locked && !showContent ? (
         <LockedWindow onUnlock={handleUnlock}/>
       ) : (
-        <NoteEditor note={note} onUpdateNote={onUpdateNote} />
+        <NoteEditor 
+        note={note}
+        onUpdateNote={onUpdateNote}
+        gifToAdd={gifToAdd} 
+        onGifAdded={onGifAdded}
+        />
       )}
     </div>
   );

@@ -716,3 +716,146 @@ header.full-width{
 .dark-mode .info-menu-button:hover {
   background-color: #333;
 }
+
+/* Gif Stuff */
+
+.gif-search-header {
+  position: absolute; /* Change to absolute */
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  backdrop-filter: blur(100px);
+  -webkit-backdrop-filter: blur(100px);
+  background: linear-gradient(to bottom, rgba(73, 73, 73, 0.2), transparent);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 24px;
+  height: 45px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.dark-mode .gif-search-header {
+  background: rgba(26, 26, 26, 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.gif-header-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  opacity: 0.8;
+}
+
+.dark-mode .gif-header-title {
+  color: #c7c7c7;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 40%;
+  min-width: 300px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  color: #666;
+}
+
+.gif-search-input:focus {
+  outline: none;
+  border-color: rgba(10, 163, 79, 0.9);
+}
+
+.gif-search-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.gif-item {
+  position: relative;
+  cursor: pointer;
+  border-radius: 4px;
+  overflow: hidden;
+  transition: transform 0.2s ease;
+}
+
+.gif-item:hover {
+  transform: scale(1.05);
+}
+
+.gif-item img {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.gif-loading {
+  text-align: center;
+  padding: 20px;
+  grid-column: 1 / -1;
+  color: #666;
+}
+
+.dark-mode .gif-loading {
+  color: #999;
+}
+
+.gif-modal .modal-body {
+  padding: 0;
+}
+
+.dark-mode .modal-content {
+  background: #1a1a1a;
+}
+
+
+.gif-modal .modal-main {
+  position: relative;
+}
+
+.gif-grid {
+  margin-top: 12px;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  overflow-y: auto;
+}
+
+/* Update search input styles */
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 40%;
+  min-width: 300px;
+}
+
+.gif-search-input {
+  width: 100%;
+  padding: 8px 12px 8px 40px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.3);
+  color: #333;
+  transition: all 0.2s ease;
+}
+
+.dark-mode .gif-search-input {
+  background: rgba(30, 30, 30, 0.3);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.dark-mode .gif-search-input:focus {
+  outline: none;
+  border-color: rgba(10, 163, 79, 0.5);
+}

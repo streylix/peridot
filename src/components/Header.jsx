@@ -14,7 +14,8 @@ function Header({
   canGoBack, 
   onDebugClick, 
   onLockModalOpen, 
-  onUnlockModalOpen 
+  onUnlockModalOpen,
+  onGifModalOpen
 }) {
   const toggleSidebar = () => {
     const sidebar = document.querySelector('.sidebar');
@@ -87,6 +88,7 @@ function Header({
             onDeleteNote={onDeleteNote}
             onLockModalOpen={onLockModalOpen}
             onUnlockModalOpen={onUnlockModalOpen}
+            onGifModalOpen={onGifModalOpen}
           />
           <button 
             type="button" 

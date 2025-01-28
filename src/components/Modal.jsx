@@ -97,7 +97,7 @@ const ItemComponents = {
     SUBSECTION: ItemComponents.SUBSECTION
   };
 
-const Modal = ({ isOpen, onClose, sections = [], title, size = 'default' }) => {
+const Modal = ({ isOpen, onClose, sections = [], title, size = 'default', className = ''}) => {
   const [activeSection, setActiveSection] = useState(0);
   const modalRef = useRef(null);
   

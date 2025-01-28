@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { debounce } from '../utils/debounce';
 
-function NoteEditor({ note, onUpdateNote }) {
+function NoteEditor({ note, onUpdateNote, gifToAdd, onGifAdded }) {
   const contentRef = useRef(null);
   const previousContentRef = useRef('');
 
@@ -15,6 +15,31 @@ function NoteEditor({ note, onUpdateNote }) {
     }, 100),
     [onUpdateNote]
   );
+
+  useEffect(() => {
+    if (gifToAdd && note && contentRef.current) {
+      const gifEmbed = `<div><img src="${gifToAdd}" alt="GIF" style="max-width: 100%; height: auto;"></div>`;
+      
+      // Update content with GIF
+      const newContent = note.content + gifEmbed;
+      contentRef.current.innerHTML = newContent;
+      
+      // Trigger content update
+      debouncedUpdate(newContent);
+      
+      // Reset gifToAdd
+      onGifAdded(null);
+      
+      // Focus and move cursor to end
+      contentRef.current.focus();
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(contentRef.current);
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  }, [gifToAdd, note, onUpdateNote, onGifAdded, debouncedUpdate]);
 
   // Optimized content input handler
   const handleContentInput = useCallback(() => {
@@ -49,38 +74,52 @@ function NoteEditor({ note, onUpdateNote }) {
 
   useEffect(() => {
     if (contentRef.current && note) {
+      // Update content
       contentRef.current.innerHTML = note.content || '';
       previousContentRef.current = note.content || '';
+      
+      // Set focus
       contentRef.current.focus();
-
-      // Set caret position
+      
+      // Try to restore caret position
       if (note.caretPosition) {
         try {
-          const nodeIterator = document.createNodeIterator(
-            contentRef.current,
-            NodeFilter.SHOW_TEXT
-          );
-          let currentNode;
-          let charCount = 0;
-          const range = document.createRange();
           const selection = window.getSelection();
-
-          while ((currentNode = nodeIterator.nextNode())) {
-            if (charCount + currentNode.length >= note.caretPosition) {
-              range.setStart(currentNode, note.caretPosition - charCount);
-              selection.removeAllRanges();
-              selection.addRange(range);
-              break;
+          const range = document.createRange();
+          
+          // Find position in content
+          let currentPos = 0;
+          let targetNode = null;
+          let targetOffset = 0;
+          
+          function findPosition(node) {
+            if (node.nodeType === Node.TEXT_NODE) {
+              if (currentPos + node.length >= note.caretPosition) {
+                targetNode = node;
+                targetOffset = note.caretPosition - currentPos;
+                return true;
+              }
+              currentPos += node.length;
+            } else {
+              for (let i = 0; i < node.childNodes.length; i++) {
+                if (findPosition(node.childNodes[i])) {
+                  return true;
+                }
+              }
             }
-            charCount += currentNode.length;
+            return false;
+          }
+          
+          findPosition(contentRef.current);
+          
+          if (targetNode) {
+            range.setStart(targetNode, targetOffset);
+            range.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(range);
           }
         } catch (e) {
-          const range = document.createRange();
-          range.selectNodeContents(contentRef.current);
-          range.collapse(false);
-          const selection = window.getSelection();
-          selection.removeAllRanges();
-          selection.addRange(range);
+          console.error('Error restoring caret position:', e);
         }
       }
     }
@@ -100,6 +139,7 @@ function NoteEditor({ note, onUpdateNote }) {
         contentEditable
         onInput={handleContentInput}
         onSelect={handleSelect}
+        onUpdateNote={handleContentInput}
         suppressContentEditableWarning
       />
     </div>

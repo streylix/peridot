@@ -10,7 +10,7 @@ const NoteItem = React.memo(({
   note, 
   isSelected, 
   onNoteSelect, 
-  onContextMenu 
+  onContextMenu,
 }) => {
   const title = useMemo(() => getFirstLine(note.content), [note.content]);
   const preview = useMemo(() => getPreviewContent(note.content), [note.content]);
@@ -108,7 +108,10 @@ function Sidebar({
   onTogglePin,
   onDeleteNote,
   onLockModalOpen,
-  onUnlockModalOpen
+  onUnlockModalOpen,
+  onUpdateNote,
+  gifToAdd,
+  onGifAdded,
 }) {
   const [searchTerm, handleSearchChange] = useSearch('');
   const [contextMenu, setContextMenu] = useState(null);
@@ -204,6 +207,7 @@ function Sidebar({
             onUnlockModalOpen={onUnlockModalOpen}
             position={contextMenu}
             onClose={() => setContextMenu(null)}
+            onUpdateNote={updateNote}
           />
         )}
       </div>
@@ -212,6 +216,8 @@ function Sidebar({
         note={notes.find(note => note.id === selectedId)}
         onUpdateNote={updateNote}
         onUnlockNote={onUnlockNote}
+        gifToAdd={gifToAdd}
+        onGifAdded={onGifAdded}
       />
     </>
   );

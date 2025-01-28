@@ -6,6 +6,7 @@ import NavigationHistory from './utils/NavigationHistory';
 import ModalDebug from './components/DebugModal';
 import LockNoteModal from './components/LockNoteModal';
 import UnlockNoteModal from './components/UnlockNoteModal';
+import GifModal from './components/GifModal';
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -14,12 +15,14 @@ function App() {
   const [isLockModalOpen, setIsLockModalOpen] = useState(false);
   const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
   const [navigationHistory] = useState(() => new NavigationHistory());
+  const [gifToAdd, setGifToAdd] = useState(null);
 
   const [notes, setNotes] = useState(() => {
     const savedNotes = localStorage.getItem('notes');
     return savedNotes ? JSON.parse(savedNotes) : [];
   });
-  
+  const [isGifModalOpen, setIsGifModalOpen] = useState(false);
+
   const selectedNote = notes.find(note => note.id === selectedId);
 
   const handleLockModalOpen = () => {
@@ -29,7 +32,7 @@ function App() {
   const handleUnlockModalOpen = () => {
     setIsUnlockModalOpen(true);
   };
-  
+
   const handleDebugModalClose = () => {
     const nextModal = {
       small: 'default',
@@ -48,7 +51,7 @@ function App() {
       )
     );
   };
-  
+
   const handleUnlockNote = (noteId) => {
     setNotes(prevNotes =>
       prevNotes.map(note =>
@@ -110,6 +113,29 @@ function App() {
   const handleBack = () => {
     const previousState = navigationHistory.back();
     setSelectedId(previousState);
+  }
+
+  const handleGifModalOpen = () => {
+    setIsGifModalOpen(true);
+  };
+
+  const handleAddGif = (gifUrl) => {
+    setGifToAdd(gifUrl);
+  };
+
+  const updateNote = (updates, updateModified = true) => {
+    setNotes(prevNotes => {
+      const updatedNotes = prevNotes.map(note => 
+        note.id === selectedId 
+          ? { 
+              ...note, 
+              ...updates,
+              dateModified: updateModified ? new Date().toISOString() : note.dateModified 
+            }
+          : note
+      );
+      return sortNotes(updatedNotes);
+    });
   };
 
   return (
@@ -126,6 +152,7 @@ function App() {
         onLockNote={handleLockNote}
         onLockModalOpen={handleLockModalOpen}
         onUnlockModalOpen={handleUnlockModalOpen}
+        onGifModalOpen={handleGifModalOpen}
       />
       <div className="main-container">
         <Sidebar
@@ -138,6 +165,10 @@ function App() {
           onTogglePin={togglePin}
           onLockModalOpen={handleLockModalOpen}
           onUnlockModalOpen={handleUnlockModalOpen}
+          onGifModalOpen={handleGifModalOpen}
+          onUpdateNote={updateNote}
+          gifToAdd={gifToAdd}
+          onGifAdded={setGifToAdd}
         />
       </div>
       <Settings
@@ -167,8 +198,13 @@ function App() {
           }
         }}
       />
+      <GifModal
+        isOpen={isGifModalOpen}
+        onClose={() => setIsGifModalOpen(false)}
+        onConfirm={handleAddGif}
+      />
     </div>
-  );
-}
+    );
+  }
 
 export default App;

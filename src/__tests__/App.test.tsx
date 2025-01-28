@@ -194,4 +194,4 @@ describe('App', () => {
       expect(URL.revokeObjectURL).toHaveBeenCalled()
     })
   })
-})
+});

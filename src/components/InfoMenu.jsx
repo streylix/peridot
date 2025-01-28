@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { CircleEllipsis, Lock, Pin, Gift, Trash2, Download } from 'lucide-react';
+import GifSearchModal from './GifModal';
 import { getFirstLine } from '../utils/contentUtils';
 
 const InfoMenu = ({
@@ -10,10 +11,13 @@ const InfoMenu = ({
   onDeleteNote,
   onLockModalOpen,
   onUnlockModalOpen,
+  onGifModalOpen,
   position = null,
-  onClose
+  onClose,
+  onUpdateNote
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isGifModalOpen, setIsGifModalOpen] = useState(false);
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
 
@@ -101,6 +105,14 @@ const InfoMenu = ({
     }
   }, [isOpen, position]);
 
+  const handleGifSelect = (gifUrl) => {
+    if (selectedNote) {
+      const gifEmbed = `<img src="${gifUrl}" alt="GIF" style="max-width: 100%; height: auto;">`;
+      const newContent = selectedNote.content + gifEmbed;
+      onUpdateNote(selectedId, { content: newContent });
+    }
+  };
+
   const Menu = () => {
     if (!isOpen) return null;
 
@@ -133,7 +145,17 @@ const InfoMenu = ({
           {selectedNote?.pinned ? 'Unpin Note' : 'Pin Note'}
         </button>
 
-        <button className="info-menu-button">
+        <button
+          className={`info-menu-button ${selectedNote ? '' : 'disabled'}`}
+          onClick={() => {
+            if (selectedNote && onGifModalOpen) {
+              onGifModalOpen();
+              setIsOpen(false);
+              if (onClose) onClose();
+            }
+          }}
+          disabled={!selectedNote}
+        >
           <Gift className="info-menu-icon" />
           Add GIF
         </button>
@@ -166,22 +188,24 @@ const InfoMenu = ({
       document.body
     );
   };
-
+  
   if (position) {
     return <Menu />;
   }
 
   return (
     <>
-      <button
-        ref={buttonRef}
-        type="button"
-        id="info-menu-btn"
-        onClick={toggleMenu}
-        className="info-menu-toggle"
-      >
-        <CircleEllipsis className="info-menu-toggle-icon" />
-      </button>
+      {position ? <Menu /> : (
+        <button
+          ref={buttonRef}
+          type="button"
+          id="info-menu-btn"
+          onClick={toggleMenu}
+          className="info-menu-toggle"
+        >
+          <CircleEllipsis />
+        </button>
+      )}
       <Menu />
     </>
   );
