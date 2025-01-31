@@ -1,0 +1,47 @@
+➕✅
+current version: unreleased
+version#: 0.10
+
+v0.11:
+➕ Better localstorage (OPFS)
+➕ "Save as" functionality
+➕ Locked note encryption
+
+v0.12:
+➕ Improved NoteEditor
+    ➕ Better gif functionality
+    ➕ Image/Link/Video embedding
+    ➕ Formatting
+    ➕ Save option creates a text file
+        ➕ this includes embedded conent
+    ➕ Imported notes understand embedding
+    ➕ Custom Check marker
+
+v0.13:
+➕ Improved Sidebar
+    ➕ Filtering notes
+    ➕ Folders
+    ➕ Resizable
+    ➕ Accepts click+drag txt/json/pdf/etc files as "import"
+
+v1.0:
+➕ Backend
+    ➕ Django
+    ➕ AWS
+    ➕ CS347's Server
+
+v1.1:
+➕ Optimizations
+    ➕ Every note that isn't present in the window shouldn't be rendering
+    ➕ edited content save hierarchy
+        ➕ immediate: localstorage
+        ➕ occasionally: OPFS
+        ➕ user preference: Cloud Sync
+➕ Styling Adjustments
+    ➕ Refined color scheme
+    ➕ Improve animations
+
+v1.2:
+➕ CS347 Compliant version
+➕ Application
+    ➕ TBD

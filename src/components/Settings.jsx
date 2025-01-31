@@ -1,66 +1,114 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Modal, ItemPresets, ItemComponents } from './Modal';
+import { Modal, ItemPresets } from './Modal';
+import { storageService } from '../utils/storageService';
 import { Sun, Moon, Bug, Save, Trash2, Upload, Monitor } from 'lucide-react';
-
 function Settings({ isOpen, onClose, setNotes }) {
   const fileInputRef = useRef(null);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    return localStorage.getItem('darkMode') === 'true';
-  });
-  const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('theme') || 'system';
-  });
+  const [theme, setTheme] = useState('system');
 
-  const handleClearNotes = () => {
-    if (window.confirm('Are you sure? This will delete all notes.')) {
-      localStorage.removeItem('notes');
-      setNotes([]);
+  // Load the theme on component mount
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const savedTheme = await storageService.readThemePreference();
+        setTheme(savedTheme);
+        applyTheme(savedTheme);
+      } catch (error) {
+        console.error('Failed to load theme:', error);
+      }
+    };
+    loadTheme();
+  }, []);
+
+  const applyTheme = async (newTheme) => {
+    try {
+      if (newTheme === 'system') {
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.body.classList.toggle('dark-mode', prefersDark);
+      } else {
+        document.body.classList.toggle('dark-mode', newTheme === 'dark');
+      }
+      
+      // Save the theme preference
+      await storageService.writeThemePreference(newTheme);
+      setTheme(newTheme);
+    } catch (error) {
+      console.error('Failed to save theme:', error);
     }
   };
 
-  const handleSaveNotes = () => {
-    const notes = localStorage.getItem('notes');
-    const blob = new Blob([notes], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `notes_backup_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const generateUniqueId = (() => {
-    let counter = 0;
-    return () => Date.now() + counter++;
-  })();
-
-  const normalizeNote = (note, existingNotes) => {
-    if (!note.content) return null;
-
-    const normalized = {
-      content: note.content,
-      dateModified: note.dateModified || new Date().toISOString(),
-      pinned: Boolean(note.pinned),
-      caretPosition: Number(note.caretPosition) || 0,
-      locked: Boolean(note.locked)
+  // Add system theme change listener
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    
+    const handleSystemThemeChange = () => {
+      if (theme === 'system') {
+        document.body.classList.toggle('dark-mode', mediaQuery.matches);
+      }
     };
 
-    // Only include tempPass if the note is locked
-    if (normalized.locked && note.tempPass) {
-      normalized.tempPass = note.tempPass;
+    mediaQuery.addEventListener('change', handleSystemThemeChange);
+    return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
+  }, [theme]);
+
+  const handleClearNotes = async () => {
+    if (window.confirm('Are you sure? This will delete all notes.')) {
+      try {
+        await storageService.clearAllData();
+        setNotes([]);
+      } catch (error) {
+        console.error('Failed to clear notes:', error);
+      }
+    }
+  };
+
+  const handleSaveNotes = async () => {
+    try {
+      const notes = await storageService.getAllNotes();
+      const blob = new Blob([JSON.stringify(notes)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `notes_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to save backup:', error);
     }
 
-    // Keep original ID if it's a number and not already taken
-    if (typeof note.id === 'number' && !existingNotes.some(n => n.id === note.id)) {
-      normalized.id = note.id;
-    } else {
-      normalized.id = generateUniqueId();
-      normalized.originalId = note.id; // Store original ID if needed
-    }
-
-    return normalized;
+    const generateUniqueId = (() => {
+      let counter = 0;
+      return () => Date.now() + counter++;
+    })();
+  
+    const normalizeNote = (note, existingNotes) => {
+      if (!note.content) return null;
+  
+      const normalized = {
+        content: note.content,
+        dateModified: note.dateModified || new Date().toISOString(),
+        pinned: Boolean(note.pinned),
+        caretPosition: Number(note.caretPosition) || 0,
+        locked: Boolean(note.locked)
+      };
+  
+      // Only include tempPass if the note is locked
+      if (normalized.locked && note.tempPass) {
+        normalized.tempPass = note.tempPass;
+      }
+  
+      // Keep original ID if it's a number and not already taken
+      if (typeof note.id === 'number' && !existingNotes.some(n => n.id === note.id)) {
+        normalized.id = note.id;
+      } else {
+        normalized.id = generateUniqueId();
+        normalized.originalId = note.id; // Store original ID if needed
+      }
+  
+      return normalized;
+    };
   };
 
   const handleImportNotes = async (event) => {
@@ -71,10 +119,6 @@ function Settings({ isOpen, onClose, setNotes }) {
       const text = await file.text();
       const importedData = JSON.parse(text);
       
-      // Get existing notes
-      const existingNotesStr = localStorage.getItem('notes');
-      const existingNotes = existingNotesStr ? JSON.parse(existingNotesStr) : [];
-
       // Handle both single note and array of notes
       const notesToProcess = Array.isArray(importedData) ? importedData : [importedData];
       
@@ -91,18 +135,22 @@ function Settings({ isOpen, onClose, setNotes }) {
         throw new Error('No valid notes found in import file');
       }
       
-      const mergedNotes = [...existingNotes, ...validNotes];
+      // Save each note individually
+      for (const note of notesToProcess) {
+        if (note.id && note.content) {
+          await storageService.writeNote(note.id, {
+            ...note,
+            dateModified: note.dateModified || new Date().toISOString(),
+            pinned: Boolean(note.pinned),
+            caretPosition: Number(note.caretPosition) || 0
+          });
+        }
+      }
 
-      // Sort notes by pinned status and date
-      const sortedNotes = mergedNotes.sort((a, b) => {
-        if (a.pinned && !b.pinned) return -1;
-        if (!a.pinned && b.pinned) return 1;
-        return new Date(b.dateModified) - new Date(a.dateModified);
-      });
+      // Reload all notes
+      const updatedNotes = await storageService.getAllNotes();
+      setNotes(updatedNotes);
 
-      localStorage.setItem('notes', JSON.stringify(sortedNotes));
-      setNotes(sortedNotes);
-      
       const skippedCount = notesToProcess.length - validNotes.length;
       if (skippedCount > 0) {
         alert(`Import completed with warnings:\n${skippedCount} invalid notes were skipped.`);
@@ -120,47 +168,6 @@ function Settings({ isOpen, onClose, setNotes }) {
     }
   };
 
-  useEffect(() => {
-    if (isDarkMode) {
-      document.body.classList.add('dark-mode');
-      localStorage.setItem('darkMode', 'true');
-    } else {
-      document.body.classList.remove('dark-mode');
-      localStorage.setItem('darkMode', 'false');
-    }
-  }, [isDarkMode]);
-
-useEffect(() => {
-  try {
-    const mediaQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
-    if (mediaQuery) {
-      const handleChange = () => {
-        if (theme === 'system') {
-          applyTheme('system');
-        }
-      };
-
-      mediaQuery.addEventListener('change', handleChange);
-      return () => mediaQuery.removeEventListener('change', handleChange);
-    }
-  } catch (e) {
-    console.warn('matchMedia not supported');
-  }
-}, [theme]);
-
-  const applyTheme = (newTheme) => {
-    if (newTheme === 'system') {
-      // Check system preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      document.body.classList.toggle('dark-mode', prefersDark);
-    } else {
-      document.body.classList.toggle('dark-mode', newTheme === 'dark');
-    }
-    localStorage.setItem('theme', newTheme);
-  };
-
-  if (!isOpen) return null;
-
   const settingsSections = [
     {
       label: 'General',
@@ -176,10 +183,7 @@ useEffect(() => {
                 { value: 'dark', label: 'Dark' },
                 { value: 'system', label: 'System' }
               ]}
-              onChange={(value) => {
-                setTheme(value);
-                applyTheme(value);
-              }}
+              onChange={applyTheme}
             />
           </ItemPresets.SUBSECTION>
         }
@@ -223,15 +227,15 @@ useEffect(() => {
     }
   ];
 
+  if (!isOpen) return null;
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      {...{
-        title: "Settings",
-        sections: settingsSections,
-        size: "large"
-      }}
+      title="Settings"
+      sections={settingsSections}
+      size="large"
     />
   );
 }

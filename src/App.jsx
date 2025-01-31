@@ -7,6 +7,7 @@ import ModalDebug from './components/DebugModal';
 import LockNoteModal from './components/LockNoteModal';
 import UnlockNoteModal from './components/UnlockNoteModal';
 import GifModal from './components/GifModal';
+import { storageService } from './utils/storageService';
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -17,10 +18,8 @@ function App() {
   const [navigationHistory] = useState(() => new NavigationHistory());
   const [gifToAdd, setGifToAdd] = useState(null);
 
-  const [notes, setNotes] = useState(() => {
-    const savedNotes = localStorage.getItem('notes');
-    return savedNotes ? JSON.parse(savedNotes) : [];
-  });
+  const [notes, setNotes] = useState([]);
+
   const [isGifModalOpen, setIsGifModalOpen] = useState(false);
 
   const selectedNote = notes.find(note => note.id === selectedId);
@@ -63,7 +62,28 @@ function App() {
   };
 
   useEffect(() => {
-    localStorage.setItem('notes', JSON.stringify(notes));
+    const loadNotes = async () => {
+      try {
+        const savedNotes = await storageService.getAllNotes();
+        setNotes(sortNotes(savedNotes));
+      } catch (error) {
+        console.error('Failed to load notes:', error);
+      }
+    };
+    loadNotes();
+  }, []);
+
+  useEffect(() => {
+    const saveNotes = async () => {
+      try {
+        await Promise.all(notes.map(note => 
+          storageService.writeNote(note.id, note)
+        ));
+      } catch (error) {
+        console.error('Failed to save notes:', error);
+      }
+    };
+    saveNotes();
   }, [notes]);
 
   useEffect(() => {
@@ -96,11 +116,16 @@ function App() {
     });
   };
 
-  const deleteNote = (noteId) => {
+  const deleteNote = async (noteId) => {
     if (window.confirm('Are you sure you want to delete this note?')) {
-      setNotes(prevNotes => prevNotes.filter(note => note.id !== noteId));
-      if (noteId === selectedId) {
-        setSelectedId(null);
+      try {
+        await storageService.deleteNote(noteId);
+        setNotes(prevNotes => prevNotes.filter(note => note.id !== noteId));
+        if (noteId === selectedId) {
+          setSelectedId(null);
+        }
+      } catch (error) {
+        console.error('Failed to delete note:', error);
       }
     }
   };
@@ -134,6 +159,14 @@ function App() {
             }
           : note
       );
+
+      // Save the updated note using debounced storage
+      const updatedNote = updatedNotes.find(note => note.id === selectedId);
+      if (updatedNote) {
+        storageService.writeNote(selectedId, updatedNote)
+          .catch(error => console.error('Failed to save note:', error));
+      }
+
       return sortNotes(updatedNotes);
     });
   };

@@ -4,6 +4,7 @@ import MainContent from './MainContent';
 import InfoMenu from './InfoMenu';
 import { getFirstLine, getPreviewContent } from '../utils/contentUtils';
 import logo from '../assets/logo.png';
+import { storageService } from '../utils/storageService';
 
 // Memoized individual note item component
 const NoteItem = React.memo(({ 
@@ -125,7 +126,7 @@ function Sidebar({
     });
   }, []);
 
-  const createNewNote = useCallback(() => {
+  const createNewNote = async () => {
     const newNote = {
       id: Date.now(),
       content: '',
@@ -134,9 +135,14 @@ function Sidebar({
       caretPosition: 0
     };
 
-    setNotes(prevNotes => [newNote, ...prevNotes]);
-    onNoteSelect(newNote.id);
-  }, [setNotes, onNoteSelect]);
+    try {
+      await storageService.writeNote(newNote.id, newNote);
+      setNotes(prevNotes => sortNotes([newNote, ...prevNotes]));
+      setSelectedId(newNote.id);
+    } catch (error) {
+      console.error('Failed to create note:', error);
+    }
+  };
 
   const sortNotes = useCallback((notesToSort) => {
     return notesToSort.sort((a, b) => {
