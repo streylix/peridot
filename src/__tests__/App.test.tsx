@@ -1,45 +1,105 @@
-import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, userEvent } from '../test/test-utils'
 import { mockNotes } from '../test/test-utils'
 import App from '../App'
 
-// Mock localStorage
-const localStorageMock = {
-  getItem: vi.fn(),
-  setItem: vi.fn(),
-  clear: vi.fn()
-};
-global.localStorage = localStorageMock as any
+// Mock OPFS directory handle
+const mockFiles = new Map()
+const mockNotesDir = {
+  getFileHandle: vi.fn(async (name, { create } = { create: false }) => {
+    if (!mockFiles.has(name) && !create) {
+      throw new Error('File not found')
+    }
+    
+    const writeFunc = vi.fn(async (data) => {
+      mockFiles.set(name, data)
+    })
+    
+    const closeFunc = vi.fn(async () => {
+      // Ensure write operation is complete
+      await Promise.resolve()
+    })
+    
+    return {
+      createWritable: vi.fn(async () => ({
+        write: writeFunc,
+        close: closeFunc
+      })),
+      getFile: vi.fn(async () => ({
+        text: async () => mockFiles.get(name)
+      }))
+    }
+  }),
+  removeEntry: vi.fn(async (name) => {
+    mockFiles.delete(name)
+  }),
+  entries: vi.fn(async function* () {
+    for (const [name, content] of mockFiles.entries()) {
+      if (name.endsWith('.json')) {
+        yield [name, {
+          getFile: async () => ({
+            text: async () => content
+          })
+        }]
+      }
+    }
+  })
+}
+
+const mockDirectoryHandle = {
+  getDirectoryHandle: vi.fn(async () => mockNotesDir)
+}
+
+const mockStorage = {
+  getDirectory: vi.fn(async () => mockDirectoryHandle)
+}
+
+Object.defineProperty(global.navigator, 'storage', {
+  value: mockStorage,
+  writable: true
+})
 
 // Mock URL.createObjectURL and URL.revokeObjectURL
 global.URL.createObjectURL = vi.fn()
 global.URL.revokeObjectURL = vi.fn()
 
 describe('App', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
-    localStorageMock.getItem.mockReturnValue(JSON.stringify(mockNotes))
+    mockFiles.clear()
+    
+    // Initialize mock notes in OPFS
+    for (const note of mockNotes) {
+      const fileName = `${note.id}.json`
+      mockFiles.set(fileName, JSON.stringify(note))
+    }
+    
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   describe('Sidebar Toggle', () => {
     it('hides and shows the sidebar when toggle button is clicked', async () => {
       render(<App />)
-      const user = userEvent.setup()
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
       
-      const sidebar = document.getElementById('sidebar') as HTMLElement
-      const toggleButton = document.getElementById('move-menu') as HTMLElement
+      const noteItems = await screen.findAllByText(/Test Note/i)
+      expect(noteItems.length).toBeGreaterThan(0)
       
-      if (!sidebar || !toggleButton) {
-        throw new Error('Required elements not found')
-      }
+      const sidebar = document.getElementById('sidebar')
+      const toggleButton = document.getElementById('move-menu')
       
+      expect(sidebar).not.toBeNull()
+      expect(toggleButton).not.toBeNull()
       expect(sidebar).not.toHaveClass('hidden')
       
-      await user.click(toggleButton)
+      await user.click(toggleButton!)
       expect(sidebar).toHaveClass('hidden')
       
-      await user.click(toggleButton)
+      await user.click(toggleButton!)
       expect(sidebar).not.toHaveClass('hidden')
     })
   })
@@ -47,151 +107,140 @@ describe('App', () => {
   describe('Back Button', () => {
     it('enables back button after navigating between notes', async () => {
       render(<App />)
-      const user = userEvent.setup()
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
       
-      const backButton = document.getElementById('back-btn') as HTMLButtonElement
-      if (!backButton) {
-        throw new Error('Back button not found')
-      }
+      const noteItems = await screen.findAllByText(/Test Note/i)
+      expect(noteItems.length).toBeGreaterThan(0)
       
+      const backButton = document.getElementById('back-btn')
+      expect(backButton).not.toBeNull()
       expect(backButton).toBeDisabled()
       
-      // Get notes from the note list in sidebar
-      const noteItems = document.querySelectorAll('.note-item')
-      if (noteItems.length < 2) {
-        throw new Error('Not enough note items found')
-      }
+      // Find the actual note items in the sidebar
+      const sidebar = document.querySelector('.sidebar')
+      const noteElements = sidebar!.querySelectorAll('.note-item')
       
-      // Click first note
-      await user.click(noteItems[0])
-      
-      // Click second note
-      await user.click(noteItems[1])
+      // Click the notes in the sidebar
+      await user.click(noteElements[0])
+      await user.click(noteElements[1])
       
       expect(backButton).toBeEnabled()
       
-      await user.click(backButton)
+      await user.click(backButton!)
+      await vi.advanceTimersByTimeAsync(0)
       
-      // After clicking back, first note should be selected
-      expect(noteItems[0]).toHaveClass('active')
+      expect(noteElements[0]).toHaveClass('active')
     })
   })
 
   describe('Info Button and Menu', () => {
     it('shows and hides info menu when clicked', async () => {
       render(<App />)
-      const user = userEvent.setup()
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
       
-      // Get first note from note list
-      const noteItems = document.querySelectorAll('.note-item')
-      if (noteItems.length === 0) {
-        throw new Error('No note items found')
-      }
-      
-      // Select first note
+      const noteItems = await screen.findAllByText(/Test Note/i)
       await user.click(noteItems[0])
       
-      const infoButton = document.getElementById('info-btn') as HTMLButtonElement
-      if (!infoButton) {
-        throw new Error('Info button not found')
-      }
+      const infoButton = document.getElementById('info-btn')
+      expect(infoButton).not.toBeNull()
       
-      await user.click(infoButton)
-  
-      // Check if menu buttons appear
-      const menuButtons = document.querySelectorAll('.menu-btn')
-      expect(menuButtons).toBeDefined()
+      await user.click(infoButton!)
+      expect(await screen.findByText('Information')).toBeInTheDocument()
       
-      // Click outside to close
       await user.click(document.body)
-      
-      // Check if menu is closed
-      expect(document.querySelector('.info-btn')).not.toBeInTheDocument()
+      expect(screen.queryByText('Information')).not.toBeInTheDocument()
     })
   })
 
   describe('Pin Functionality', () => {
     it('pins and unpins notes correctly', async () => {
       render(<App />)
-      const user = userEvent.setup()
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
       
-      // Select first note
-      await user.click(screen.getByText('Test Note 1'))
+      // Wait for initial notes to load
+      const noteItems = await screen.findAllByText(/Test Note/i)
       
-      const infoButton = document.getElementById('info-menu-btn') as HTMLButtonElement
+      // Click the last note (Test Note 1)
+      await user.click(noteItems[2])
       
-      if (!infoButton) {
-        throw new Error('Info button not found')
-      }
+      // Open the menu
+      const infoButton = document.getElementById('info-menu-btn')
+      expect(infoButton).not.toBeNull()
+      await user.click(infoButton!)
       
-      // Open info menu and click pin
-      await user.click(infoButton)
-      await user.click(screen.getByText('Pin Note'))
+      // Find and click Pin Note button in menu
+      const pinButton = await screen.findByRole('button', { 
+        name: (name) => name.includes('Pin Note')
+      })
+      await user.click(pinButton)
       
-      // Verify localStorage was called with updated notes
-      expect(localStorage.setItem).toHaveBeenCalledWith(
-        'notes',
-        expect.stringContaining('"pinned":true')
-      )
+      // Wait for all timers and promises
+      await vi.advanceTimersByTimeAsync(1000)
+      await new Promise(resolve => setTimeout(resolve, 0))
+      
+      // Verify note was saved with pinned status
+      const savedNote = JSON.parse(mockFiles.get('1.json'))
+      expect(savedNote.pinned).toBe(true)
     })
   })
 
   describe('Note Lock Functionality', () => {
     it('locks and unlocks notes with password', async () => {
       render(<App />)
-      const user = userEvent.setup()
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
       
-      // Select a note
-      await user.click(screen.getByText('Test Note 1'))
+      // Wait for initial notes to load and select first note
+      const noteItems = await screen.findAllByText(/Test Note/i)
+      await user.click(noteItems[2]) // Click "Test Note 1"
       
-      const infoButton = document.getElementById('info-menu-btn') as HTMLButtonElement
+      // Open info menu using the element ID
+      const infoButton = document.getElementById('info-menu-btn')
+      expect(infoButton).not.toBeNull()
+      await user.click(infoButton!)
       
-      if (!infoButton) {
-        throw new Error('Info button not found')
-      }
+      // Find and click Lock Note
+      const lockButton = await screen.findByText(/^Lock Note$/)
+      await user.click(lockButton)
       
-      // Open info menu and lock note
-      await user.click(infoButton)
-      await user.click(screen.getByText('Lock Note'))
+      // Enter passwords
+      const passwordInput = await screen.findByPlaceholderText(/enter password/i)
+      const confirmInput = await screen.findByPlaceholderText(/confirm password/i)
       
-      // Enter password in modal
-      const passwordInput = screen.getByPlaceholderText(/enter password/i)
       await user.type(passwordInput, 'test123')
-      await user.click(screen.getByRole('button', { name: /ok/i }))
+      await user.type(confirmInput, 'test123')
       
-      // Verify note is locked
-      expect(localStorage.setItem).toHaveBeenCalledWith(
-        'notes',
-        expect.stringContaining('"locked":true')
-      )
+      // Click OK button
+      const okButton = await screen.findByRole('button', { name: /^OK$/i })
+      await user.click(okButton)
+      
+      // Wait for debounced save operations
+      await vi.advanceTimersByTimeAsync(1000)
+      // Wait for any promises
+      await new Promise(resolve => setTimeout(resolve, 0))
+      
+      // Verify the note is locked
+      const savedNote = JSON.parse(mockFiles.get('1.json'))
+      expect(savedNote.locked).toBe(true)
+      expect(savedNote.tempPass).toBe('test123')
     })
   })
 
   describe('Download Note Functionality', () => {
     it('downloads note as JSON when clicked', async () => {
       render(<App />)
-      const user = userEvent.setup()
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
       
-      // Select a note
-      await user.click(screen.getByText('Test Note 1'))
+      const noteItems = await screen.findAllByText(/Test Note/i)
+      await user.click(noteItems[0])
       
-      const infoButton = document.getElementById('info-menu-btn') as HTMLButtonElement
+      const infoButton = document.getElementById('info-menu-btn')
+      expect(infoButton).not.toBeNull()
       
-      if (!infoButton) {
-        throw new Error('Info button not found')
-      }
-      
-      // Open info menu and click download
-      await user.click(infoButton)
+      await user.click(infoButton!)
       await user.click(screen.getByText('Download Note'))
       
-      // Verify URL.createObjectURL was called
-      expect(URL.createObjectURL).toHaveBeenCalledWith(
-        expect.any(Blob)
-      )
-      
-      // Verify URL.revokeObjectURL was called for cleanup
+      expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
       expect(URL.revokeObjectURL).toHaveBeenCalled()
     })
   })
-});
+})
