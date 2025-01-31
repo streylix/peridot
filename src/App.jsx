@@ -199,9 +199,9 @@ function App() {
           onLockModalOpen={handleLockModalOpen}
           onUnlockModalOpen={handleUnlockModalOpen}
           onGifModalOpen={handleGifModalOpen}
-          onUpdateNote={updateNote}
           gifToAdd={gifToAdd}
           onGifAdded={setGifToAdd}
+          // onUpdateNote={updateNote}
         />
       </div>
       <Settings

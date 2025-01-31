@@ -12,7 +12,7 @@ function NoteEditor({ note, onUpdateNote, gifToAdd, onGifAdded }) {
         onUpdateNote({ content }, true);
         previousContentRef.current = content;
       }
-    }, 100),
+    }, 10),
     [onUpdateNote]
   );
 
@@ -39,7 +39,7 @@ function NoteEditor({ note, onUpdateNote, gifToAdd, onGifAdded }) {
       selection.removeAllRanges();
       selection.addRange(range);
     }
-  }, [gifToAdd, note, onUpdateNote, onGifAdded, debouncedUpdate]);
+  }, [gifToAdd, note, onGifAdded, debouncedUpdate]);
 
   // Optimized content input handler
   const handleContentInput = useCallback(() => {
@@ -68,7 +68,7 @@ function NoteEditor({ note, onUpdateNote, gifToAdd, onGifAdded }) {
         charCount += range.startOffset;
         onUpdateNote({ caretPosition: charCount }, false);
       }
-    }, 150),
+    }, 10),
     [onUpdateNote]
   );
 
@@ -139,7 +139,6 @@ function NoteEditor({ note, onUpdateNote, gifToAdd, onGifAdded }) {
         contentEditable
         onInput={handleContentInput}
         onSelect={handleSelect}
-        onUpdateNote={handleContentInput}
         suppressContentEditableWarning
       />
     </div>
