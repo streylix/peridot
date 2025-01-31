@@ -1,0 +1,4 @@
+v0.11.2
+- this took a stupid amount of time to complete properly, i think i'm just sleep deprived, what i did find out was that using utils for commonly required things is way better
+  than just passing in a bunch of functions through the different components. i think i should convert some other functions into utils tomorrow, but it's been over 6 hours, I'm
+  gonna go sleep now

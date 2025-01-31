@@ -1,9 +1,8 @@
+current version:
+v0.11.2:
+✅ Extra security for downloading locked notes
+    - requires the password to download now
+
+previous versions:
 v0.11.1:
 ✅ Better localstorage (OPFS)
-
-version#: 0.10
-
-v0.11:
-➕ Better localstorage (OPFS)
-➕ "Save as" functionality
-➕ Locked note encryption

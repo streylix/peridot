@@ -15,7 +15,11 @@ function Header({
   onDebugClick, 
   onLockModalOpen, 
   onUnlockModalOpen,
-  onGifModalOpen
+  onGifModalOpen,
+  onDownloadUnlockModalOpen,
+  isDownloadable,
+  setDownloadable,
+  setDownloadNoteId,
 }) {
   const toggleSidebar = () => {
     const sidebar = document.querySelector('.sidebar');
@@ -89,6 +93,8 @@ function Header({
             onLockModalOpen={onLockModalOpen}
             onUnlockModalOpen={onUnlockModalOpen}
             onGifModalOpen={onGifModalOpen}
+            onDownloadUnlockModalOpen={onDownloadUnlockModalOpen}
+            isDownloadable={isDownloadable}
           />
           <button 
             type="button" 

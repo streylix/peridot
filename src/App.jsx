@@ -8,6 +8,8 @@ import LockNoteModal from './components/LockNoteModal';
 import UnlockNoteModal from './components/UnlockNoteModal';
 import GifModal from './components/GifModal';
 import { storageService } from './utils/StorageService.js';
+import DownloadUnlockModal from './components/DownloadUnlockModal.jsx';
+import { performDownload } from './utils/downloadUtils';
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -17,12 +19,24 @@ function App() {
   const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
   const [navigationHistory] = useState(() => new NavigationHistory());
   const [gifToAdd, setGifToAdd] = useState(null);
-
   const [notes, setNotes] = useState([]);
-
   const [isGifModalOpen, setIsGifModalOpen] = useState(false);
+  const [isDownloadUnlockModalOpen, setIsDownloadUnlockModalOpen] = useState(false);
+  const [downloadNoteId, setDownloadNoteId] = useState(null);
+  const [isDownloadable, setDownloadable] = useState(false);
 
   const selectedNote = notes.find(note => note.id === selectedId);
+
+  useEffect(() => {
+    if (isDownloadable && downloadNoteId) {
+      const noteToDownload = notes.find(note => note.id === downloadNoteId);
+      if (noteToDownload) {
+        performDownload(noteToDownload);
+        setDownloadable(false);
+        setDownloadNoteId(null);
+      }
+    }
+  }, [isDownloadable, downloadNoteId, notes]);
 
   const handleLockModalOpen = () => {
     setIsLockModalOpen(true);
@@ -30,6 +44,24 @@ function App() {
 
   const handleUnlockModalOpen = () => {
     setIsUnlockModalOpen(true);
+  };
+
+  const handleDownloadUnlockModalOpen = (noteId) => {
+    setDownloadNoteId(noteId);
+    setIsDownloadUnlockModalOpen(true);
+  };
+
+  const handleDownloadUnlock = (password) => {
+    const noteToDownload = notes.find(note => note.id === downloadNoteId);
+    
+    if (noteToDownload && password === noteToDownload.tempPass) {
+      setIsDownloadUnlockModalOpen(false);
+      setDownloadable(true);
+      return true;
+    }
+    setDownloadable(false);
+    setDownloadNoteId(null);
+    return false;
   };
 
   const handleDebugModalClose = () => {
@@ -138,7 +170,7 @@ function App() {
   const handleBack = () => {
     const previousState = navigationHistory.back();
     setSelectedId(previousState);
-  }
+  };
 
   const handleGifModalOpen = () => {
     setIsGifModalOpen(true);
@@ -160,7 +192,6 @@ function App() {
           : note
       );
 
-      // Save the updated note using debounced storage
       const updatedNote = updatedNotes.find(note => note.id === selectedId);
       if (updatedNote) {
         storageService.writeNote(selectedId, updatedNote)
@@ -186,6 +217,7 @@ function App() {
         onLockModalOpen={handleLockModalOpen}
         onUnlockModalOpen={handleUnlockModalOpen}
         onGifModalOpen={handleGifModalOpen}
+        onDownloadUnlockModalOpen={handleDownloadUnlockModalOpen}
       />
       <div className="main-container">
         <Sidebar
@@ -198,10 +230,14 @@ function App() {
           onTogglePin={togglePin}
           onLockModalOpen={handleLockModalOpen}
           onUnlockModalOpen={handleUnlockModalOpen}
-          onGifModalOpen={handleGifModalOpen}
+          onUpdateNote={updateNote}
           gifToAdd={gifToAdd}
           onGifAdded={setGifToAdd}
-          // onUpdateNote={updateNote}
+          onDownloadUnlockModalOpen={handleDownloadUnlockModalOpen}
+          downloadNoteId={downloadNoteId}
+          isDownloadable={isDownloadable}
+          setDownloadable={setDownloadable}
+          setDownloadNoteId={setDownloadNoteId}
         />
       </div>
       <Settings
@@ -231,13 +267,27 @@ function App() {
           }
         }}
       />
+      <DownloadUnlockModal
+        isOpen={isDownloadUnlockModalOpen}
+        onClose={() => {
+          setIsDownloadUnlockModalOpen(false);
+          setDownloadable(false);
+          setDownloadNoteId(null);
+        }}
+        onConfirm={(password) => {
+          if (!handleDownloadUnlock(password)) {
+            setDownloadable(false);
+            setDownloadNoteId(null);
+          }
+        }}
+      />
       <GifModal
         isOpen={isGifModalOpen}
         onClose={() => setIsGifModalOpen(false)}
         onConfirm={handleAddGif}
       />
     </div>
-    );
-  }
+  );
+}
 
 export default App;

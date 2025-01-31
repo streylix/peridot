@@ -256,4 +256,59 @@ describe('App', () => {
       expect(URL.revokeObjectURL).toHaveBeenCalled()
     })
   })
+
+
+  describe('Note Content Persistence', () => {
+    it('preserves note content when navigating between notes', async () => {
+      render(<App />)
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      
+      // Wait for initial notes to load
+      const noteItems = await screen.findAllByRole('listitem')
+      expect(noteItems.length).toBeGreaterThan(0)
+      
+      // Click the first note
+      await user.click(noteItems[0])
+      
+      // Find the editable content area for the first note
+      const firstNoteContentEditor = document.getElementById('inner-note')
+      if (!firstNoteContentEditor) {
+        throw new Error('Content editor not found');
+      }
+      
+      // Type some text into the first note
+      await user.type(firstNoteContentEditor, 'First note content test')
+      expect(firstNoteContentEditor.textContent).toContain('First note content test')
+      
+      // Wait for debounce and save
+      await vi.advanceTimersByTimeAsync(1000)
+      
+      // Navigate to another note, if available
+      await user.click(noteItems[2])
+      
+      // Find the editable content area for the second note
+      const secondNoteContentEditor = document.getElementById('inner-note')
+      if (!secondNoteContentEditor) {
+        throw new Error('Content editor not found');
+      }
+      
+      // Verify we're on a different note
+      const secondNoteContent = secondNoteContentEditor.textContent || '';
+      expect(secondNoteContent).not.toContain('First note content test')
+
+      // Go back to the first note
+      const backButton = document.getElementById('back-btn')
+      if (!backButton) {
+        throw new Error('Back button not found');
+      }
+      await user.click(backButton)
+      
+      // Wait for note to load
+      await vi.advanceTimersByTimeAsync(100)
+      
+      // Verify the text is still there
+      const firstNoteContent = firstNoteContentEditor.textContent || '';
+      expect(firstNoteContent).toContain('First note content test')
+    })
+  })
 })

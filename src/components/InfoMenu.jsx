@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { CircleEllipsis, Lock, Pin, Gift, Trash2, Download } from 'lucide-react';
-import GifSearchModal from './GifModal';
-import { getFirstLine } from '../utils/contentUtils';
+import { performDownload } from '../utils/downloadUtils';
 
 const InfoMenu = ({
   selectedId,
@@ -12,16 +11,30 @@ const InfoMenu = ({
   onLockModalOpen,
   onUnlockModalOpen,
   onGifModalOpen,
+  onDownloadUnlockModalOpen,
   position = null,
   onClose,
-  onUpdateNote
+  downloadNoteId,
+  isDownloadable,
+  setDownloadable,
+  setDownloadNoteId
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [isGifModalOpen, setIsGifModalOpen] = useState(false);
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
 
   const selectedNote = notes.find(note => note.id === selectedId);
+
+  useEffect(() => {
+    if (isDownloadable && downloadNoteId) {
+      const noteToDownload = notes.find(note => note.id === downloadNoteId);
+      if (noteToDownload) {
+        performDownload(noteToDownload);
+        setDownloadable(false);
+        setDownloadNoteId(null);
+      }
+    }
+  }, [isDownloadable, downloadNoteId, notes, setDownloadable, setDownloadNoteId]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -63,31 +76,13 @@ const InfoMenu = ({
   const handleDownloadNote = () => {
     if (!selectedNote) return;
 
-    const noteForExport = {
-      id: selectedNote.id,
-      content: selectedNote.content,
-      dateModified: selectedNote.dateModified,
-      pinned: selectedNote.pinned,
-      locked: selectedNote.locked,
-      tempPass: selectedNote.tempPass
-    };
+    if (selectedNote.locked) {
+      onDownloadUnlockModalOpen(selectedNote.id);
+      setIsOpen(false);
+      return;
+    }
 
-    const blob = new Blob([JSON.stringify(noteForExport, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const noteTitle = getFirstLine(selectedNote.content)
-      .replace(/[^a-z0-9]/gi, '_') // Replace non-alphanumeric chars with underscore
-      .toLowerCase()
-      .slice(0, 50); // Limit length
-    const fileName = `${noteTitle}.json`;
-
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
+    performDownload(selectedNote);
     setIsOpen(false);
     if (onClose) onClose();
   };
@@ -104,12 +99,12 @@ const InfoMenu = ({
       }
     }
   }, [isOpen, position]);
-
+  
   const handleGifSelect = (gifUrl) => {
     if (selectedNote) {
       const gifEmbed = `<img src="${gifUrl}" alt="GIF" style="max-width: 100%; height: auto;">`;
       const newContent = selectedNote.content + gifEmbed;
-      onUpdateNote(selectedId, { content: newContent });
+      // onUpdateNote(selectedId, { content: newContent });
     }
   };
 

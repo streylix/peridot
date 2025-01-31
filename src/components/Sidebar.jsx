@@ -113,6 +113,11 @@ function Sidebar({
   onUpdateNote,
   gifToAdd,
   onGifAdded,
+  onDownloadUnlockModalOpen,
+  downloadNoteId,
+  isDownloadable,
+  setDownloadable,
+  setDownloadNoteId,
 }) {
   const [searchTerm, handleSearchChange] = useSearch('');
   const [contextMenu, setContextMenu] = useState(null);
@@ -211,9 +216,14 @@ function Sidebar({
             onDeleteNote={onDeleteNote}
             onLockModalOpen={onLockModalOpen}
             onUnlockModalOpen={onUnlockModalOpen}
+            onDownloadUnlockModalOpen={onDownloadUnlockModalOpen}
             position={contextMenu}
             onClose={() => setContextMenu(null)}
             onUpdateNote={updateNote}
+            downloadNoteId={downloadNoteId}
+            isDownloadable={isDownloadable}
+            setDownloadable={setDownloadable}
+            setDownloadNoteId={setDownloadNoteId}
           />
         )}
       </div>
