@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Modal, ItemPresets } from './Modal';
-import { storageService } from '../utils/storageService';
+import { storageService } from '../utils/StorageService';
 import { Sun, Moon, Bug, Save, Trash2, Upload, Monitor } from 'lucide-react';
 function Settings({ isOpen, onClose, setNotes }) {
   const fileInputRef = useRef(null);

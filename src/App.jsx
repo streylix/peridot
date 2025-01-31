@@ -7,7 +7,7 @@ import ModalDebug from './components/DebugModal';
 import LockNoteModal from './components/LockNoteModal';
 import UnlockNoteModal from './components/UnlockNoteModal';
 import GifModal from './components/GifModal';
-import { storageService } from './utils/storageService.js';
+import { storageService } from './utils/StorageService.js';
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);

@@ -4,7 +4,7 @@ import MainContent from './MainContent';
 import InfoMenu from './InfoMenu';
 import { getFirstLine, getPreviewContent } from '../utils/contentUtils';
 import logo from '../assets/logo.png';
-import { storageService } from '../utils/storageService';
+import { storageService } from '../utils/StorageService';
 
 // Memoized individual note item component
 const NoteItem = React.memo(({ 
