@@ -1,25 +1,68 @@
 import { getFirstLine } from './contentUtils';
 
-export const performDownload = (note) => {
-  if (!note) return;
+const jsonToText = (content) => {
+  console.log(content);
 
-  const noteForExport = {
-    id: note.id,
-    content: note.content,
-    dateModified: note.dateModified,
-    pinned: note.pinned,
-    locked: note.locked,
-    tempPass: note.tempPass
+  content = content.replace(/<\/div>/gi, '\n');
+  content = content.replace(/<br\s*\/?>/gi, '');
+
+  let lines = content.split('\n');
+  lines.shift(); // Remove the first line
+
+  content = lines.join('\n');
+
+  // Replace <img> tags with Markdown image syntax and remove style attributes
+  content = content.replace(/<img[^>]+src="([^"]+)"[^>]*alt="([^"]*)".*?>/gi, '\n\n![$2]($1)\n\n');
+
+  // Remove <div> tags but keep their content
+  content = content.replace(/<\/?div>/gi, '');
+
+  return content;
+};
+
+const getFileTypeInfo = (fileType) => {
+  const types = {
+    json: { mimeType: 'application/json', extension: 'json' },
+    markdown: { mimeType: 'text/markdown', extension: 'md' },
+    text: { mimeType: 'text/plain', extension: 'txt' },
+    pdf: { mimeType: 'application/pdf', extension: 'pdf' }
   };
+  return types[fileType] || types.json;
+};
 
-  const blob = new Blob([JSON.stringify(noteForExport, null, 2)], { type: 'application/json' });
+export const performDownload = (note, fileType = 'json') => {
+  if (!note) return;
+  console.log(fileType)
+
+  let content;
+  const { mimeType, extension } = getFileTypeInfo(fileType);
+  const noteTitle = getFirstLine(note.content)
+
+  switch (fileType) {
+    case 'markdown':
+    case 'text':
+      content = jsonToText(note.content);
+      break;
+    case 'pdf':
+      // PDF conversion would go here - requires additional library
+      console.warn('PDF conversion not yet implemented');
+      return;
+    case 'json':
+    default:
+      content = JSON.stringify({
+        id: note.id,
+        content: note.content,
+        dateModified: note.dateModified,
+        pinned: note.pinned,
+        locked: note.locked,
+        tempPass: note.tempPass
+      }, null, 2);
+  }
+
+  const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const noteTitle = getFirstLine(note.content)
-    .replace(/[^a-z0-9]/gi, '_')
-    .toLowerCase()
-    .slice(0, 50);
-  const fileName = `${noteTitle}.json`;
+  const fileName = `${noteTitle}.${extension}`;
 
   a.href = url;
   a.download = fileName;

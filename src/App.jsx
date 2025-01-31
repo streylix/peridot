@@ -24,6 +24,9 @@ function App() {
   const [isDownloadUnlockModalOpen, setIsDownloadUnlockModalOpen] = useState(false);
   const [downloadNoteId, setDownloadNoteId] = useState(null);
   const [isDownloadable, setDownloadable] = useState(false);
+  const [preferredFileType, setPreferredFileType] = useState(
+    localStorage.getItem('preferredFileType') || 'json'
+  );
 
   const selectedNote = notes.find(note => note.id === selectedId);
 
@@ -31,7 +34,8 @@ function App() {
     if (isDownloadable && downloadNoteId) {
       const noteToDownload = notes.find(note => note.id === downloadNoteId);
       if (noteToDownload) {
-        performDownload(noteToDownload);
+        const preferredFileType = localStorage.getItem('preferredFileType') || 'json';
+        performDownload(noteToDownload, preferredFileType);
         setDownloadable(false);
         setDownloadNoteId(null);
       }

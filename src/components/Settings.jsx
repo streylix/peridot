@@ -2,11 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Modal, ItemPresets } from './Modal';
 import { storageService } from '../utils/StorageService';
 import { Sun, Moon, Bug, Save, Trash2, Upload, Monitor } from 'lucide-react';
+
 function Settings({ isOpen, onClose, setNotes }) {
   const fileInputRef = useRef(null);
   const [theme, setTheme] = useState('system');
+  const [fileType, setFileType] = useState(() => localStorage.getItem('preferredFileType') || 'json');
 
-  // Load the theme on component mount
+const handleFileTypeChange = (newType) => {
+  console.log(`new type: ${newType}`)
+  setFileType(newType);
+  localStorage.setItem('preferredFileType', newType);
+};
+
   useEffect(() => {
     const loadTheme = async () => {
       try {
@@ -29,7 +36,6 @@ function Settings({ isOpen, onClose, setNotes }) {
         document.body.classList.toggle('dark-mode', newTheme === 'dark');
       }
       
-      // Save the theme preference
       await storageService.writeThemePreference(newTheme);
       setTheme(newTheme);
     } catch (error) {
@@ -37,7 +43,6 @@ function Settings({ isOpen, onClose, setNotes }) {
     }
   };
 
-  // Add system theme change listener
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     
@@ -77,38 +82,6 @@ function Settings({ isOpen, onClose, setNotes }) {
     } catch (error) {
       console.error('Failed to save backup:', error);
     }
-
-    const generateUniqueId = (() => {
-      let counter = 0;
-      return () => Date.now() + counter++;
-    })();
-  
-    const normalizeNote = (note, existingNotes) => {
-      if (!note.content) return null;
-  
-      const normalized = {
-        content: note.content,
-        dateModified: note.dateModified || new Date().toISOString(),
-        pinned: Boolean(note.pinned),
-        caretPosition: Number(note.caretPosition) || 0,
-        locked: Boolean(note.locked)
-      };
-  
-      // Only include tempPass if the note is locked
-      if (normalized.locked && note.tempPass) {
-        normalized.tempPass = note.tempPass;
-      }
-  
-      // Keep original ID if it's a number and not already taken
-      if (typeof note.id === 'number' && !existingNotes.some(n => n.id === note.id)) {
-        normalized.id = note.id;
-      } else {
-        normalized.id = generateUniqueId();
-        normalized.originalId = note.id; // Store original ID if needed
-      }
-  
-      return normalized;
-    };
   };
 
   const handleImportNotes = async (event) => {
@@ -119,23 +92,12 @@ function Settings({ isOpen, onClose, setNotes }) {
       const text = await file.text();
       const importedData = JSON.parse(text);
       
-      // Handle both single note and array of notes
       const notesToProcess = Array.isArray(importedData) ? importedData : [importedData];
       
-      // Validate that we have note-like objects
       if (!notesToProcess.every(note => typeof note === 'object' && note !== null && 'content' in note)) {
         throw new Error('Invalid note format: Notes must have content');
       }
 
-      const validNotes = notesToProcess
-        .map(note => normalizeNote(note, existingNotes))
-        .filter(Boolean);
-
-      if (validNotes.length === 0) {
-        throw new Error('No valid notes found in import file');
-      }
-      
-      // Save each note individually
       for (const note of notesToProcess) {
         if (note.id && note.content) {
           await storageService.writeNote(note.id, {
@@ -147,7 +109,6 @@ function Settings({ isOpen, onClose, setNotes }) {
         }
       }
 
-      // Reload all notes
       const updatedNotes = await storageService.getAllNotes();
       setNotes(updatedNotes);
 
@@ -162,7 +123,6 @@ function Settings({ isOpen, onClose, setNotes }) {
       alert(`Error importing notes: ${error.message}`);
     }
 
-    // Clear the file input for future imports
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -184,6 +144,24 @@ function Settings({ isOpen, onClose, setNotes }) {
                 { value: 'system', label: 'System' }
               ]}
               onChange={applyTheme}
+            />
+          </ItemPresets.SUBSECTION>
+        },
+        {
+          content: <ItemPresets.SUBSECTION title="Download">
+            <ItemPresets.TEXT_DROPDOWN
+              label="Saved File Type"
+              subtext="Note: Some attributes may be lost when using formats other than JSON"
+              value={fileType}
+              options={[
+                { value: 'json', label: 'JSON (.json)' },
+                { value: 'markdown', label: 'Markdown (.md)' },
+                { value: 'text', label: 'Plain Text (.txt)' },
+                { value: 'pdf', label: 'PDF Document (.pdf)' }
+              ]}
+              onChange={(type) => {
+                handleFileTypeChange(type);
+              }}
             />
           </ItemPresets.SUBSECTION>
         }

@@ -80,9 +80,9 @@ const ItemComponents = {
       </ItemComponents.CONTAINER>
     ),
   
-    TEXT_DROPDOWN: ({ label, value, options, onChange = () => {} }) => (
+    TEXT_DROPDOWN: ({ label, subtext, value, options, onChange = () => {} }) => (
       <ItemComponents.CONTAINER>
-        <ItemComponents.TEXT label={label} />
+        <ItemComponents.TEXT label={label} subtext={subtext} />
         <ItemComponents.DROPDOWN value={value} options={options} onChange={onChange} />
       </ItemComponents.CONTAINER>
     ),

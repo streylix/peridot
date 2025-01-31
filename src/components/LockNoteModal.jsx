@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { Modal, ItemPresets } from './Modal';
 
@@ -7,6 +7,14 @@ function LockNoteModal({ isOpen, onClose, onConfirm }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) {
+      setPassword('');
+      setError('');
+      setShowPassword(false);
+      }
+    }, [isOpen]);
 
   const handleSubmit = () => {
     if (!password || !confirmPassword) {
@@ -43,6 +51,7 @@ function LockNoteModal({ isOpen, onClose, onConfirm }) {
               onChange={(e) => setPassword(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Enter password"
+              autoFocus
             />
           </div>
           <div className="inner-small">

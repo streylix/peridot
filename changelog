@@ -1,8 +1,15 @@
 current version:
-v0.11.2:
-✅ Extra security for downloading locked notes
-    - requires the password to download now
+v0.11.3:
+- Option to change downloaded note file type
+    - JSON, .txt, .md
+    - PDF implementation will be added in a later patch
+- Autofocus on password modals
+- Password modals no longer retain their contents when closed sporadicallys
 
 previous versions:
+v0.11.2:
+- Extra security for downloading locked notes
+    - requires the password to download now
+
 v0.11.1:
-✅ Better localstorage (OPFS)
+- Better localstorage (OPFS)

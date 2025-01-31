@@ -17,7 +17,7 @@ const InfoMenu = ({
   downloadNoteId,
   isDownloadable,
   setDownloadable,
-  setDownloadNoteId
+  setDownloadNoteId,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef(null);
@@ -29,7 +29,8 @@ const InfoMenu = ({
     if (isDownloadable && downloadNoteId) {
       const noteToDownload = notes.find(note => note.id === downloadNoteId);
       if (noteToDownload) {
-        performDownload(noteToDownload);
+        const preferredFileType = localStorage.getItem('preferredFileType') || 'json';
+        performDownload(noteToDownload, preferredFileType);
         setDownloadable(false);
         setDownloadNoteId(null);
       }
@@ -82,7 +83,8 @@ const InfoMenu = ({
       return;
     }
 
-    performDownload(selectedNote);
+    const preferredFileType = localStorage.getItem('preferredFileType') || 'json';
+    performDownload(selectedNote, preferredFileType);
     setIsOpen(false);
     if (onClose) onClose();
   };
@@ -99,7 +101,7 @@ const InfoMenu = ({
       }
     }
   }, [isOpen, position]);
-  
+
   const handleGifSelect = (gifUrl) => {
     if (selectedNote) {
       const gifEmbed = `<img src="${gifUrl}" alt="GIF" style="max-width: 100%; height: auto;">`;

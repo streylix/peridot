@@ -143,7 +143,7 @@ function Sidebar({
     try {
       await storageService.writeNote(newNote.id, newNote);
       setNotes(prevNotes => sortNotes([newNote, ...prevNotes]));
-      setSelectedId(newNote.id);
+      onNoteSelect(newNote.id);
     } catch (error) {
       console.error('Failed to create note:', error);
     }

@@ -40,6 +40,7 @@ function DownloadUnlockModal({ isOpen, onClose, onConfirm }) {
              onChange={(e) => setPassword(e.target.value)}
              onKeyPress={handleKeyPress}
              placeholder="Enter password"
+             autoFocus
            />
          </div>
          {error && <div style={{ color: '#ff4444', fontSize: '14px', marginTop: '8px' }}>{error}</div>}

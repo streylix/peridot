@@ -1,10 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal, ItemPresets } from './Modal';
 
 function UnlockNoteModal({ isOpen, onClose, onConfirm }) {
  const [password, setPassword] = useState('');
  const [error, setError] = useState('');
  const [showPassword, setShowPassword] = useState(false);
+
+ useEffect(() => {
+  if (!isOpen) {
+    setPassword('');
+    setError('');
+    setShowPassword(false);
+    }
+  }, [isOpen]);
 
  const handleSubmit = () => {
    if (!password) {
@@ -32,6 +40,7 @@ function UnlockNoteModal({ isOpen, onClose, onConfirm }) {
              onChange={(e) => setPassword(e.target.value)}
              onKeyPress={handleKeyPress}
              placeholder="Enter password"
+             autoFocus
            />
          </div>
          {error && <div style={{ color: '#ff4444', fontSize: '14px', marginTop: '8px' }}>{error}</div>}
