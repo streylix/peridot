@@ -3,6 +3,19 @@ import { render, screen, userEvent } from '../test/test-utils'
 import { mockNotes } from '../test/test-utils'
 import App from '../App'
 
+declare global {
+  interface Navigator {
+    storage: {
+      getDirectory: () => Promise<FileSystemDirectoryHandle>;
+    }
+  }
+
+  interface URL {
+    createObjectURL: typeof URL.createObjectURL;
+    revokeObjectURL: typeof URL.revokeObjectURL;
+  }
+}
+
 // Mock OPFS directory handle
 const mockFiles = new Map()
 const mockNotesDir = {
@@ -54,14 +67,14 @@ const mockStorage = {
   getDirectory: vi.fn(async () => mockDirectoryHandle)
 }
 
-Object.defineProperty(global.navigator, 'storage', {
+Object.defineProperty(globalThis.navigator, 'storage', {
   value: mockStorage,
   writable: true
 })
 
 // Mock URL.createObjectURL and URL.revokeObjectURL
-global.URL.createObjectURL = vi.fn()
-global.URL.revokeObjectURL = vi.fn()
+globalThis.URL.createObjectURL = vi.fn()
+globalThis.URL.revokeObjectURL = vi.fn()
 
 describe('App', () => {
   beforeEach(async () => {
