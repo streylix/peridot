@@ -1,4 +1,5 @@
 import { getFirstLine } from './contentUtils';
+import html2pdf from 'html2pdf.js';
 
 const jsonToText = (content) => {
   console.log(content);
@@ -30,23 +31,180 @@ const getFileTypeInfo = (fileType) => {
   return types[fileType] || types.json;
 };
 
-export const performDownload = (note, fileType = 'json') => {
+
+const processContentForPdf = (htmlContent) => {
+  // Remove HTML tags except for images
+  let content = htmlContent;
+  console.log(`1: ${content}`)
+
+  content = content.replace(/<\/div>/gi, '\n');
+  console.log(`2: ${content}`)
+  content = content.replace(/<br\s*\/?>/gi, '');
+  console.log(`3: ${content}`)
+
+
+  // Remove <div> tags but keep their content
+  content = content.replace(/<\/?div>/gi, '');
+  console.log(`4: ${content}`)
+
+  // Preserve image tags
+  const images = [];
+  let imgCount = 0;
+  content = content.replace(/<img[^>]+>/gi, match => {
+    images[imgCount] = match;
+    return `__IMG${imgCount++}__`;
+  });
+
+  // Remove other HTML tags
+  content = content.replace(/<[^>]+>/g, '');
+  console.log(`5: ${content}`)
+
+  // Restore images
+  images.forEach((img, i) => {
+    content = content.replace(`__IMG${i}__`, img);
+  });
+
+  // Fix multiple spaces and clean up
+  // content = content.replace(/\s+/g, ' ');
+  console.log(`6: ${content}`)
+
+  return content;
+};
+
+const createPdfContent = (note, includeTitle = true) => {
+  const container = document.createElement('div');
+  console.log(`container: ${container}`)
+
+  // Create header container
+  const titleText = getFirstLine(note.content);
+  console.log(`titleText: ${titleText}`)
+  const headerContainer = document.createElement('div');
+  headerContainer.style.cssText = `
+    margin-bottom: 12px;
+  `;
+
+  // Create title
+  const titleElement = document.createElement('div');
+  titleElement.textContent = titleText;
+  titleElement.style.cssText = `
+    font-size: 32px;
+    font-weight: bold;
+    color: #000000;
+  `;
+
+  headerContainer.appendChild(titleElement);
+  container.appendChild(headerContainer);
+
+  const processedContent = processContentForPdf(note.content)
+  const mainContent = processedContent
+
+  // Create content container
+  const contentContainer = document.createElement('div');
+  contentContainer.style.cssText = `
+    font-size: 16px;
+    color: #000000;
+    `;
+
+  // Split into paragraphs and handle each
+  const paragraphs = processedContent.split('\n');
+  paragraphs.shift();
+  
+  paragraphs.forEach(para => {
+    if (para.includes('<img')) {
+      // Handle images
+      const imgDiv = document.createElement('div');
+      imgDiv.innerHTML = para;
+      const images = imgDiv.getElementsByTagName('img');
+      Array.from(images).forEach(img => {
+        img.style.cssText = `
+          max-width: 100%;
+          height: auto;
+          margin: 16px 0;
+          display: block;
+        `;
+        img.crossOrigin = 'anonymous';
+      });
+      contentContainer.appendChild(imgDiv);
+    } else if (para) {
+      // Handle text paragraphs
+      const p = document.createElement('div');
+      p.textContent = para;
+      contentContainer.appendChild(p);
+    } else if (!para){
+      contentContainer.appendChild(document.createElement('br'))
+    }
+  });
+
+  container.appendChild(contentContainer);
+  return container;
+};
+
+export const performDownload = async (note, fileType = 'json', pdfSettings = null) => {
   if (!note) return;
-  console.log(fileType)
 
-  let content;
   const { mimeType, extension } = getFileTypeInfo(fileType);
-  const noteTitle = getFirstLine(note.content)
+  const noteTitle = getFirstLine(note.content);
+  const fileName = `${noteTitle}.${extension}`;
 
+  if (fileType === 'pdf' && pdfSettings) {
+    try {
+      const container = createPdfContent(note, pdfSettings.includeTitle);
+      document.body.appendChild(container);
+      
+      const options = {
+        margin: pdfSettings.margin,
+        filename: fileName,
+        image: { 
+          type: 'jpeg', 
+          quality: 1.0
+        },
+        html2canvas: { 
+          scale: pdfSettings.scale,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff'
+        },
+        jsPDF: { 
+          unit: 'mm', 
+          format: pdfSettings.pageSize, 
+          orientation: pdfSettings.isLandscape ? 'landscape' : 'portrait'
+        }
+      };
+
+      const worker = html2pdf().set(options).from(container);
+      const pdfBlob = await worker.output('blob');
+      document.body.removeChild(container);
+
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = pdfUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      setTimeout(() => {
+        window.open(pdfUrl, '_blank');
+        setTimeout(() => URL.revokeObjectURL(pdfUrl), 1000);
+      }, 100);
+
+      return true;
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      if (document.body.contains(container)) {
+        document.body.removeChild(container);
+      }
+      throw new Error('Failed to generate PDF');
+    }
+  }
+
+  // Handle other file types (unchanged)...
+  let content;
   switch (fileType) {
     case 'markdown':
     case 'text':
-      content = jsonToText(note.content);
+      content = processContentForPdf(note.content);
       break;
-    case 'pdf':
-      // PDF conversion would go here - requires additional library
-      console.warn('PDF conversion not yet implemented');
-      return;
     case 'json':
     default:
       content = JSON.stringify({
@@ -62,8 +220,6 @@ export const performDownload = (note, fileType = 'json') => {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const fileName = `${noteTitle}.${extension}`;
-
   a.href = url;
   a.download = fileName;
   document.body.appendChild(a);

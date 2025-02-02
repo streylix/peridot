@@ -20,6 +20,8 @@ function Header({
   isDownloadable,
   setDownloadable,
   setDownloadNoteId,
+  setPdfExportNote,
+  setIsPdfExportModalOpen,
 }) {
   const toggleSidebar = () => {
     const sidebar = document.querySelector('.sidebar');
@@ -95,6 +97,8 @@ function Header({
             onGifModalOpen={onGifModalOpen}
             onDownloadUnlockModalOpen={onDownloadUnlockModalOpen}
             isDownloadable={isDownloadable}
+            setPdfExportNote={setPdfExportNote}
+            setIsPdfExportModalOpen={setIsPdfExportModalOpen}
           />
           <button 
             type="button" 

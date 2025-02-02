@@ -1,7 +1,7 @@
 {
   "name": "peridot",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.11.3",
   "type": "module",
   "homepage": "https://streylix.github.io/peridot/",
   "scripts": {
@@ -16,6 +16,7 @@
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "html2pdf.js": "^0.10.2",
     "lucide-react": "^0.471.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

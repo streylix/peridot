@@ -118,6 +118,8 @@ function Sidebar({
   isDownloadable,
   setDownloadable,
   setDownloadNoteId,
+  setPdfExportNote,
+  setIsPdfExportModalOpen,
 }) {
   const [searchTerm, handleSearchChange] = useSearch('');
   const [contextMenu, setContextMenu] = useState(null);
@@ -224,6 +226,8 @@ function Sidebar({
             isDownloadable={isDownloadable}
             setDownloadable={setDownloadable}
             setDownloadNoteId={setDownloadNoteId}
+            setPdfExportNote={setPdfExportNote}
+            setIsPdfExportModalOpen={setIsPdfExportModalOpen}
           />
         )}
       </div>

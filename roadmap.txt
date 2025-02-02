@@ -8,6 +8,13 @@ v0.11:
 ➕ Locked note encryption
 
 v0.12:
+➕ Improved Sidebar
+    ➕ Filtering notes
+    ➕ Folders
+    ➕ Resizable
+    ➕ Accepts click+drag txt/json/pdf/etc files as "import"
+
+v0.13:
 ➕ Improved NoteEditor
     ➕ Better gif functionality
     ➕ Image/Link/Video embedding
@@ -16,13 +23,6 @@ v0.12:
         ➕ this includes embedded conent
     ➕ Imported notes understand embedding
     ➕ Custom Check marker
-
-v0.13:
-➕ Improved Sidebar
-    ➕ Filtering notes
-    ➕ Folders
-    ➕ Resizable
-    ➕ Accepts click+drag txt/json/pdf/etc files as "import"
 
 v1.0:
 ➕ Backend
@@ -45,3 +45,4 @@ v1.2:
 ➕ CS347 Compliant version
 ➕ Application
     ➕ TBD
+➕ Mobile browser support

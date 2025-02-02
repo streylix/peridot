@@ -18,6 +18,8 @@ const InfoMenu = ({
   isDownloadable,
   setDownloadable,
   setDownloadNoteId,
+  setPdfExportNote,
+  setIsPdfExportModalOpen,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef(null);
@@ -76,15 +78,21 @@ const InfoMenu = ({
 
   const handleDownloadNote = () => {
     if (!selectedNote) return;
-
+  
     if (selectedNote.locked) {
       onDownloadUnlockModalOpen(selectedNote.id);
       setIsOpen(false);
       return;
     }
-
+  
     const preferredFileType = localStorage.getItem('preferredFileType') || 'json';
-    performDownload(selectedNote, preferredFileType);
+    
+    if (preferredFileType === 'pdf') {
+      setPdfExportNote(selectedNote);
+      setIsPdfExportModalOpen(true);
+    } else {
+      performDownload(selectedNote, preferredFileType);
+    }
     setIsOpen(false);
     if (onClose) onClose();
   };

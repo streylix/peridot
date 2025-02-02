@@ -7,9 +7,12 @@ import ModalDebug from './components/DebugModal';
 import LockNoteModal from './components/LockNoteModal';
 import UnlockNoteModal from './components/UnlockNoteModal';
 import GifModal from './components/GifModal';
-import { storageService } from './utils/StorageService.js';
 import DownloadUnlockModal from './components/DownloadUnlockModal.jsx';
+import PDFExportModal from './components/PDFExportModal';
+
+import { storageService } from './utils/StorageService.js';
 import { performDownload } from './utils/downloadUtils';
+import { getFirstLine } from './utils/contentUtils.js';
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -24,6 +27,8 @@ function App() {
   const [isDownloadUnlockModalOpen, setIsDownloadUnlockModalOpen] = useState(false);
   const [downloadNoteId, setDownloadNoteId] = useState(null);
   const [isDownloadable, setDownloadable] = useState(false);
+  const [isPdfExportModalOpen, setIsPdfExportModalOpen] = useState(false);
+  const [pdfExportNote, setPdfExportNote] = useState(null);
   const [preferredFileType, setPreferredFileType] = useState(
     localStorage.getItem('preferredFileType') || 'json'
   );
@@ -222,6 +227,8 @@ function App() {
         onUnlockModalOpen={handleUnlockModalOpen}
         onGifModalOpen={handleGifModalOpen}
         onDownloadUnlockModalOpen={handleDownloadUnlockModalOpen}
+        setPdfExportNote={setPdfExportNote}
+        setIsPdfExportModalOpen={setIsPdfExportModalOpen}
       />
       <div className="main-container">
         <Sidebar
@@ -242,6 +249,8 @@ function App() {
           isDownloadable={isDownloadable}
           setDownloadable={setDownloadable}
           setDownloadNoteId={setDownloadNoteId}
+          setPdfExportNote={setPdfExportNote}
+          setIsPdfExportModalOpen={setIsPdfExportModalOpen}
         />
       </div>
       <Settings
@@ -289,6 +298,15 @@ function App() {
         isOpen={isGifModalOpen}
         onClose={() => setIsGifModalOpen(false)}
         onConfirm={handleAddGif}
+      />
+      <PDFExportModal 
+        isOpen={isPdfExportModalOpen}
+        onClose={() => setIsPdfExportModalOpen(false)}
+        noteTitle={pdfExportNote ? getFirstLine(pdfExportNote.content) : ''}
+        onExport={(pdfSettings) => {
+          performDownload(pdfExportNote, 'pdf', pdfSettings);
+          setPdfExportNote(null);
+        }}
       />
     </div>
   );
