@@ -859,3 +859,128 @@ header.full-width{
   outline: none;
   border-color: rgba(10, 163, 79, 0.5);
 }
+
+/* Range input base styles */
+input[type="range"] {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: #e0e0e0;
+  outline: none;
+  margin: 10px 0;
+  justify-content: center;
+}
+
+/* Thumb styles */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #19d282;
+  cursor: pointer;
+  border: none;
+  transition: transform 0.2s ease;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #19d282;
+  cursor: pointer;
+  border: none;
+  transition: transform 0.2s ease;
+}
+
+/* Hover state */
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+input[type="range"]::-moz-range-thumb:hover {
+  transform: scale(1.1);
+}
+
+/* Active state */
+input[type="range"]::-webkit-slider-thumb:active {
+  transform: scale(0.95);
+}
+
+input[type="range"]::-moz-range-thumb:active {
+  transform: scale(0.95);
+}
+
+/* Track styles - the line the thumb moves along */
+input[type="range"]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+/* Dark mode styles */
+.dark-mode input[type="range"] {
+  background: #333;
+}
+
+.dark-mode input[type="range"]::-webkit-slider-thumb {
+  background: #19d282;
+}
+
+.dark-mode input[type="range"]::-moz-range-thumb {
+  background: #19d282;
+}
+
+/* Scale value text */
+.scale-value {
+  margin-left: 10px;
+  min-width: 48px;
+  text-align: right;
+}
+
+.dark-mode .scale-value {
+  color: #c7c7c7;
+}
+
+/* Scale control container */
+.scale-control {
+  display: flex;
+  align-items: center;
+  width: 200px;
+}
+
+.range-input {
+  --slider-value: 0%;
+}
+
+.scale-value-container {
+  width: 60px;
+  text-align: right;
+  margin-left: auto;
+}
+
+input[type="range"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+input[type="range"]:disabled::-webkit-slider-thumb {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
+input[type="range"]:disabled::-moz-range-thumb {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}

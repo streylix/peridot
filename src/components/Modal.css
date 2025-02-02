@@ -18,11 +18,16 @@
         backdrop-filter: blur(4px);
       }
     }
-    
-    .modal-content:not(.small){
-      width: 125vh;
-      height: 75vh;
-    }
+
+  .medium {
+    width: 75vh;
+    max-height: 90vh;
+  }
+  
+  .modal-content:not(.small, .medium){
+    width: 125vh;
+    height: 75vh;
+  }
 
   .modal-content{
       opacity: 0;
@@ -37,6 +42,8 @@
       transform: translateY(-20px);
       animation: modalSlideIn 0.3s ease forwards;
   }
+
+
     
     @keyframes modalSlideIn {
       to {
@@ -270,6 +277,7 @@
       flex-direction: column;
       gap: 4px;
     }
+
     
     .item-text-primary {
       /* color: #c7c7c7; */

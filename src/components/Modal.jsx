@@ -49,7 +49,7 @@ const ItemComponents = {
       ),
     
     TEXT: ({ label, subtext }) => (
-      <div className="item-text">
+      <div className={`item-text`}>
         <span className="item-text-primary">{label}</span>
         {subtext && <span className="item-text-secondary">{subtext}</span>}
       </div>

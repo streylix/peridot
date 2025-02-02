@@ -1,4 +1,8 @@
 current version:
+v0.11.4:
+- Export as PDF implementation
+
+previous versions:
 v0.11.3:
 - Option to change downloaded note file type
     - JSON, .txt, .md
@@ -6,7 +10,6 @@ v0.11.3:
 - Autofocus on password modals
 - Password modals no longer retain their contents when closed sporadicallys
 
-previous versions:
 v0.11.2:
 - Extra security for downloading locked notes
     - requires the password to download now

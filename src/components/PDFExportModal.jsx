@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { Modal } from './Modal';
+import { ItemComponents, ItemPresets } from './Modal';
 
 function PDFExportModal({ isOpen, onClose, noteTitle, onExport }) {
   const [settings, setSettings] = useState({
@@ -10,6 +11,19 @@ function PDFExportModal({ isOpen, onClose, noteTitle, onExport }) {
     margin: 'default',
     scale: 100
   });
+
+  const [isSliding, setIsSliding] = useState(false);
+  const sliderRef = useRef(null);
+
+  useEffect(() => {
+    if (sliderRef.current) {
+      const min = parseFloat(sliderRef.current.min);
+      const max = parseFloat(sliderRef.current.max);
+      const val = parseFloat(sliderRef.current.value);
+      const percentage = ((val - min) / (max - min)) * 100;
+      sliderRef.current.style.setProperty('--slider-value', `${percentage}%`);
+    }
+  }, [settings.scale]);
 
   const pageSizeOptions = [
     { value: 'letter', label: 'Letter' },
@@ -42,118 +56,78 @@ function PDFExportModal({ isOpen, onClose, noteTitle, onExport }) {
     onClose();
   };
 
+  const handleScaleChange = (e) => {
+    const newScale = parseInt(e.target.value);
+    setSettings({ ...settings, scale: newScale });
+  };
+
   const sections = [
     {
       items: [
         {
           content: (
-            <div className="setting-row">
-              <div className="setting-label">
-                <span>Include file name as title</span>
-                <span className="setting-subtext">Add "{noteTitle}" as the document title</span>
-              </div>
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={settings.includeTitle}
-                  onChange={(e) => setSettings({ ...settings, includeTitle: e.target.checked })}
-                />
-                <span className="slider" />
-              </label>
-            </div>
-          )
-        },
-        {
-          content: (
-            <div className="setting-row">
-              <div className="setting-label">
-                <span>Page size</span>
-              </div>
-              <select
+            <ItemComponents.SUBSECTION
+            title={"Export to PDF"}
+            children={[  
+              <ItemPresets.TEXT_SWITCH
+                label={"Include File Name As Title"}
+                value={settings.includeTitle}
+                onChange={(e) => setSettings({ ...settings, includeTitle: e.target.checked })}
+              />,
+              <ItemPresets.TEXT_DROPDOWN
+                label={"Page size"}
                 value={settings.pageSize}
-                onChange={(e) => setSettings({ ...settings, pageSize: e.target.value })}
-                className="select-input"
-              >
-                {pageSizeOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )
-        },
-        {
-          content: (
-            <div className="setting-row">
-              <div className="setting-label">
-                <span>Landscape</span>
-                <span className="setting-subtext">Use landscape orientation</span>
-              </div>
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={settings.isLandscape}
-                  onChange={(e) => setSettings({ ...settings, isLandscape: e.target.checked })}
-                />
-                <span className="slider" />
-              </label>
-            </div>
-          )
-        },
-        {
-          content: (
-            <div className="setting-row">
-              <div className="setting-label">
-                <span>Margin</span>
-              </div>
-              <select
+                options={pageSizeOptions}
+                onChange={(value) => setSettings({ ...settings, pageSize: value })}
+              />,
+              <ItemPresets.TEXT_SWITCH
+                label={"Landscape"}
+                value={settings.isLandscape}
+                onChange={(e) => setSettings({ ...settings, isLandscape: e.target.checked })}
+              />,
+              <ItemPresets.TEXT_DROPDOWN
+                label={"Margin"}
                 value={settings.margin}
-                onChange={(e) => setSettings({ ...settings, margin: e.target.value })}
-                className="select-input"
-              >
-                {marginOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )
-        },
-        {
-          content: (
-            <div className="setting-row">
-              <div className="setting-label">
-                <span>Scale</span>
-                <span className="setting-subtext">Adjust the content size</span>
-              </div>
-              <div className="scale-control">
-                <input
-                  type="range"
-                  min="50"
-                  max="150"
-                  value={settings.scale}
-                  onChange={(e) => setSettings({ ...settings, scale: parseInt(e.target.value) })}
-                  className="range-input"
-                />
-                <span className="scale-value">{settings.scale}%</span>
-              </div>
-            </div>
-          )
-        },
-        {
-          content: (
-            <div className="setting-row">
-              <button 
+                options={marginOptions}
+                onChange={(value) => setSettings({ ...settings, margin: value })}
+              />,
+              <ItemComponents.CONTAINER
+                children={[
+                  <ItemComponents.TEXT
+                    label={"Scale"}
+                    subtext={"Adjust the content size (Currently unavailable)"}
+                  />,
+                  <input
+                    disabled
+                    ref={sliderRef}
+                    type="range"
+                    min="10"
+                    max="100"
+                    value={settings.scale}
+                    onChange={handleScaleChange}
+                    className={`range-input ${isSliding ? 'sliding' : ''}`}
+                    data-value={settings.scale}
+                    onMouseDown={() => setIsSliding(true)}
+                    onMouseUp={() => setIsSliding(false)}
+                    onMouseLeave={() => setIsSliding(false)}
+                  />,
+                  <div className="scale-value-container">
+                    <ItemComponents.TEXT
+                      label={`${settings.scale}%`}
+                    />
+                  </div>,
+                ]}
+              />,
+              <ItemComponents.BUTTON
+                primary="primary"
                 onClick={handleExport}
-                className="export-button"
               >
                 Export to PDF
-              </button>
-            </div>
+              </ItemComponents.BUTTON>
+            ]}
+            />
           )
-        }
+        },
       ]
     }
   ];
@@ -164,7 +138,7 @@ function PDFExportModal({ isOpen, onClose, noteTitle, onExport }) {
       onClose={onClose}
       sections={sections}
       title="Export to PDF"
-      size="small"
+      size="medium"
     />
   );
 }

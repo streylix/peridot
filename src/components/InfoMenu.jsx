@@ -33,7 +33,7 @@ const InfoMenu = ({
       const preferredFileType = localStorage.getItem('preferredFileType') || 'json';
       if (noteToDownload) {
         if (preferredFileType === 'pdf') {
-          setPdfExportNote(selectedNote);
+          setPdfExportNote(noteToDownload);
           setIsPdfExportModalOpen(true);
           setDownloadable(false);
           setDownloadNoteId(null);

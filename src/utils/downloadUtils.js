@@ -35,17 +35,13 @@ const getFileTypeInfo = (fileType) => {
 const processContentForPdf = (htmlContent) => {
   // Remove HTML tags except for images
   let content = htmlContent;
-  console.log(`1: ${content}`)
 
   content = content.replace(/<\/div>/gi, '\n');
-  console.log(`2: ${content}`)
   content = content.replace(/<br\s*\/?>/gi, '');
-  console.log(`3: ${content}`)
 
 
   // Remove <div> tags but keep their content
   content = content.replace(/<\/?div>/gi, '');
-  console.log(`4: ${content}`)
 
   // Preserve image tags
   const images = [];
@@ -57,7 +53,6 @@ const processContentForPdf = (htmlContent) => {
 
   // Remove other HTML tags
   content = content.replace(/<[^>]+>/g, '');
-  console.log(`5: ${content}`)
 
   // Restore images
   images.forEach((img, i) => {
@@ -66,7 +61,6 @@ const processContentForPdf = (htmlContent) => {
 
   // Fix multiple spaces and clean up
   // content = content.replace(/\s+/g, ' ');
-  console.log(`6: ${content}`)
 
   return content;
 };
@@ -75,25 +69,27 @@ const createPdfContent = (note, includeTitle = true) => {
   const container = document.createElement('div');
   console.log(`container: ${container}`)
 
-  // Create header container
-  const titleText = getFirstLine(note.content);
-  console.log(`titleText: ${titleText}`)
-  const headerContainer = document.createElement('div');
-  headerContainer.style.cssText = `
-    margin-bottom: 12px;
-  `;
+  if (includeTitle) {
+    // Create header container
+    const titleText = getFirstLine(note.content);
+    console.log(`titleText: ${titleText}`)
+    const headerContainer = document.createElement('div');
+    headerContainer.style.cssText = `
+      margin-bottom: 12px;
+    `;
 
-  // Create title
-  const titleElement = document.createElement('div');
-  titleElement.textContent = titleText;
-  titleElement.style.cssText = `
-    font-size: 32px;
-    font-weight: bold;
-    color: #000000;
-  `;
+    // Create title
+    const titleElement = document.createElement('div');
+    titleElement.textContent = titleText;
+    titleElement.style.cssText = `
+      font-size: 32px;
+      font-weight: bold;
+      color: #000000;
+    `;
 
-  headerContainer.appendChild(titleElement);
-  container.appendChild(headerContainer);
+    headerContainer.appendChild(titleElement);
+    container.appendChild(headerContainer);
+  }
 
   const processedContent = processContentForPdf(note.content)
   const mainContent = processedContent
@@ -185,7 +181,6 @@ export const performDownload = async (note, fileType = 'json', pdfSettings = nul
       document.body.removeChild(a);
 
       setTimeout(() => {
-        window.open(pdfUrl, '_blank');
         setTimeout(() => URL.revokeObjectURL(pdfUrl), 1000);
       }, 100);
 
