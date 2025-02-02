@@ -140,6 +140,7 @@ const createPdfContent = (note, includeTitle = true) => {
 };
 
 export const performDownload = async (note, fileType = 'json', pdfSettings = null) => {
+  console.log("performing download")
   if (!note) return;
 
   const { mimeType, extension } = getFileTypeInfo(fileType);

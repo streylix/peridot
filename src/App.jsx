@@ -35,14 +35,22 @@ function App() {
 
   const selectedNote = notes.find(note => note.id === selectedId);
 
+
   useEffect(() => {
     if (isDownloadable && downloadNoteId) {
       const noteToDownload = notes.find(note => note.id === downloadNoteId);
+      const preferredFileType = localStorage.getItem('preferredFileType') || 'json';
       if (noteToDownload) {
-        const preferredFileType = localStorage.getItem('preferredFileType') || 'json';
-        performDownload(noteToDownload, preferredFileType);
-        setDownloadable(false);
-        setDownloadNoteId(null);
+        if (preferredFileType === 'pdf') {
+          setPdfExportNote(selectedNote);
+          setIsPdfExportModalOpen(true);
+          setDownloadable(false);
+          setDownloadNoteId(null);
+        } else {
+          performDownload(noteToDownload, preferredFileType);
+          setDownloadable(false);
+          setDownloadNoteId(null);
+        }
       }
     }
   }, [isDownloadable, downloadNoteId, notes]);
