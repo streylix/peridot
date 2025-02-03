@@ -9,10 +9,7 @@ const InfoMenu = ({
   notes,
   onTogglePin,
   onDeleteNote,
-  onLockModalOpen,
-  onUnlockModalOpen,
   onGifModalOpen,
-  onDownloadUnlockModalOpen,
   position = null,
   onUnlockNote,
   onLockNote,
@@ -126,7 +123,6 @@ const InfoMenu = ({
     if (selectedNote) {
       const gifEmbed = `<img src="${gifUrl}" alt="GIF" style="max-width: 100%; height: auto;">`;
       const newContent = selectedNote.content + gifEmbed;
-      // onUpdateNote(selectedId, { content: newContent });
     }
   };
 

@@ -13,10 +13,7 @@ function Header({
   onBack, 
   canGoBack, 
   onDebugClick, 
-  onLockModalOpen, 
-  onUnlockModalOpen,
   onGifModalOpen,
-  onDownloadUnlockModalOpen,
   isDownloadable,
   setDownloadable,
   setDownloadNoteId,
@@ -88,9 +85,9 @@ function Header({
           )}
         </div>
         <div className="header-buttons">
-          <button onClick={onDebugClick}>
+          {/* <button onClick={onDebugClick}>
             <Bug />
-          </button>
+          </button> */}
           <StatsMenu 
             selectedId={selectedId}
             notes={notes}
@@ -100,10 +97,7 @@ function Header({
             notes={notes}
             onTogglePin={onTogglePin}
             onDeleteNote={onDeleteNote}
-            onLockModalOpen={onLockModalOpen}
-            onUnlockModalOpen={onUnlockModalOpen}
             onGifModalOpen={onGifModalOpen}
-            onDownloadUnlockModalOpen={onDownloadUnlockModalOpen}
             isDownloadable={isDownloadable}
             setPdfExportNote={setPdfExportNote}
             setIsPdfExportModalOpen={setIsPdfExportModalOpen}

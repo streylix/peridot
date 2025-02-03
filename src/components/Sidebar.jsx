@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { SquarePen, Pin, Lock } from 'lucide-react';
 import MainContent from './MainContent';
 import InfoMenu from './InfoMenu';
 import { noteContentService } from '../utils/NoteContentService';
 import logo from '../assets/logo.png';
 import { storageService } from '../utils/StorageService';
+import { noteUpdateService } from '../utils/NoteUpdateService';
 
 // Memoized individual note item component
 const NoteItem = React.memo(({
@@ -119,12 +120,8 @@ function Sidebar({
   onUnlockNote,
   onTogglePin,
   onDeleteNote,
-  onLockModalOpen,
-  onUnlockModalOpen,
-  onUpdateNote,
   gifToAdd,
   onGifAdded,
-  onDownloadUnlockModalOpen,
   downloadNoteId,
   isDownloadable,
   setDownloadable,
@@ -171,43 +168,19 @@ function Sidebar({
   }, []);
 
   
-  const updateNote = async (updates, updateModified = true) => {
-    setNotes(prevNotes => {
-      const updatedNotes = prevNotes.map(note => {
-        if (note.id === selectedId) {
-          // Only include encryption-related fields if the note is actually locked
-          const updatedNote = {
-            ...note,
-            ...updates,
-            dateModified: updateModified ? new Date().toISOString() : note.dateModified
-          };
-
-          // If the note was not locked before and updates don't specify locking,
-          // remove encryption-related fields
-          if (!note.locked && !updates.locked) {
-            delete updatedNote.encrypted;
-            delete updatedNote.keyParams;
-            delete updatedNote.iv;
-            delete updatedNote.visibleTitle;
-          }
-
-          return updatedNote;
-        }
-        return note;
+  // Subscribe to updates
+  useEffect(() => {
+    const unsubscribe = noteUpdateService.subscribe((updatedNote) => {
+      setNotes(prevNotes => {
+        const updatedNotes = prevNotes.map(note =>
+          note.id === updatedNote.id ? updatedNote : note
+        );
+        return sortNotes(updatedNotes);
       });
-
-      // Save notes to storage
-      updatedNotes.forEach(async note => {
-        try {
-          await storageService.writeNote(note.id, note);
-        } catch (error) {
-          console.error('Failed to save note:', error);
-        }
-      });
-
-      return sortNotes(updatedNotes);
     });
-  };
+  
+    return () => unsubscribe();
+  }, []);
 
   return (
     <>
@@ -250,12 +223,8 @@ function Sidebar({
             notes={notes}
             onTogglePin={onTogglePin}
             onDeleteNote={onDeleteNote}
-            onLockModalOpen={onLockModalOpen}
-            onUnlockModalOpen={onUnlockModalOpen}
-            onDownloadUnlockModalOpen={onDownloadUnlockModalOpen}
             position={contextMenu}
             onClose={() => setContextMenu(null)}
-            onUpdateNote={updateNote}
             downloadNoteId={downloadNoteId}
             isDownloadable={isDownloadable}
             setDownloadable={setDownloadable}
@@ -268,7 +237,6 @@ function Sidebar({
 
       <MainContent 
         note={notes.find(note => note.id === selectedId)}
-        onUpdateNote={updateNote}
         onUnlockNote={onUnlockNote}
         gifToAdd={gifToAdd}
         onGifAdded={onGifAdded}

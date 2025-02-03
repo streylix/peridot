@@ -4,6 +4,7 @@ import EmptyState from './EmptyState';
 import LockedWindow from './LockedWindow';
 import { passwordStorage } from '../utils/PasswordStorageService';
 import { decryptNote, encryptNote } from '../utils/encryption';
+import { noteUpdateService } from '../utils/NoteUpdateService';
 
 function MainContent({ note, onUpdateNote, gifToAdd, onGifAdded }) {
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -48,34 +49,12 @@ function MainContent({ note, onUpdateNote, gifToAdd, onGifAdded }) {
   };
 
   const handleUpdateNote = async (updates, updateModified = true) => {
-    // If note is temporarily unlocked, re-encrypt it
-    if (isUnlocked && currentPassword) {
-      const updatedNote = {
-        ...note,
-        ...updates,
-        content: updates.content || note.content,
-        dateModified: updateModified ? new Date().toISOString() : note.dateModified
-      };
-
-      try {
-        // Re-encrypt the updated note with the current password
-        const reEncryptedNote = await encryptNote(updatedNote, currentPassword);
-        onUpdateNote(reEncryptedNote, updateModified);
-      } catch (error) {
-        // console.error('Failed to re-encrypt note:', error);
-
-        // Sometimes the note.content doesn't exist and causes this error to run, however everything still works
-        // In fact, it works incredibly well this way, I tried other methods to prevent the error from happening but
-        // they all broke in some way or another. I'm going to leave implementation like this as I think it's the most
-        // effective here, though I should find a better fix later
-
-        // Fallback to normal update if re-encryption fails
-        onUpdateNote(updates, updateModified);
-      }
-    } else {
-      // Normal update for unlocked notes
-      onUpdateNote(updates, updateModified);
-    }
+    const encryptionContext = isUnlocked && currentPassword ? {
+      shouldEncrypt: true,
+      password: currentPassword
+    } : null;
+    
+    await noteUpdateService.queueUpdate(note.id, updates, updateModified, encryptionContext);
   };
 
   if (!note) {

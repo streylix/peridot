@@ -1,6 +1,6 @@
 ➕✅
 current version: unreleased
-version#: 0.11.4
+version#: 0.11.5
 
 v0.11:
 ➕ Better localstorage (OPFS)

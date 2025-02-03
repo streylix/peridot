@@ -3,11 +3,7 @@ import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import Settings from './components/Settings';
 import { noteNavigation } from './utils/NoteNavigationUtil';
-import ModalDebug from './components/DebugModal';
-import LockNoteModal from './components/LockNoteModal';
-import UnlockNoteModal from './components/UnlockNoteModal';
 import GifModal from './components/GifModal';
-import DownloadUnlockModal from './components/DownloadUnlockModal.jsx';
 import PDFExportModal from './components/PDFExportModal';
 import MainContent from './components/MainContent.jsx';
 import PasswordModal from './components/PasswordModal.jsx';
@@ -16,17 +12,15 @@ import { encryptNote, decryptNote, reEncryptNote, permanentlyUnlockNote } from '
 import { passwordStorage } from './utils/PasswordStorageService';
 import { storageService } from './utils/StorageService.js';
 import { noteContentService } from './utils/NoteContentService.js';
+import { noteUpdateService } from './utils/NoteUpdateService.js';
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentModal, setCurrentModal] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
-  const [isLockModalOpen, setIsLockModalOpen] = useState(false);
-  const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
   const [gifToAdd, setGifToAdd] = useState(null);
   const [notes, setNotes] = useState([]);
   const [isGifModalOpen, setIsGifModalOpen] = useState(false);
-  const [isDownloadUnlockModalOpen, setIsDownloadUnlockModalOpen] = useState(false);
   const [downloadNoteId, setDownloadNoteId] = useState(null);
   const [isDownloadable, setDownloadable] = useState(false);
   const [isPdfExportModalOpen, setIsPdfExportModalOpen] = useState(false);
@@ -68,19 +62,6 @@ function App() {
       }
     }
   }, [isDownloadable, downloadNoteId, notes]);
-
-  const handleLockModalOpen = () => {
-    setIsLockModalOpen(true);
-  };
-
-  const handleUnlockModalOpen = () => {
-    setIsUnlockModalOpen(true);
-  };
-
-  const handleDownloadUnlockModalOpen = (noteId) => {
-    setDownloadNoteId(noteId);
-    setIsDownloadUnlockModalOpen(true);
-  };
 
   const handleDebugModalClose = () => {
     const nextModal = {
@@ -244,19 +225,7 @@ function App() {
   }, [updateQueue, notes]);
 
   const updateNote = async (updates, updateModified = true) => {
-    console.log('Queueing note update:', {
-      noteId: selectedId,
-      isEncrypted: updates._isEncryptedUpdate
-    });
-
-    setUpdateQueue(prevQueue => [
-      ...prevQueue,
-      {
-        noteId: selectedId,
-        updates,
-        updateModified
-      }
-    ]);
+    await noteUpdateService.queueUpdate(selectedId, updates, updateModified);
   };
 
   return (
@@ -270,11 +239,7 @@ function App() {
         onBack={handleBack}
         canGoBack={noteNavigation.canGoBack()}
         onDebugClick={() => setCurrentModal('small')}
-        // onLockNote={handleLockNote}
-        onLockModalOpen={handleLockModalOpen}
-        onUnlockModalOpen={handleUnlockModalOpen}
         onGifModalOpen={handleGifModalOpen}
-        onDownloadUnlockModalOpen={handleDownloadUnlockModalOpen}
         setPdfExportNote={setPdfExportNote}
         setIsPdfExportModalOpen={setIsPdfExportModalOpen}
       />
@@ -285,12 +250,8 @@ function App() {
           notes={notes}
           setNotes={setNotes}
           onDeleteNote={deleteNote}
-          // onUnlockNote={handleUnlockNote}
           onTogglePin={togglePin}
-          onLockModalOpen={handleLockModalOpen}
-          onUnlockModalOpen={handleUnlockModalOpen}
           onGifAdded={setGifToAdd}
-          onDownloadUnlockModalOpen={handleDownloadUnlockModalOpen}
           downloadNoteId={downloadNoteId}
           isDownloadable={isDownloadable}
           setDownloadable={setDownloadable}
@@ -309,10 +270,6 @@ function App() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         setNotes={setNotes}
-      />
-      <ModalDebug
-        currentModal={currentModal}
-        onClose={handleDebugModalClose}
       />
       <PasswordModal />
       <GifModal
