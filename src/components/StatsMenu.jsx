@@ -38,10 +38,20 @@ const StatsMenu = ({ selectedId, notes }) => {
   }, [isOpen]);
 
   const countWordsAndChars = (content) => {
-    const text = content.replace(/<[^>]*>/g, ' '); // Remove HTML tags
-    const words = text.trim().split(/\s+/).filter(word => word.length > 0);
-    const chars = text.replace(/\s/g, '').length;
-    return { words: words.length, chars };
+      // Get the editor content div
+      const editorContent = document.querySelector('#inner-note');
+      if (!editorContent) {
+        return { words: 0, chars: 0 };
+      }
+  
+      // Get text content from the editor
+      const text = editorContent.textContent || '';
+      
+      // Count words and characters
+      const words = text.trim().split(/\s+/).filter(word => word.length > 0);
+      const chars = text.replace(/\s/g, '').length;
+  
+      return {words: words.length, chars};
   };
 
   const formatDate = (dateString) => {

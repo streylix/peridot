@@ -41,29 +41,39 @@ function LockedWindow({ onUnlock }) {
     form: {
       width: '100%',
       maxWidth: '300px'
-      },
+    },
     showPasswordContainer: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '4px',
-        fontSize: '12px',
-        color: '#6b7280',
-      },
-      switch: {
-        transform: 'scale(0.0) !important',
-        marginRight: '4px !important'
-      }
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px',
+      fontSize: '12px',
+      color: '#6b7280',
+      marginTop: '8px'
+    },
+    switch: {
+      transform: 'scale(0.8) !important',
+      marginRight: '4px !important'
+    }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    
     if (!password.trim()) {
       setError('Please enter a password');
       return;
     }
-    const result = onUnlock(password);
-    if (!result) {
-      setError('Invalid password');
+
+    try {
+      const result = await onUnlock(password);
+      
+      if (!result) {
+        setError('Invalid password');
+        return;
+      }
+    } catch (err) {
+      console.error('Error unlocking note:', err);
+      setError('Failed to unlock note');
     }
   };
 
@@ -88,8 +98,8 @@ function LockedWindow({ onUnlock }) {
             <div style={styles.showPasswordContainer}>
               <div className="locked-window-switch">
                 <ItemComponents.SWITCH
-                value={showPassword}
-                onChange={() => setShowPassword(!showPassword)}
+                  value={showPassword}
+                  onChange={() => setShowPassword(!showPassword)}
                 />
               </div>
               <span>Show password</span>
@@ -103,6 +113,6 @@ function LockedWindow({ onUnlock }) {
       </div>
     </div>
   );
- }
+}
 
 export default LockedWindow;

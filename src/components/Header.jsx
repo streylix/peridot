@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { SlidersHorizontal, PanelLeft, ChevronLeft, Bug } from 'lucide-react';
 import InfoMenu from './InfoMenu';
 import StatsMenu from './StatsMenu';
-import { getFirstLine } from '../utils/contentUtils';
+import { noteContentService } from '../utils/NoteContentService';
 
 function Header({ 
   onSettingsClick, 
@@ -38,10 +38,18 @@ function Header({
   };
 
   const selectedNote = notes.find(note => note.id === selectedId);
-  const noteTitle = useMemo(() => 
-    selectedNote ? getFirstLine(selectedNote.content) : '',
-    [selectedNote?.content]
-  );
+  const noteTitle = useMemo(() => {
+    if (selectedNote) {
+      if (selectedNote.locked) {
+        // Use the visibleTitle property for locked notes
+        return selectedNote.visibleTitle || 'Untitled';
+      } else {
+        // Use the first line of the note content for unlocked notes
+        return noteContentService.getFirstLine(selectedNote.content);
+      }
+    }
+    return '';
+  }, [selectedNote?.content, selectedNote?.locked, selectedNote?.visibleTitle]);
 
   return (
     <header>

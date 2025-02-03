@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { CircleEllipsis, Lock, Pin, Gift, Trash2, Download } from 'lucide-react';
-import { performDownload } from '../utils/downloadUtils';
+import { noteContentService } from '../utils/NoteContentService';
+import { passwordModalUtils } from '../utils/PasswordModalUtils';
 
 const InfoMenu = ({
   selectedId,
@@ -13,6 +14,8 @@ const InfoMenu = ({
   onGifModalOpen,
   onDownloadUnlockModalOpen,
   position = null,
+  onUnlockNote,
+  onLockNote,
   onClose,
   downloadNoteId,
   isDownloadable,
@@ -40,7 +43,7 @@ const InfoMenu = ({
           setIsOpen(false);
           if (onClose) onClose();
         } else {
-          performDownload(noteToDownload, preferredFileType);
+          noteContentService.performDownload(noteToDownload, preferredFileType);
           setDownloadable(false);
           setDownloadNoteId(null);
         }
@@ -77,9 +80,9 @@ const InfoMenu = ({
 
   const handleLockClick = () => {
     if (selectedNote?.locked) {
-      onUnlockModalOpen();
+      passwordModalUtils.openUnlockModal(selectedNote.id, selectedNote);
     } else {
-      onLockModalOpen();
+      passwordModalUtils.openLockModal(selectedNote.id, selectedNote);
     }
     setIsOpen(false);
     if (onClose) onClose();
@@ -89,7 +92,7 @@ const InfoMenu = ({
     if (!selectedNote) return;
   
     if (selectedNote.locked) {
-      onDownloadUnlockModalOpen(selectedNote.id);
+      passwordModalUtils.openDownloadUnlockModal(selectedNote.id, selectedNote);
       setIsOpen(false);
       return;
     }
@@ -100,7 +103,7 @@ const InfoMenu = ({
       setPdfExportNote(selectedNote);
       setIsPdfExportModalOpen(true);
     } else {
-      performDownload(selectedNote, preferredFileType);
+      noteContentService.performDownload(selectedNote, preferredFileType);
     }
     setIsOpen(false);
     if (onClose) onClose();

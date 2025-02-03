@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Modal, ItemPresets } from './Modal';
 import { storageService } from '../utils/StorageService';
 import { Sun, Moon, Bug, Save, Trash2, Upload, Monitor } from 'lucide-react';
+import { passwordStorage } from '../utils/PasswordStorageService';
 
 function Settings({ isOpen, onClose, setNotes }) {
   const fileInputRef = useRef(null);
@@ -14,6 +15,7 @@ const handleFileTypeChange = (newType) => {
   localStorage.setItem('preferredFileType', newType);
 };
 
+// Load theme
   useEffect(() => {
     const loadTheme = async () => {
       try {
@@ -43,6 +45,7 @@ const handleFileTypeChange = (newType) => {
     }
   };
 
+  // Match system theme
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     

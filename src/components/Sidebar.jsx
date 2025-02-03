@@ -2,19 +2,32 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { SquarePen, Pin, Lock } from 'lucide-react';
 import MainContent from './MainContent';
 import InfoMenu from './InfoMenu';
-import { getFirstLine, getPreviewContent } from '../utils/contentUtils';
+import { noteContentService } from '../utils/NoteContentService';
 import logo from '../assets/logo.png';
 import { storageService } from '../utils/StorageService';
 
 // Memoized individual note item component
-const NoteItem = React.memo(({ 
+const NoteItem = React.memo(({
   note, 
   isSelected, 
   onNoteSelect, 
   onContextMenu,
 }) => {
-  const title = useMemo(() => getFirstLine(note.content), [note.content]);
-  const preview = useMemo(() => getPreviewContent(note.content), [note.content]);
+  const title = useMemo(() => {
+    // If the note is locked, use the stored visible title
+    if (note.locked && note.visibleTitle) {
+      return note.visibleTitle;
+    }
+    // Otherwise get the first line of content
+    return noteContentService.getFirstLine(note.content);
+  }, [note.content, note.locked, note.visibleTitle]);
+
+  const preview = useMemo(() => {
+    if (note.locked) {
+      return 'Unlock to view';
+    }
+    return noteContentService.getPreviewContent(note.content);
+  }, [note.content, note.locked]);
 
   const handleClick = useCallback(() => {
     onNoteSelect(note.id);
@@ -34,9 +47,7 @@ const NoteItem = React.memo(({
       <div className="note-header">
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <span className="note-title">{title}</span>
-          <div className="note-preview">
-            {note.locked ? 'Unlock to view' : preview}
-          </div>
+          <div className="note-preview">{preview}</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
           {note.pinned && <Pin size={20} className="pin-indicator" />}
@@ -159,21 +170,44 @@ function Sidebar({
     });
   }, []);
 
-  // Add this function inside the Sidebar component
-  const updateNote = useCallback((updates, updateModified = true) => {
+  
+  const updateNote = async (updates, updateModified = true) => {
     setNotes(prevNotes => {
-      const updatedNotes = prevNotes.map(note => 
-        note.id === selectedId 
-          ? { 
-              ...note, 
-              ...updates,
-              dateModified: updateModified ? new Date().toISOString() : note.dateModified 
-            }
-          : note
-      );
-      return updateModified ? sortNotes(updatedNotes) : updatedNotes;
+      const updatedNotes = prevNotes.map(note => {
+        if (note.id === selectedId) {
+          // Only include encryption-related fields if the note is actually locked
+          const updatedNote = {
+            ...note,
+            ...updates,
+            dateModified: updateModified ? new Date().toISOString() : note.dateModified
+          };
+
+          // If the note was not locked before and updates don't specify locking,
+          // remove encryption-related fields
+          if (!note.locked && !updates.locked) {
+            delete updatedNote.encrypted;
+            delete updatedNote.keyParams;
+            delete updatedNote.iv;
+            delete updatedNote.visibleTitle;
+          }
+
+          return updatedNote;
+        }
+        return note;
+      });
+
+      // Save notes to storage
+      updatedNotes.forEach(async note => {
+        try {
+          await storageService.writeNote(note.id, note);
+        } catch (error) {
+          console.error('Failed to save note:', error);
+        }
+      });
+
+      return sortNotes(updatedNotes);
     });
-  }, [selectedId, sortNotes, setNotes]);
+  };
 
   return (
     <>

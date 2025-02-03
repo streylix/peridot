@@ -199,7 +199,7 @@ export const performDownload = async (note, fileType = 'json', pdfSettings = nul
   switch (fileType) {
     case 'markdown':
     case 'text':
-      content = processContentForPdf(note.content);
+      content = jsonToText(note.content);
       break;
     case 'json':
     default:

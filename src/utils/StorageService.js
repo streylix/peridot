@@ -12,6 +12,7 @@ class StorageService {
     try {
       this.root = await navigator.storage.getDirectory();
       await this.ensureNotesDirectory();
+      await this.ensurePasswordsDirectory();
       this.initialized = true;
     } catch (error) {
       console.error('Failed to initialize OPFS:', error);
@@ -20,7 +21,6 @@ class StorageService {
   }
 
   async ensureNotesDirectory() {
-    console.log("attempting to ensure notes directory")
     try {
       await this.root.getDirectoryHandle('notes', { create: true });
     } catch (error) {
@@ -29,10 +29,23 @@ class StorageService {
     }
   }
 
-  // Debounced write function
+  async ensurePasswordsDirectory() {
+    try {
+      await this.root.getDirectoryHandle('passwords', { create: true });
+    } catch (error) {
+      console.error('Failed to ensure passwords directory:', error);
+      throw error;
+    }
+  }
+
   async writeNote(noteId, noteData) {
     await this.init();
-    console.log("calling writeNote")
+    // console.log("Writing note:", { 
+    //   noteId, 
+    //   isLocked: noteData.locked,
+    //   isEncrypted: noteData.encrypted,
+    //   hasEncryption: noteData.encrypted && noteData.keyParams && noteData.iv
+    // });
 
     // Clear any pending save for this note
     if (this.pendingSaves.has(noteId)) {
@@ -45,9 +58,33 @@ class StorageService {
         try {
           const notesDir = await this.root.getDirectoryHandle('notes', { create: true });
           const fileHandle = await notesDir.getFileHandle(`${noteId}.json`, { create: true });
+          
+          // If note is locked and encrypted, ensure we maintain encryption state
+          let dataToSave = noteData;
+          if (noteData.locked && !noteData.encrypted) {
+            // Get the stored password
+            const passwordsDir = await this.root.getDirectoryHandle('passwords', { create: true });
+            try {
+              const passFileHandle = await passwordsDir.getFileHandle(`${noteId}.pass`);
+              const passFile = await passFileHandle.getFile();
+              const password = await passFile.text();
+              
+              // Re-encrypt with stored password
+              const { encryptNote } = await import('./encryption');
+              dataToSave = await encryptNote(noteData, password);
+              console.log('Re-encrypted note before saving:', { 
+                noteId,
+                hasEncryptedContent: !!dataToSave.content
+              });
+            } catch (error) {
+              console.error('Failed to re-encrypt note:', error);
+            }
+          }
+
           const writable = await fileHandle.createWritable();
-          await writable.write(JSON.stringify(noteData));
+          await writable.write(JSON.stringify(dataToSave));
           await writable.close();
+          
           this.pendingSaves.delete(noteId);
           resolve();
         } catch (error) {
@@ -65,7 +102,7 @@ class StorageService {
 
   async readNote(noteId) {
     await this.init();
-    console.log("reading the note")
+    console.log("Reading note:", noteId);
     
     try {
       if (this.pendingSaves.has(noteId)) {
@@ -87,6 +124,46 @@ class StorageService {
     }
   }
 
+  async writePassword(noteId, password) {
+    await this.init();
+    
+    try {
+      const passwordsDir = await this.root.getDirectoryHandle('passwords', { create: true });
+      const fileHandle = await passwordsDir.getFileHandle(`${noteId}.pass`, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(password);
+      await writable.close();
+    } catch (error) {
+      console.error(`Failed to write password for ${noteId}:`, error);
+      throw error;
+    }
+  }
+
+  async readPassword(noteId) {
+    await this.init();
+    
+    try {
+      const passwordsDir = await this.root.getDirectoryHandle('passwords', { create: true });
+      const fileHandle = await passwordsDir.getFileHandle(`${noteId}.pass`);
+      const file = await fileHandle.getFile();
+      return await file.text();
+    } catch (error) {
+      console.error(`Failed to read password for ${noteId}:`, error);
+      return null;
+    }
+  }
+
+  async deletePassword(noteId) {
+    await this.init();
+    
+    try {
+      const passwordsDir = await this.root.getDirectoryHandle('passwords', { create: true });
+      await passwordsDir.removeEntry(`${noteId}.pass`);
+    } catch (error) {
+      console.error(`Failed to delete password for ${noteId}:`, error);
+    }
+  }
+
   async deleteNote(noteId) {
     await this.init();
     
@@ -98,12 +175,12 @@ class StorageService {
 
       const notesDir = await this.root.getDirectoryHandle('notes', { create: true });
       await notesDir.removeEntry(`${noteId}.json`);
+      await this.deletePassword(noteId);
     } catch (error) {
       console.error(`Failed to delete note ${noteId}:`, error);
       throw error;
     }
   }
-
   async getAllNotes() {
     await this.init();
     console.log("retreiving all notes")
@@ -176,9 +253,15 @@ class StorageService {
       }
 
       const notesDir = await this.root.getDirectoryHandle('notes', { create: true });
+      // const passwordsDir = await this.root.getDirectoryHandle('passwords', { create: true });
+      
       for await (const [name, _] of notesDir.entries()) {
         await notesDir.removeEntry(name);
       }
+      
+      // for await (const [name, _] of passwordsDir.entries()) {
+      //   await passwordsDir.removeEntry(name);
+      // }
     } catch (error) {
       console.error('Failed to clear all data:', error);
       throw error;

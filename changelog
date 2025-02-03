@@ -1,8 +1,17 @@
 current version:
+v0.11.5:
+- Locked Note encryption
+    - Locked notes will now be encrypted using AES
+    - Content is editable but still encrypted on closing
+    - Passwords are saved in alternative storage and are associated by note ID
+    - Passwords are only removed frmo that ID when unlocked, so imported locked notes also works
+- System optimizations (WIP)
+    - Cleaning up the workspace to use less heirarchy and more utils
+
+previous versions:
 v0.11.4:
 - Export as PDF implementation
 
-previous versions:
 v0.11.3:
 - Option to change downloaded note file type
     - JSON, .txt, .md

@@ -11,6 +11,82 @@ const Section = ({ label, isActive, onClick }) => (
   </button>
 );
 
+const PasswordVerify = ({ 
+  password,
+  confirmPassword,
+  onPasswordChange,
+  onConfirmChange,
+  showPasswords,
+  onToggleShow,
+  error,
+  onKeyPress,
+}) => (
+  <div className="outer-small">
+    <div className="inner-small">
+      <label>Password</label>
+      <input
+        type={showPasswords ? "text" : "password"}
+        value={password}
+        onChange={onPasswordChange}
+        onKeyPress={onKeyPress}
+        placeholder="Enter password"
+        autoFocus
+      />
+    </div>
+    <div className="inner-small">
+      <label>Confirm Password</label>
+      <input
+        type={showPasswords ? "text" : "password"}
+        value={confirmPassword}
+        onChange={onConfirmChange}
+        onKeyPress={onKeyPress}
+        placeholder="Confirm password"
+      />
+    </div>
+    {error && (
+      <div style={{ color: '#ff4444', fontSize: '14px', marginTop: '8px' }}>
+        {error}
+      </div>
+    )}
+    <ItemPresets.TEXT_SWITCH
+      label="Show passwords"
+      value={showPasswords}
+      onChange={onToggleShow}
+    />
+  </div>
+);
+
+const Password = ({ 
+  value,
+  onChange,
+  showPassword,
+  onToggleShow,
+  error,
+  onKeyPress,
+  placeholder = "Enter password",
+  autoFocus = true
+}) => (
+  <div className="inner-small">
+    <input
+      type={showPassword ? "text" : "password"}
+      value={value}
+      onChange={onChange}
+      onKeyPress={onKeyPress}
+      placeholder={placeholder}
+      autoFocus={autoFocus}
+    />
+    {error && (
+      <div style={{ color: '#ff4444', fontSize: '14px', marginTop: '8px' }}>
+        {error}
+      </div>
+    )}
+    <ItemPresets.TEXT_SWITCH
+      label="Show password"
+      value={showPassword}
+      onChange={onToggleShow}
+    />
+  </div>
+);
 
 
 const ItemComponents = {
@@ -94,7 +170,9 @@ const ItemComponents = {
       </ItemComponents.CONTAINER>
     ),
   
-    SUBSECTION: ItemComponents.SUBSECTION
+    SUBSECTION: ItemComponents.SUBSECTION,
+    PASSWORD_VERIFY: PasswordVerify,
+    PASSWORD: Password,
   };
 
 const Modal = ({ isOpen, onClose, sections = [], title, size = 'default', className = ''}) => {

@@ -1,18 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import Settings from './components/Settings';
-import NavigationHistory from './utils/NavigationHistory';
+import { noteNavigation } from './utils/NoteNavigationUtil';
 import ModalDebug from './components/DebugModal';
 import LockNoteModal from './components/LockNoteModal';
 import UnlockNoteModal from './components/UnlockNoteModal';
 import GifModal from './components/GifModal';
 import DownloadUnlockModal from './components/DownloadUnlockModal.jsx';
 import PDFExportModal from './components/PDFExportModal';
+import MainContent from './components/MainContent.jsx';
+import PasswordModal from './components/PasswordModal.jsx';
 
+import { encryptNote, decryptNote, reEncryptNote, permanentlyUnlockNote } from './utils/encryption';
+import { passwordStorage } from './utils/PasswordStorageService';
 import { storageService } from './utils/StorageService.js';
-import { performDownload } from './utils/downloadUtils';
-import { getFirstLine } from './utils/contentUtils.js';
+import { noteContentService } from './utils/NoteContentService.js';
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -20,7 +23,6 @@ function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [isLockModalOpen, setIsLockModalOpen] = useState(false);
   const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
-  const [navigationHistory] = useState(() => new NavigationHistory());
   const [gifToAdd, setGifToAdd] = useState(null);
   const [notes, setNotes] = useState([]);
   const [isGifModalOpen, setIsGifModalOpen] = useState(false);
@@ -29,12 +31,24 @@ function App() {
   const [isDownloadable, setDownloadable] = useState(false);
   const [isPdfExportModalOpen, setIsPdfExportModalOpen] = useState(false);
   const [pdfExportNote, setPdfExportNote] = useState(null);
+  const [updateQueue, setUpdateQueue] = useState([]);
+  const processingRef = useRef(false);
   const [preferredFileType, setPreferredFileType] = useState(
     localStorage.getItem('preferredFileType') || 'json'
   );
 
   const selectedNote = notes.find(note => note.id === selectedId);
 
+  useEffect(() => {
+    const handleNoteUpdate = (event) => {
+      setNotes(prevNotes => prevNotes.map(note => 
+        note.id === event.detail.note.id ? event.detail.note : note
+      ));
+    };
+  
+    window.addEventListener('noteUpdate', handleNoteUpdate);
+    return () => window.removeEventListener('noteUpdate', handleNoteUpdate);
+  }, []);
 
   useEffect(() => {
     if (isDownloadable && downloadNoteId) {
@@ -47,7 +61,7 @@ function App() {
           setDownloadable(false);
           setDownloadNoteId(null);
         } else {
-          performDownload(noteToDownload, preferredFileType);
+          noteContentService.performDownload(noteToDownload, preferredFileType);
           setDownloadable(false);
           setDownloadNoteId(null);
         }
@@ -68,19 +82,6 @@ function App() {
     setIsDownloadUnlockModalOpen(true);
   };
 
-  const handleDownloadUnlock = (password) => {
-    const noteToDownload = notes.find(note => note.id === downloadNoteId);
-    
-    if (noteToDownload && password === noteToDownload.tempPass) {
-      setIsDownloadUnlockModalOpen(false);
-      setDownloadable(true);
-      return true;
-    }
-    setDownloadable(false);
-    setDownloadNoteId(null);
-    return false;
-  };
-
   const handleDebugModalClose = () => {
     const nextModal = {
       small: 'default',
@@ -90,25 +91,12 @@ function App() {
     setCurrentModal(nextModal);
   };
 
-  const handleLockNote = (noteId, password) => {
-    setNotes(prevNotes => 
-      prevNotes.map(note => 
-        note.id === noteId 
-          ? { ...note, locked: true, tempPass: password }
-          : note
-      )
-    );
-  };
-
-  const handleUnlockNote = (noteId) => {
-    setNotes(prevNotes =>
-      prevNotes.map(note =>
-        note.id === noteId
-          ? { ...note, locked: false, tempPass: null }
-          : note
-      )
-    );
-  };
+  useEffect(() => {
+    const unsubscribe = noteNavigation.subscribe((noteId) => {
+      setSelectedId(noteId);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const loadNotes = async () => {
@@ -180,13 +168,23 @@ function App() {
   };
 
   const handleNoteSelect = (noteId) => {
-    navigationHistory.push(selectedId);
-    setSelectedId(noteId);
+
+    const selectedNote = notes.find(note => note.id === noteId);
+  
+    if (selectedNote) {
+      console.log('Selected Note Contents:', {
+        id: selectedNote.id,
+        content: selectedNote.content,
+        locked: selectedNote.locked,
+        encrypted: selectedNote.encrypted
+      });
+    }
+    
+    noteNavigation.push(noteId);
   };
 
   const handleBack = () => {
-    const previousState = navigationHistory.back();
-    setSelectedId(previousState);
+    noteNavigation.back();
   };
 
   const handleGifModalOpen = () => {
@@ -197,26 +195,68 @@ function App() {
     setGifToAdd(gifUrl);
   };
 
-  const updateNote = (updates, updateModified = true) => {
-    setNotes(prevNotes => {
-      const updatedNotes = prevNotes.map(note => 
-        note.id === selectedId 
-          ? { 
-              ...note, 
-              ...updates,
-              dateModified: updateModified ? new Date().toISOString() : note.dateModified 
+  useEffect(() => {
+    const processUpdates = async () => {
+      if (processingRef.current || updateQueue.length === 0) return;
+      
+      processingRef.current = true;
+      const update = updateQueue[0];
+
+      try {
+        console.log('Processing update:', {
+          noteId: update.noteId,
+          isEncrypted: update.updates._isEncryptedUpdate
+        });
+
+        const updatedNotes = notes.map(note => {
+          if (note.id === update.noteId) {
+            if (update.updates._isEncryptedUpdate) {
+              // Handle encrypted updates
+              const { _isEncryptedUpdate, ...encryptedUpdates } = update.updates;
+              return encryptedUpdates;
             }
-          : note
-      );
+            // Handle normal updates
+            return {
+              ...note,
+              ...update.updates,
+              dateModified: update.updateModified ? new Date().toISOString() : note.dateModified
+            };
+          }
+          return note;
+        });
 
-      const updatedNote = updatedNotes.find(note => note.id === selectedId);
-      if (updatedNote) {
-        storageService.writeNote(selectedId, updatedNote)
-          .catch(error => console.error('Failed to save note:', error));
+        // Save only the modified note
+        const modifiedNote = updatedNotes.find(note => note.id === update.noteId);
+        if (modifiedNote) {
+          await storageService.writeNote(update.noteId, modifiedNote);
+        }
+
+        setNotes(sortNotes(updatedNotes));
+        setUpdateQueue(prevQueue => prevQueue.slice(1));
+      } catch (error) {
+        console.error('Failed to process update:', error);
+      } finally {
+        processingRef.current = false;
       }
+    };
 
-      return sortNotes(updatedNotes);
+    processUpdates();
+  }, [updateQueue, notes]);
+
+  const updateNote = async (updates, updateModified = true) => {
+    console.log('Queueing note update:', {
+      noteId: selectedId,
+      isEncrypted: updates._isEncryptedUpdate
     });
+
+    setUpdateQueue(prevQueue => [
+      ...prevQueue,
+      {
+        noteId: selectedId,
+        updates,
+        updateModified
+      }
+    ]);
   };
 
   return (
@@ -228,9 +268,9 @@ function App() {
         onTogglePin={togglePin}
         onDeleteNote={deleteNote}
         onBack={handleBack}
-        canGoBack={navigationHistory.canGoBack()}
+        canGoBack={noteNavigation.canGoBack()}
         onDebugClick={() => setCurrentModal('small')}
-        onLockNote={handleLockNote}
+        // onLockNote={handleLockNote}
         onLockModalOpen={handleLockModalOpen}
         onUnlockModalOpen={handleUnlockModalOpen}
         onGifModalOpen={handleGifModalOpen}
@@ -245,12 +285,10 @@ function App() {
           notes={notes}
           setNotes={setNotes}
           onDeleteNote={deleteNote}
-          onUnlockNote={handleUnlockNote}
+          // onUnlockNote={handleUnlockNote}
           onTogglePin={togglePin}
           onLockModalOpen={handleLockModalOpen}
           onUnlockModalOpen={handleUnlockModalOpen}
-          onUpdateNote={updateNote}
-          gifToAdd={gifToAdd}
           onGifAdded={setGifToAdd}
           onDownloadUnlockModalOpen={handleDownloadUnlockModalOpen}
           downloadNoteId={downloadNoteId}
@@ -261,6 +299,12 @@ function App() {
           setIsPdfExportModalOpen={setIsPdfExportModalOpen}
         />
       </div>
+      <MainContent 
+        note={notes.find(note => note.id === selectedId)}
+        onUpdateNote={updateNote}
+        gifToAdd={gifToAdd} 
+        onGifAdded={setGifToAdd}
+      />
       <Settings
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -270,38 +314,7 @@ function App() {
         currentModal={currentModal}
         onClose={handleDebugModalClose}
       />
-      <LockNoteModal
-        isOpen={isLockModalOpen}
-        onClose={() => setIsLockModalOpen(false)}
-        onConfirm={(password) => {
-          handleLockNote(selectedId, password);
-          setIsLockModalOpen(false);
-        }}
-      />
-      <UnlockNoteModal
-        isOpen={isUnlockModalOpen}
-        onClose={() => setIsUnlockModalOpen(false)}
-        onConfirm={(password) => {
-          if (password === selectedNote?.tempPass) {
-            handleUnlockNote(selectedId);
-            setIsUnlockModalOpen(false);
-          }
-        }}
-      />
-      <DownloadUnlockModal
-        isOpen={isDownloadUnlockModalOpen}
-        onClose={() => {
-          setIsDownloadUnlockModalOpen(false);
-          setDownloadable(false);
-          setDownloadNoteId(null);
-        }}
-        onConfirm={(password) => {
-          if (!handleDownloadUnlock(password)) {
-            setDownloadable(false);
-            setDownloadNoteId(null);
-          }
-        }}
-      />
+      <PasswordModal />
       <GifModal
         isOpen={isGifModalOpen}
         onClose={() => setIsGifModalOpen(false)}
@@ -310,12 +323,12 @@ function App() {
       <PDFExportModal 
         isOpen={isPdfExportModalOpen}
         onClose={() => setIsPdfExportModalOpen(false)}
-        noteTitle={pdfExportNote ? getFirstLine(pdfExportNote.content) : ''}
+        noteTitle={pdfExportNote ? noteContentService.getFirstLine(pdfExportNote.content) : ''}
         onExport={(pdfSettings) => {
-          performDownload(pdfExportNote, 'pdf', pdfSettings);
+          noteContentService.performDownload(pdfExportNote, 'pdf', pdfSettings);
           setPdfExportNote(null);
         }}
-      />
+    />
     </div>
   );
 }

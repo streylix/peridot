@@ -216,8 +216,8 @@ describe('App', () => {
       await user.click(lockButton)
       
       // Enter passwords
-      const passwordInput = await screen.findByPlaceholderText(/enter password/i)
-      const confirmInput = await screen.findByPlaceholderText(/confirm password/i)
+      const passwordInput = await screen.findByPlaceholderText(/Enter password/i)
+      const confirmInput = await screen.findByPlaceholderText(/Confirm password/i)
       
       await user.type(passwordInput, 'test123')
       await user.type(confirmInput, 'test123')
