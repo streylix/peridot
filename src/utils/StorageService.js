@@ -175,7 +175,6 @@ class StorageService {
 
       const notesDir = await this.root.getDirectoryHandle('notes', { create: true });
       await notesDir.removeEntry(`${noteId}.json`);
-      await this.deletePassword(noteId);
     } catch (error) {
       console.error(`Failed to delete note ${noteId}:`, error);
       throw error;
