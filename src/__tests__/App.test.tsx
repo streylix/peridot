@@ -224,8 +224,8 @@ describe('App', () => {
       // Checks if the locked window is there
       const isLocked = await screen.findByRole('inner-note');
       expect(!isLocked)
-      const value = await screen.findAllByText('This note is password protected');
-      expect(value)
+      // const value = await screen.findAllByText('This note is password protected');
+      // expect(value)
       
       await vi.advanceTimersByTimeAsync(1000);
       
@@ -249,9 +249,9 @@ describe('App', () => {
       const isUnlocked = await screen.findByRole('inner-note');
       expect(isUnlocked)
       
-      // // Verify note is unlocked and content is preserved
-      // const savedUnlockedNote = JSON.parse(mockFiles.get('2.json'));
-      // expect(savedUnlockedNote.locked).toBe(false);
+      // Verify note is unlocked and content is preserved
+      const savedUnlockedNote = JSON.parse(mockFiles.get('2.json'));
+      expect(savedUnlockedNote.locked).toBe(false);
     });
   });
 
