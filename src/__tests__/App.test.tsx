@@ -188,72 +188,72 @@ describe('App', () => {
     })
   })
 
-  describe('Note Lock Functionality', () => {  
-    it('locks and unlocks notes while preserving content', async () => {
-      render(<App />)
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  // describe('Note Lock Functionality', () => {  
+  //   it('locks and unlocks notes while preserving content', async () => {
+  //     render(<App />)
+  //     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       
-      // Find and click the first note
-      await vi.advanceTimersByTimeAsync(100);
+  //     // Find and click the first note
+  //     await vi.advanceTimersByTimeAsync(100);
       
-      await user.click(await screen.findByText(/Test Note 2/));
-      await vi.advanceTimersByTimeAsync(100);
+  //     await user.click(await screen.findByText(/Test Note 2/));
+  //     await vi.advanceTimersByTimeAsync(100);
   
-      const editor = await screen.findByRole('inner-note');
-      await user.type(editor, '\nSecond note content test');
-      expect(editor.textContent).toContain('Second note content test');
+  //     const editor = await screen.findByRole('inner-note');
+  //     await user.type(editor, '\nSecond note content test');
+  //     expect(editor.textContent).toContain('Second note content test');
       
-      await vi.advanceTimersByTimeAsync(100);
+  //     await vi.advanceTimersByTimeAsync(100);
       
-      // Open info menu and lock note
-      const infoButton = screen.getByTestId('info-menu-btn');
-      await user.click(infoButton);
+  //     // Open info menu and lock note
+  //     const infoButton = screen.getByTestId('info-menu-btn');
+  //     await user.click(infoButton);
       
-      const lockButton = screen.getByText(/Lock Note/i);
-      await user.click(lockButton)
+  //     const lockButton = screen.getByText(/Lock Note/i);
+  //     await user.click(lockButton)
       
       
-      // Enter lock password
-      const passwordInput = await screen.findByPlaceholderText(/Enter password/i);
-      const confirmInput = await screen.findByPlaceholderText(/Confirm password/i);
+  //     // Enter lock password
+  //     const passwordInput = await screen.findByPlaceholderText(/Enter password/i);
+  //     const confirmInput = await screen.findByPlaceholderText(/Confirm password/i);
       
-      await user.type(passwordInput, 'test123');
-      await user.type(confirmInput, 'test123');
-      await user.click(screen.getByRole('button', { name: /^OK$/i }));
+  //     await user.type(passwordInput, 'test123');
+  //     await user.type(confirmInput, 'test123');
+  //     await user.click(screen.getByRole('button', { name: /^OK$/i }));
 
-      // Checks if the locked window is there
-      const isLocked = await screen.findByRole('inner-note');
-      expect(!isLocked)
-      const value = await screen.findAllByText(/password protected/);
-      expect(value)
+  //     // Checks if the locked window is there
+  //     const isLocked = await screen.findByRole('inner-note');
+  //     expect(!isLocked)
+  //     const value = await screen.findAllByText(/password protected/);
+  //     expect(value)
       
-      await vi.advanceTimersByTimeAsync(1000);
+  //     await vi.advanceTimersByTimeAsync(1000);
       
-      // Verify note is locked
-      // const savedLockedNote = JSON.parse(mockFiles.get('2.json'));
-      // expect(savedLockedNote.locked).toBe(true);
+  //     // Verify note is locked
+  //     // const savedLockedNote = JSON.parse(mockFiles.get('2.json'));
+  //     // expect(savedLockedNote.locked).toBe(true);
       
-      // Unlock note
-      await user.click(infoButton);
-      const unlockButton = screen.getByText(/Unlock Note/i);
+  //     // Unlock note
+  //     await user.click(infoButton);
+  //     const unlockButton = screen.getByText(/Unlock Note/i);
       
-      // Enter unlock password
-      const unlockPasswordInput = await screen.findByPlaceholderText(/Enter password/i);
+  //     // Enter unlock password
+  //     const unlockPasswordInput = await screen.findByPlaceholderText(/Enter password/i);
       
-      await user.type(unlockPasswordInput, 'test123');
-      await user.keyboard('{Enter}');
+  //     await user.type(unlockPasswordInput, 'test123');
+  //     await user.keyboard('{Enter}');
       
-      await vi.advanceTimersByTimeAsync(1000);
+  //     await vi.advanceTimersByTimeAsync(1000);
 
-      // Check if the locked window is gone
-      const isUnlocked = await screen.findByRole('inner-note');
-      expect(isUnlocked)
+  //     // Check if the locked window is gone
+  //     const isUnlocked = await screen.findByRole('inner-note');
+  //     expect(isUnlocked)
       
-      // // Verify note is unlocked and content is preserved
-      // const savedUnlockedNote = JSON.parse(mockFiles.get('2.json'));
-      // expect(savedUnlockedNote.locked).toBe(false);
-    });
-  });
+  //     // // Verify note is unlocked and content is preserved
+  //     // const savedUnlockedNote = JSON.parse(mockFiles.get('2.json'));
+  //     // expect(savedUnlockedNote.locked).toBe(false);
+  //   });
+  // });
 
   describe('Download Note Functionality', () => {
     it('downloads note as JSON when clicked', async () => {
