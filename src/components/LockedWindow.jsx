@@ -12,7 +12,8 @@ function LockedWindow({ onUnlock }) {
       display: 'flex',
       height: 'calc(100% - 45px)',
       alignItems: 'center',
-      justifyContent: 'center'
+      justifyContent: 'center',
+      textAlign: 'center'
     },
     content: {
       display: 'flex',

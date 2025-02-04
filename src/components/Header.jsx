@@ -19,20 +19,8 @@ function Header({
   setDownloadNoteId,
   setPdfExportNote,
   setIsPdfExportModalOpen,
+  onToggleSidebar,
 }) {
-  const toggleSidebar = () => {
-    const sidebar = document.querySelector('.sidebar');
-    const mainContent = document.querySelector('.main-content');
-    const topBar = document.querySelector('.top-bar');
-    const header = document.querySelector('header');
-    
-    if (sidebar && mainContent && header && topBar) {
-      sidebar.classList.toggle('hidden');
-      mainContent.classList.toggle('full-width');
-      topBar.classList.toggle('full-width');
-      header.classList.toggle('full-width');
-    }
-  };
 
   const selectedNote = notes.find(note => note.id === selectedId);
   const noteTitle = useMemo(() => {
@@ -62,7 +50,7 @@ function Header({
             type="button"
             id="move-menu"
             className="menu-btn"
-            onClick={toggleSidebar}
+            onClick={onToggleSidebar}
             style={{cursor: 'pointer'}}
           >
             <PanelLeft />

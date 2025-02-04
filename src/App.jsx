@@ -228,6 +228,14 @@ function App() {
     await noteUpdateService.queueUpdate(selectedId, updates, updateModified);
   };
 
+  const sidebarRef = useRef();
+
+  const handleToggleSidebar = () => {
+    if (sidebarRef.current && sidebarRef.current.toggleSidebar) {
+      sidebarRef.current.toggleSidebar();
+    }
+  };
+
   return (
     <div className="app">
       <Header
@@ -242,6 +250,7 @@ function App() {
         onGifModalOpen={handleGifModalOpen}
         setPdfExportNote={setPdfExportNote}
         setIsPdfExportModalOpen={setIsPdfExportModalOpen}
+        onToggleSidebar={handleToggleSidebar}
       />
       <div className="main-container">
         <Sidebar
@@ -258,14 +267,15 @@ function App() {
           setDownloadNoteId={setDownloadNoteId}
           setPdfExportNote={setPdfExportNote}
           setIsPdfExportModalOpen={setIsPdfExportModalOpen}
+          ref={sidebarRef}
+        />
+        <MainContent 
+          note={selectedNote}
+          onUpdateNote={updateNote}
+          gifToAdd={gifToAdd} 
+          onGifAdded={setGifToAdd}
         />
       </div>
-      <MainContent 
-        note={notes.find(note => note.id === selectedId)}
-        onUpdateNote={updateNote}
-        gifToAdd={gifToAdd} 
-        onGifAdded={setGifToAdd}
-      />
       <Settings
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -285,7 +295,7 @@ function App() {
           noteContentService.performDownload(pdfExportNote, 'pdf', pdfSettings);
           setPdfExportNote(null);
         }}
-    />
+      />
     </div>
   );
 }

@@ -4,7 +4,7 @@
   ➕ Email and page for resetting password
   ➕ Profile specific notes for extra security and synchronization
 ➕ Server hosted
-➕ Better gif feature
+✅ Better gif feature
 ➕ Multiple note formats (i.e comparison, where two text areas are side by side, or a flipbook, where infinite vertical pages noted by page number are laid out)
 ➕ Improved note list (folders👷, date accesseda✅, pin/lock icons aren't text associated✅)
 ➕ Image optimization (fix text wrapping and allow images to be moved and resized)
@@ -29,4 +29,4 @@
 ➕ Notes (including locked) can be stored in localstorage or on the users computer
 ➕ Check boxes to notes
 ➕ Improve EditorWindow to be more concise
-➕ Convert storage system to OPFS
+✅ Convert storage system to OPFS

@@ -1,4 +1,9 @@
 current version:
+v0.12.1:
+- Sidebar Resizing
+    - Click and drag the side of the sidebar to resize it's window
+
+previous versions:
 v0.11.5:
 - Locked Note encryption
     - Locked notes will now be encrypted using AES
@@ -8,7 +13,6 @@ v0.11.5:
 - System optimizations (WIP)
     - Cleaning up the workspace to use less heirarchy and more utils
 
-previous versions:
 v0.11.4:
 - Export as PDF implementation
 
