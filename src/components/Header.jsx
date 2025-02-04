@@ -58,6 +58,7 @@ function Header({
           <button
             type="button"
             id="back-btn"
+            data-testid="back-btn"
             onClick={onBack}
             disabled={!canGoBack}
             onMouseEnter={e => canGoBack && (e.target.style.opacity = '1')} 

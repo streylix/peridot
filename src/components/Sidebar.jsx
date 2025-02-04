@@ -39,6 +39,7 @@ const NoteItem = React.memo(({
   return (
     <li
       className={`note-item ${isSelected ? 'active' : ''}`}
+      data-testid="note-item"
       onClick={handleClick}
       onContextMenu={handleContextMenu}
     >
@@ -153,7 +154,6 @@ const Sidebar = React.forwardRef(({
         if (newWidth < MIN_WIDTH / 2) {
           // Full collapse
           setIsCollapsed(true);
-          console.log(isCollapsed)
           setSidebarWidth(0);
           sidebar.classList.add('hidden');
           mainContent.classList.add('full-width');
@@ -189,7 +189,6 @@ const Sidebar = React.forwardRef(({
           header.classList.remove('full-width');
           
           // Update all elements with the constrained width
-          // console.log("setting to false")
           setIsCollapsed(false);
           setSidebarWidth(effectiveWidth);
           header.style.left = `${effectiveWidth}px`;

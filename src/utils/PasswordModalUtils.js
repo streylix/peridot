@@ -1,6 +1,7 @@
 import { encryptNote, decryptNote } from './encryption';
 import { noteContentService } from './NoteContentService';
 import { passwordStorage } from './PasswordStorageService';
+import { storageService } from './StorageService';
 
 class PasswordModalUtils {
   constructor() {
@@ -63,11 +64,20 @@ class PasswordModalUtils {
         return { success: false, error: 'Passwords do not match' };
       }
     }
-
     try {
       switch (this.modalType) {
         case 'lock':
           const encryptedNote = await encryptNote(this.noteData, password);
+          await passwordStorage.storePassword(this.noteData.id, password);
+
+
+          await storageService.writeNote(this.noteData.id, {
+            ...encryptedNote,
+            id: this.noteData.id,
+            locked: true,
+            encrypted: true
+          });
+
           window.dispatchEvent(new CustomEvent('noteUpdate', {
             detail: { 
               note: {
@@ -111,7 +121,6 @@ class PasswordModalUtils {
 
           const fileType = localStorage.getItem('preferredFileType') || 'json';
           if (fileType === 'pdf') {
-            console.log("pdf export when locked needs implementation");
             break;
           }
           

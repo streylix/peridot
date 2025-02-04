@@ -76,11 +76,16 @@ const InfoMenu = ({
   };
 
   const handleLockClick = () => {
-    if (selectedNote?.locked) {
-      passwordModalUtils.openUnlockModal(selectedNote.id, selectedNote);
-    } else {
-      passwordModalUtils.openLockModal(selectedNote.id, selectedNote);
+    try {
+      if (selectedNote?.locked) {
+        passwordModalUtils.openUnlockModal(selectedNote.id, selectedNote);
+      } else {
+        passwordModalUtils.openLockModal(selectedNote.id, selectedNote);
+      }
+    } catch (error) {
+      console.error('Error in handleLockClick:', error);
     }
+  
     setIsOpen(false);
     if (onClose) onClose();
   };
@@ -213,6 +218,7 @@ const InfoMenu = ({
           ref={buttonRef}
           type="button"
           id="info-menu-btn"
+          data-testid="info-menu-btn"
           onClick={toggleMenu}
           className="info-menu-toggle"
         >

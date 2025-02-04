@@ -10,7 +10,6 @@ function Settings({ isOpen, onClose, setNotes }) {
   const [fileType, setFileType] = useState(() => localStorage.getItem('preferredFileType') || 'json');
 
 const handleFileTypeChange = (newType) => {
-  console.log(`new type: ${newType}`)
   setFileType(newType);
   localStorage.setItem('preferredFileType', newType);
 };

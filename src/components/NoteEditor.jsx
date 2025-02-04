@@ -160,6 +160,7 @@ function NoteEditor({ note, onUpdateNote, gifToAdd, onGifAdded }) {
   return (
     <div className="editable">
       <div
+        role='inner-note'
         ref={contentRef}
         id="inner-note"
         contentEditable

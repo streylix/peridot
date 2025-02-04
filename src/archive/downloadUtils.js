@@ -2,7 +2,6 @@ import { getFirstLine } from './contentUtils';
 import html2pdf from 'html2pdf.js';
 
 const jsonToText = (content) => {
-  console.log(content);
 
   content = content.replace(/<\/div>/gi, '\n');
   content = content.replace(/<br\s*\/?>/gi, '');
@@ -67,12 +66,10 @@ const processContentForPdf = (htmlContent) => {
 
 const createPdfContent = (note, includeTitle = true) => {
   const container = document.createElement('div');
-  console.log(`container: ${container}`)
 
   if (includeTitle) {
     // Create header container
     const titleText = getFirstLine(note.content);
-    console.log(`titleText: ${titleText}`)
     const headerContainer = document.createElement('div');
     headerContainer.style.cssText = `
       margin-bottom: 12px;
@@ -136,7 +133,6 @@ const createPdfContent = (note, includeTitle = true) => {
 };
 
 export const performDownload = async (note, fileType = 'json', pdfSettings = null) => {
-  console.log("performing download")
   if (!note) return;
 
   const { mimeType, extension } = getFileTypeInfo(fileType);

@@ -30,7 +30,6 @@ function LockNoteModal({ isOpen, onClose, onConfirm }) {
     setError('');
     onClose();
     onConfirm(password)
-    console.log("finished submitting")
   };
 
   const handleKeyPress = (e) => {

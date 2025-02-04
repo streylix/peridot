@@ -40,12 +40,6 @@ class StorageService {
 
   async writeNote(noteId, noteData) {
     await this.init();
-    // console.log("Writing note:", { 
-    //   noteId, 
-    //   isLocked: noteData.locked,
-    //   isEncrypted: noteData.encrypted,
-    //   hasEncryption: noteData.encrypted && noteData.keyParams && noteData.iv
-    // });
 
     // Clear any pending save for this note
     if (this.pendingSaves.has(noteId)) {
@@ -72,10 +66,6 @@ class StorageService {
               // Re-encrypt with stored password
               const { encryptNote } = await import('./encryption');
               dataToSave = await encryptNote(noteData, password);
-              console.log('Re-encrypted note before saving:', { 
-                noteId,
-                hasEncryptedContent: !!dataToSave.content
-              });
             } catch (error) {
               console.error('Failed to re-encrypt note:', error);
             }
@@ -102,7 +92,6 @@ class StorageService {
 
   async readNote(noteId) {
     await this.init();
-    console.log("Reading note:", noteId);
     
     try {
       if (this.pendingSaves.has(noteId)) {
@@ -182,7 +171,6 @@ class StorageService {
   }
   async getAllNotes() {
     await this.init();
-    console.log("retreiving all notes")
     
     try {
       if (this.pendingSaves.size > 0) {
@@ -216,7 +204,6 @@ class StorageService {
 
   async writeThemePreference(theme) {
     await this.init();
-    console.log("writing theme preference")
     
     try {
       const fileHandle = await this.root.getFileHandle('theme.txt', { create: true });
@@ -231,7 +218,6 @@ class StorageService {
 
   async readThemePreference() {
     await this.init();
-    console.log("reading theme preference")
     
     try {
       const fileHandle = await this.root.getFileHandle('theme.txt');

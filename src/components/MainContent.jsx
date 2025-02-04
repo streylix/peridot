@@ -23,7 +23,6 @@ function MainContent({ note, onUpdateNote, gifToAdd, onGifAdded }) {
 
     try {
       const storedPassword = await passwordStorage.getPassword(note.id);
-      console.log(`Password in storage: ${storedPassword} | ${note.id}`)
       
       if (!storedPassword || password !== storedPassword) {
         return false;

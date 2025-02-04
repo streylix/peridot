@@ -58,10 +58,12 @@ class NoteUpdateService {
       // Handle encryption if needed
       if (update.encryptionContext?.shouldEncrypt) {
         try {
-          updatedNote = await encryptNote(
-            updatedNote, 
-            update.encryptionContext.password
-          );
+          if (typeof updatedNote.content === 'string'){
+            updatedNote = await encryptNote(
+              updatedNote, 
+              update.encryptionContext.password
+            );
+          }
         } catch (error) {
           // If encryption fails, continue with unencrypted update
           console.warn('Encryption failed, continuing with unencrypted update');

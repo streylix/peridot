@@ -25,12 +25,6 @@ export async function generateKey(password, salt, iterations = 100000) {
 }
 
 export async function encryptNote(note, password) {
-  console.log('Starting note encryption:', { 
-    noteId: note.id, 
-    contentType: typeof note.content,
-    contentLength: note.content?.length,
-  });
-  
   // Store the password securely
   await passwordStorage.storePassword(note.id, password);
 
@@ -48,22 +42,10 @@ export async function encryptNote(note, password) {
   tempDiv.innerHTML = note.content;
   const firstDiv = tempDiv.querySelector('div');
   const visibleTitle = (firstDiv?.textContent || '').trim() || 'Untitled';
-  
-  console.log('Title preparation:', {
-    originalContent: note.content.substring(0, 50),
-    firstDivContent: firstDiv?.innerHTML || 'No first div found',
-    visibleTitle
-  });
 
   // Encrypt the content
   const encodedContent = encoder.encode(note.content);
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
-
-  console.log('Content preparation:', {
-    encodedLength: encodedContent.length,
-    ivLength: iv.length,
-    saltLength: salt.length,
-  });
 
   const encryptedContent = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv: iv },
@@ -86,34 +68,14 @@ export async function encryptNote(note, password) {
     encrypted: true
   };
 
-  console.log('Encryption complete:', {
-    hasEncryptedContent: !!encryptedArray.length,
-    hasVisibleTitle: !!visibleTitle,
-    hasKeyParams: !!encryptedNote.keyParams,
-    hasIV: !!encryptedNote.iv,
-    encryptedNote
-  });
-
   return encryptedNote;
 }
 
 export async function decryptNote(note, password, permanent = false) {
-  console.log('Starting note decryption:', { 
-    noteId: note.id, 
-    hasEncryptedContent: !!note.content,
-    hasKeyParams: !!note.keyParams,
-    hasIV: !!note.iv,
-    isPermanent: permanent,
-    note 
-  });
 
   try {
     // Verify the password
     const storedPassword = await passwordStorage.getPassword(note.id);
-    console.log('Password verification:', {
-      hasStoredPassword: !!storedPassword,
-      passwordsMatch: password === storedPassword
-    });
 
     if (!storedPassword || password !== storedPassword) {
       return {
@@ -154,15 +116,10 @@ export async function decryptNote(note, password, permanent = false) {
     // Convert the decrypted buffer to text
     const decoder = new TextDecoder();
     const decryptedContent = decoder.decode(decryptedBuffer);
-    
-    console.log('Decryption successful:', {
-      hasDecryptedContent: !!decryptedContent
-    });
 
     // If permanent unlock is requested, remove the stored password
     if (permanent) {
       await passwordStorage.removePassword(note.id);
-      console.log('Removed stored password for permanent unlock');
     }
     
     // Create decrypted note object
@@ -200,11 +157,9 @@ export async function reEncryptNote(note) {
 }
 
 export async function permanentlyUnlockNote(noteId, password) {
-  console.log('Attempting permanent unlock:', { noteId });
   try {
     const storedPassword = await passwordStorage.getPassword(noteId);
     if (!storedPassword || password !== storedPassword) {
-      console.log('Password verification failed for permanent unlock');
       return {
         success: false,
         error: "Incorrect password"
@@ -212,7 +167,6 @@ export async function permanentlyUnlockNote(noteId, password) {
     }
 
     await passwordStorage.removePassword(noteId);
-    console.log('Permanent unlock successful');
     
     return {
       success: true

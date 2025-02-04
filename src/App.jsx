@@ -152,14 +152,14 @@ function App() {
 
     const selectedNote = notes.find(note => note.id === noteId);
   
-    if (selectedNote) {
-      console.log('Selected Note Contents:', {
-        id: selectedNote.id,
-        content: selectedNote.content,
-        locked: selectedNote.locked,
-        encrypted: selectedNote.encrypted
-      });
-    }
+    // if (selectedNote) {
+    //     console.log('Selected Note Contents:', {
+    //     id: selectedNote.id,
+    //     content: selectedNote.content,
+    //     locked: selectedNote.locked,
+    //     encrypted: selectedNote.encrypted
+    //   });
+    // }
     
     noteNavigation.push(noteId);
   };
@@ -184,10 +184,6 @@ function App() {
       const update = updateQueue[0];
 
       try {
-        console.log('Processing update:', {
-          noteId: update.noteId,
-          isEncrypted: update.updates._isEncryptedUpdate
-        });
 
         const updatedNotes = notes.map(note => {
           if (note.id === update.noteId) {

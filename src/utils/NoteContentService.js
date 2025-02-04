@@ -76,7 +76,6 @@ class NoteContentService {
 
   createPdfContent(note, includeTitle = true) {
     const jsonToText = (content) => {
-        console.log(content);
       
         content = content.replace(/<\/div>/gi, '\n');
         content = content.replace(/<br\s*\/?>/gi, '');
