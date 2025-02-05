@@ -10,6 +10,13 @@
   padding: 1.5em;
   will-change: filter;
   transition: filter 300ms;
+  background: -webkit-linear-gradient(0deg, #0aa34f, greenyellow, yellow);
+  background-clip: text;
+  color: transparent;
+  /* -webkit-background-clip: text; */
+  -webkit-text-fill-color: transparent;
+  padding: 0px 8px 8px 8px;
+  user-select: none;
 }
 .logo:hover {
   filter: drop-shadow(0 0 2em #646cffaa);

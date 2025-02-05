@@ -63,13 +63,17 @@ header.full-width{
 .logo {
   display: flex;
   align-items: center;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
 }
 
 .logo h1 {
   font-weight: bold;
   text-align: left;
-  flex-grow: 1;
+  background: linear-gradient(-50deg, green, #0aa34f, rgb(0, 255, 81));
+  background-clip: text;
+  color: transparent;
+  user-select: none;
+  padding-left: 4px;
 }
 
 /* Move Menu */
@@ -312,7 +316,7 @@ header.full-width{
 
 .note-item.active {
   background-color: #dcfaed;
-  border-left: 3px solid #19d282;
+  border-left: 3px solid #0aa34f;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 

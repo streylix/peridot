@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo, useRef, useEffect, useImperative
 import { SquarePen, Pin, Lock } from 'lucide-react';
 import InfoMenu from './InfoMenu';
 import { noteContentService } from '../utils/NoteContentService';
-import logo from '../assets/logo.png';
+import logo2 from '../assets/logo2.png';
 import { storageService } from '../utils/StorageService';
 import { noteUpdateService } from '../utils/NoteUpdateService';
 
@@ -67,18 +67,32 @@ const NoteList = React.memo(({
 }) => {
   // Memoize filtered and sorted notes
   const filteredAndSortedNotes = useMemo(() => {
+    console.log("filteredAndSortedNotes in NoteList");
     return notes
       .filter(note => {
         if (!searchTerm) return true;
-        const content = note.content.toLowerCase();
+        
         const search = searchTerm.toLowerCase();
-        return content.includes(search);
+        
+        // For locked notes, only search the visible title
+        if (note.locked) {
+          const visibleTitle = note.visibleTitle || noteContentService.getFirstLine(note.content);
+          return visibleTitle.toLowerCase().includes(search);
+        }
+        
+        // For unlocked notes, search title and content
+        const title = noteContentService.getFirstLine(note.content);
+        const content = noteContentService.getPreviewContent(note.content);
+        console.log(title)
+        console.log(content)
+        
+        return title.toLowerCase().includes(search) || 
+               content.toLowerCase().includes(search);
       })
       .sort((a, b) => {
-        // First sort by pinned status
+        // Sort by pinned status then date
         if (a.pinned && !b.pinned) return -1;
         if (!a.pinned && b.pinned) return 1;
-        // Then by modification date
         return new Date(b.dateModified) - new Date(a.dateModified);
       });
   }, [notes, searchTerm]);
@@ -165,19 +179,6 @@ const Sidebar = React.forwardRef(({
           topBar.style.width = '100%';
           mainContent.style.width = '100%';
         } else {
-          // If we were previously collapsed, add opening transitions
-          // This lowkey sucks but it is better than not having it imo
-          // if (newWidth < MIN_WIDTH) {
-          //   mainContent.classList.add('opening');
-          //   topBar.classList.add('opening');
-          //   header.classList.add('opening');
-            
-          //   setTimeout(() => {
-          //     mainContent.classList.remove('opening');
-          //     topBar.classList.remove('opening');
-          //     header.classList.remove('opening');
-          //   }, 300);
-          // }
           
           // Apply MIN_WIDTH constraint
           const effectiveWidth = Math.max(MIN_WIDTH, newWidth);
@@ -332,12 +333,29 @@ const Sidebar = React.forwardRef(({
   // Filter notes based on search term
   const filteredNotes = useMemo(() => {
     return notes.filter(note => {
-      if (!searchTerm) return true;
-      const title = note.locked && note.visibleTitle 
-        ? note.visibleTitle 
-        : noteContentService.getFirstLine(note.content);
-      return title.toLowerCase().includes(searchTerm.toLowerCase());
-    });
+        if (!searchTerm) return true;
+        
+        const search = searchTerm.toLowerCase();
+        
+        // For locked notes, only search the visible title
+        if (note.locked) {
+          const visibleTitle = note.visibleTitle || noteContentService.getFirstLine(note.content);
+          return visibleTitle.toLowerCase().includes(search);
+        }
+        
+        // For unlocked notes, search title and content
+        const title = noteContentService.getFirstLine(note.content);
+        const content = noteContentService.getPreviewContent(note.content);
+        
+        return title.toLowerCase().includes(search) || 
+               content.toLowerCase().includes(search);
+      })
+      .sort((a, b) => {
+        // Sort by pinned status then date
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        return new Date(b.dateModified) - new Date(a.dateModified);
+      });
   }, [notes, searchTerm]);
 
   return (
@@ -352,7 +370,7 @@ const Sidebar = React.forwardRef(({
     >
       <div className="sidebar-header">
         <div className="logo">
-          <img src={logo} alt="biz logo" width="50" height="50" />
+          <img src={logo2} alt="biz logo" width="50" height="50" />
           <h1>peridot.</h1>
         </div>
         <div className="search">

@@ -1,4 +1,10 @@
 current version:
+v0.12.3:
+- Visual improvements
+    - New logo and color scheme
+- Search note functionality hotfix
+
+previous versions:
 v0.12.2:
 - Internal Import/Export/Downloading modifications
     - Better handling of imported notes
@@ -10,7 +16,6 @@ v0.12.2:
 - Fixed title text overflow for note items
 - Style improvements(?)
 
-previous versions:
 v0.12.1:
 - Sidebar Resizing
     - Click and drag the side of the sidebar to resize it's window

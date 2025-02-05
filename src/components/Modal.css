@@ -92,8 +92,9 @@
     }
     
     .section-button.active {
+      border: 1px solid #0aa34f !important;
       /* background-color: #1c7a43; */
-      background-color: #0aa34f !important;
+      /* background-color: #0aa34f !important; */
       color: white;
     }
     
@@ -202,7 +203,8 @@
     
     input:checked + .slider {
       /* background-color: #1c7a43; */
-      background-color: #0aa34f;
+      /* background-color: #0aa34f; */
+      background: linear-gradient(-90deg, rgba(0, 128, 0, 0.5), hsla(147, 88%, 34%, 0.5), rgba(0, 255, 81, 0.7)) !important;
     }
     
     input:checked + .slider:before {
@@ -437,16 +439,17 @@
   }
 
   .dark-mode .section-button:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: #208f4e;
   }
 
   .section-button.active {
-    background-color: #0aa34f !important;
-    color: white;
+    /* background-color: #0aa34f !important; */
+    background: linear-gradient(90deg, rgba(0, 128, 0, 0.30), hsla(147, 88%, 34%, 0.30), rgba(0, 255, 81, 0.30));
+    color: rgb(68, 68, 68);
   }
 
   .dark-mode .section-button.active {
-    background-color: #1c7a43;
+    color: #ffffff;
   }
 
   .modal-body {
@@ -590,7 +593,8 @@
   }
 
   .dark-mode button.primary {
-    background-color: #1c7a43;
+    /* background-color: #1c7a43; */
+    background: linear-gradient(90deg, rgba(0, 128, 0, 0.30), hsla(147, 88%, 34%, 0.30), rgba(0, 255, 81, 0.30));
   }
 
   button.primary:hover {

@@ -47,6 +47,8 @@
     .editable div {
       height: calc(100% - 12vh);
       overflow-y: auto;
+      color: #0aa34f6a
+      -webkit-linear-gradient(45deg, #0aa34f6a, rgba(172, 255, 47, 0.451), rgba(255, 255, 0, 0.398));
     }
   
     /* Animation classes */

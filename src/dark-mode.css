@@ -27,7 +27,8 @@ body.dark-mode {
   }
   
   .dark-mode .note-item.active {
-    background-color: #062c06;
+    background: linear-gradient(-50deg, rgba(0, 128, 0, 0.150), hsla(147, 88%, 34%, 0.150), rgba(0, 255, 81, 0.150));
+    /* background: linear-gradient(90deg, hsla(147, 88%, 34%, 0.150), rgba(0, 128, 0, 0.150), rgba(128, 255, 0, 0.150)); */
     border-bottom: 1px solid #083d08;
     color: #ffffff;
   }
