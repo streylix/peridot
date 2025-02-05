@@ -1,16 +1,65 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import NoteEditor from './NoteEditor';
 import EmptyState from './EmptyState';
 import LockedWindow from './LockedWindow';
+import { noteImportExportService } from '../utils/NoteImportExportService';
 import { passwordStorage } from '../utils/PasswordStorageService';
 import { decryptNote, encryptNote } from '../utils/encryption';
 import { noteUpdateService } from '../utils/NoteUpdateService';
 
-function MainContent({ note, onUpdateNote, gifToAdd, onGifAdded }) {
+function MainContent({ 
+  note, 
+  onUpdateNote, 
+  gifToAdd, 
+  onGifAdded, 
+  setNotes,
+  onNoteSelect
+}) {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [decryptedNote, setDecryptedNote] = useState(null);
   const [currentPassword, setCurrentPassword] = useState(null);
+  const [isDragOver, setIsDragOver] = useState(false);
 
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const files = Array.from(e.dataTransfer.files)
+      .filter(file => {
+        const ext = file.name.split('.').pop().toLowerCase();
+        return ['json', 'md', 'txt'].includes(ext);
+      });
+
+    if (files.length > 0) {
+      try {
+        const results = await noteImportExportService.importNotes(files, {
+          openLastImported: true,
+          setSelectedId: onNoteSelect,
+          setNotes,
+          onError: (error, filename) => {
+            console.error(`Error importing ${filename}:`, error);
+          }
+        });
+      } catch (error) {
+        console.error('Import failed:', error);
+      }
+    }
+  };
+
+  // Rest of the existing MainContent component remains the same
   useEffect(() => {
     // Reset unlock state when note changes
     setIsUnlocked(false);
@@ -58,8 +107,13 @@ function MainContent({ note, onUpdateNote, gifToAdd, onGifAdded }) {
 
   if (!note) {
     return (
-      <div className="main-content">
-        <div className="empty-state">
+      <div 
+        className={`main-content ${isDragOver ? 'drag-over' : ''}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <div className={`empty-state`}>
           <EmptyState />
         </div>
       </div>
@@ -67,12 +121,17 @@ function MainContent({ note, onUpdateNote, gifToAdd, onGifAdded }) {
   }
 
   return (
-    <div className="main-content">
+    <div
+      className={`main-content ${isDragOver ? 'drag-over' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <div className="title-spacer" style={{ height: '40px' }} />
       {note?.locked && !isUnlocked ? (
-        <LockedWindow 
+        <LockedWindow
           onUnlock={handleUnlock}
-          note={note} 
+          note={note}
         />
       ) : (
         <NoteEditor

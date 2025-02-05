@@ -1029,3 +1029,58 @@ input[type="range"]:disabled::-moz-range-thumb {
   cursor: ew-resize;
   z-index: 1000;
 }
+
+
+/* Drag and Drop Styles */
+
+.sidebar.drag-over::after {
+  content: '';
+  position: absolute;
+  width: calc(100% - 1vh);
+  height: 100%;
+  background-color: rgba(10, 163, 79, 0.5);
+  border: 3px dashed #0aa34f;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  animation: fadeInOverlay 0.1s ease-in-out forwards;
+}
+
+.dark-mode .sidebar.drag-over::after {
+  border-color: #1c7a43;
+  background-color: rgba(28, 122, 67, 0.5);
+}
+
+@keyframes fadeInOverlay {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+  }
+
+.main-content.drag-over::after {
+  content: '';
+  position: absolute;
+  top: 45px;
+  left: 0;
+  width: calc(100% - 1vh);
+  height: calc(100vh - 7vh);
+  background-color: rgba(10, 163, 79, 0.5);
+  border: 3px dashed #0aa34f;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  animation: fadeInOverlay 0.3s ease-in-out forwards;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.main-content:not(.drag-over)::after {
+  opacity: 0;
+}
+
+.dark-mode .main-content.drag-over::after {
+  border-color: #1c7a43;
+  background-color: rgba(28, 122, 67, 0.5);
+}

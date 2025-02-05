@@ -5,6 +5,7 @@ import { noteContentService } from '../utils/NoteContentService';
 import logo2 from '../assets/logo2.png';
 import { storageService } from '../utils/StorageService';
 import { noteUpdateService } from '../utils/NoteUpdateService';
+import { noteImportExportService } from '../utils/NoteImportExportService';
 
 // Memoized individual note item component
 const NoteItem = React.memo(({
@@ -146,9 +147,49 @@ const Sidebar = React.forwardRef(({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const sidebarRef = useRef(null);
   const resizeHandleRef = useRef(null);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const MIN_WIDTH = 280;
   const MAX_WIDTH_PERCENTAGE = 75;
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const files = Array.from(e.dataTransfer.files)
+      .filter(file => {
+        const ext = file.name.split('.').pop().toLowerCase();
+        return ['json', 'md', 'txt'].includes(ext);
+      });
+
+    if (files.length > 0) {
+      try {
+        await noteImportExportService.importNotes(files, {
+          openLastImported: true,
+          setSelectedId: onNoteSelect,
+          setNotes,
+          onError: (error, filename) => {
+            console.error(`Error importing ${filename}:`, error);
+          }
+        });
+      } catch (error) {
+        console.error('Import failed:', error);
+      }
+    }
+  };
 
   useEffect(() => {
     const handleMouseMove = (e) => {
@@ -361,7 +402,10 @@ const Sidebar = React.forwardRef(({
   return (
     <div 
       ref={sidebarRef}
-      className={`sidebar`} // ${isCollapsed ? 'hidden' : ''}
+      className={`sidebar ${isDragOver ? 'drag-over' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       id="sidebar"
       style={{ 
         width: isCollapsed ? 280 : sidebarWidth,

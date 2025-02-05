@@ -3,15 +3,15 @@ current version: unreleased
 version#: 0.12.1
 
 v0.11:
-➕ Better localstorage (OPFS)
-➕ "Save as" functionality
-➕ Locked note encryption
+✅ Better localstorage (OPFS)
+✅ "Save as" functionality
+✅ Locked note encryption
 
 v0.12:
 ➕ Improved Sidebar
     ➕ Filtering notes
     ➕ Folders
-    ➕ Resizable
+    ✅ Resizable
     ➕ Accepts click+drag txt/json/pdf/etc files as "import"
 
 v0.13:

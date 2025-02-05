@@ -218,6 +218,8 @@ function App() {
           onUpdateNote={updateNote}
           gifToAdd={gifToAdd} 
           onGifAdded={setGifToAdd}
+          setNotes={setNotes}
+          onNoteSelect={handleNoteSelect}
         />
       </div>
       <Settings

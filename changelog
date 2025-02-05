@@ -1,10 +1,13 @@
 current version:
+v0.12.4:
+- Drag and drop files
+
+previous versions:
 v0.12.3:
 - Visual improvements
     - New logo and color scheme
 - Search note functionality hotfix
 
-previous versions:
 v0.12.2:
 - Internal Import/Export/Downloading modifications
     - Better handling of imported notes
