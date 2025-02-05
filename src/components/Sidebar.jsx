@@ -5,6 +5,9 @@ import { noteContentService } from '../utils/NoteContentService';
 import logo2 from '../assets/logo2.png';
 import { storageService } from '../utils/StorageService';
 import { noteUpdateService } from '../utils/NoteUpdateService';
+import { noteSortingService } from '../utils/NoteSortingService';
+import SortingButton from './SortingButton';
+
 const NoteItem = React.memo(({
   note, 
   isSelected, 
@@ -42,7 +45,7 @@ const NoteItem = React.memo(({
       onContextMenu={handleContextMenu}
     >
       <div className="note-header">
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div className="item-text" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <span className="note-title">{title}</span>
           <div className="note-preview">{preview}</div>
         </div>
@@ -61,7 +64,8 @@ const NoteList = React.memo(({
   searchTerm, 
   selectedId, 
   onNoteSelect, 
-  onContextMenu 
+  onContextMenu,
+  setNotes,
 }) => {
   // Memoize filtered and sorted notes
   const filteredAndSortedNotes = useMemo(() => {
@@ -128,7 +132,7 @@ const CustomTooltip = ({ children, content }) => (
   </div>
 );
 
-const ActionButtons = ({ onCreateNote }) => (
+const ActionButtons = ({ onCreateNote, onSortChange }) => (
   <div className="flex justify-center items-center gap-4 w-full">
     <CustomTooltip content="Create new note">
       <button 
@@ -151,13 +155,7 @@ const ActionButtons = ({ onCreateNote }) => (
     </CustomTooltip>
 
     <CustomTooltip content="Change sort order">
-      <button 
-        type="button"
-        className="new-note-btn"
-        onClick={() => {}}
-      >
-        <SortDesc />
-      </button>
+      <SortingButton onSortChange={onSortChange} />
     </CustomTooltip>
   </div>
 );
@@ -184,6 +182,7 @@ const Sidebar = React.forwardRef(({
   const sidebarRef = useRef(null);
   const resizeHandleRef = useRef(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [sortMethod, setSortMethod] = useState(noteSortingService.getSortMethod());
 
   const MIN_WIDTH = 280;
   const MAX_WIDTH_PERCENTAGE = 75;
@@ -386,52 +385,48 @@ const Sidebar = React.forwardRef(({
   };
 
   const sortNotes = useCallback((notesToSort) => {
-    return notesToSort.sort((a, b) => {
-      if (a.pinned && !b.pinned) return -1;
-      if (!a.pinned && b.pinned) return 1;
-      return new Date(b.dateModified) - new Date(a.dateModified);
-    });
+    return noteSortingService.sortNotes(notesToSort);
   }, []);
 
   useEffect(() => {
+    console.log("useEffect in sidebar for subscribing to sorts")
     const unsubscribe = noteUpdateService.subscribe((updatedNote) => {
       setNotes(prevNotes => {
         const updatedNotes = prevNotes.map(note =>
           note.id === updatedNote.id ? updatedNote : note
         );
-        return sortNotes(updatedNotes);
+        return noteSortingService.sortNotes(updatedNotes);
       });
     });
   
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    console.log("useEffect in sidebar for getting sort method")
+    const method = noteSortingService.getSortMethod();
+    setNotes(prevNotes => [...noteSortingService.sortNotes(prevNotes, method)]);
+  }, [noteSortingService.getSortMethod()]);
+
   const filteredNotes = useMemo(() => {
-    return notes.filter(note => {
+    return noteSortingService.sortNotes(
+      notes.filter(note => {
         if (!searchTerm) return true;
-        
         const search = searchTerm.toLowerCase();
-        
-        // For locked notes, only search the visible title
         if (note.locked) {
           const visibleTitle = note.visibleTitle || noteContentService.getFirstLine(note.content);
           return visibleTitle.toLowerCase().includes(search);
         }
-        
-        // For unlocked notes, search title and content
         const title = noteContentService.getFirstLine(note.content);
         const content = noteContentService.getPreviewContent(note.content);
-        
-        return title.toLowerCase().includes(search) || 
-               content.toLowerCase().includes(search);
+        return title.toLowerCase().includes(search) || content.toLowerCase().includes(search);
       })
-      .sort((a, b) => {
-        // Sort by pinned status then date
-        if (a.pinned && !b.pinned) return -1;
-        if (!a.pinned && b.pinned) return 1;
-        return new Date(b.dateModified) - new Date(a.dateModified);
-      });
-  }, [notes, searchTerm]);
+    );
+  }, [notes, searchTerm, sortMethod]);
+
+  const handleSortChange = useCallback((value) => {
+    setNotes(prevNotes => noteSortingService.sortNotes(notes, value));
+  }, [notes]);
 
   return (
     <div 
@@ -453,7 +448,7 @@ const Sidebar = React.forwardRef(({
         </div>
         <div className="search">
         <div className='sidebar-buttons'>
-          <ActionButtons onCreateNote={createNewNote} />
+          <ActionButtons onCreateNote={createNewNote} onSortChange={handleSortChange} />
         </div>
           <input
             type="search"

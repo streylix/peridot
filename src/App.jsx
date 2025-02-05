@@ -15,6 +15,7 @@ import { noteContentService } from './utils/NoteContentService.js';
 import { noteUpdateService } from './utils/NoteUpdateService.js';
 import { passwordModalUtils } from './utils/PasswordModalUtils.js';
 import { noteImportExportService } from './utils/NoteImportExportService.js';
+import { noteSortingService } from './utils/NoteSortingService.js';
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -75,7 +76,7 @@ function App() {
     const loadNotes = async () => {
       try {
         const savedNotes = await storageService.getAllNotes();
-        setNotes(sortNotes(savedNotes));
+        setNotes(noteSortingService.sortNotes(savedNotes));
       } catch (error) {
         console.error('Failed to load notes:', error);
       }

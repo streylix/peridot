@@ -4,11 +4,17 @@ import { storageService } from '../utils/StorageService';
 import { Sun, Moon, Bug, Save, Trash2, Upload, Monitor } from 'lucide-react';
 import { passwordStorage } from '../utils/PasswordStorageService';
 import { noteImportExportService } from '../utils/NoteImportExportService';
+import { noteSortingService } from '../utils/NoteSortingService';
 
 function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
   const fileInputRef = useRef(null);
   const [theme, setTheme] = useState('system');
   const [fileType, setFileType] = useState(() => localStorage.getItem('preferredFileType') || 'json');
+
+  const [prioritizePinned, setPrioritizePinned] = useState(() => 
+  localStorage.getItem('prioritizePinned') === 'true'
+  );
+  
   const [jsonAsEncrypted, setJsonAsEncrypted] = useState(() => 
     localStorage.getItem('jsonAsEncrypted') === 'true'
   );
@@ -145,6 +151,23 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
                 { value: 'system', label: 'System' }
               ]}
               onChange={applyTheme}
+            />
+          </ItemPresets.SUBSECTION>
+        },
+        {
+          content: 
+          <ItemPresets.SUBSECTION title="Filter & Sort">
+            <ItemPresets.TEXT_SWITCH
+              label="Prioritize pinned notes"
+              subtext="Keep pinned notes at top regardless of sort order (Always active when sorting by Date Modified)"
+              value={prioritizePinned}
+              onChange={(e) => {
+                const newValue = e.target.checked;
+                setPrioritizePinned(newValue);
+                noteSortingService.setPrioritizePinned(newValue);
+                const currentMethod = noteSortingService.getSortMethod();
+                setNotes(prevNotes => [...noteSortingService.sortNotes(prevNotes, currentMethod)]);
+              }}
             />
           </ItemPresets.SUBSECTION>
         },

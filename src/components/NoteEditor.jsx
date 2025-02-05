@@ -16,32 +16,6 @@ function NoteEditor({ note, onUpdateNote, gifToAdd, onGifAdded }) {
     [onUpdateNote]
   );
 
-  // Handle tab key press WILL FIX LATER
-  const handleKeyDown = useCallback((e) => {
-    console.log("hellO");
-  //   if (e.key === 'Tab') {
-  //     e.preventDefault();
-      
-  //     const selection = window.getSelection();
-  //     const range = selection.getRangeAt(0);
-      
-  //     // Create and insert tab space (4 spaces)
-  //     const tabNode = document.createTextNode('\u00a0\u00a0\u00a0\u00a0');
-  //     range.insertNode(tabNode);
-      
-  //     // Move cursor after the tab
-  //     range.setStartAfter(tabNode);
-  //     range.setEndAfter(tabNode);
-  //     selection.removeAllRanges();
-  //     selection.addRange(range);
-      
-  //     // Trigger content update
-  //     if (contentRef.current) {
-  //       debouncedUpdate(contentRef.current.innerHTML);
-  //     }
-  //   }
-  }, [debouncedUpdate]);
-
   useEffect(() => {
     if (gifToAdd && note && contentRef.current) {
       const gifEmbed = `<div><img src="${gifToAdd}" alt="GIF" style="max-width: 100%; height: auto;"></div>`;
@@ -165,7 +139,6 @@ function NoteEditor({ note, onUpdateNote, gifToAdd, onGifAdded }) {
         contentEditable
         onInput={handleContentInput}
         onSelect={handleSelect}
-        onKeyDown={handleKeyDown}
         suppressContentEditableWarning
       />
     </div>
