@@ -1,9 +1,20 @@
 current version:
+v0.12.2:
+- Internal Import/Export/Downloading modifications
+    - Better handling of imported notes
+    - Can now import .md and .txt file types (still a bit buggy)
+    - "Download JSON as encrypted" option for saving individual notes as JSON if they're locked
+    - Fixed downloading locked notes to pdf
+    - Cleaned up redundant internal functions
+- (quality of life) Locked window automatically detects for input
+- Fixed title text overflow for note items
+- Style improvements(?)
+
+previous versions:
 v0.12.1:
 - Sidebar Resizing
     - Click and drag the side of the sidebar to resize it's window
 
-previous versions:
 v0.11.5:
 - Locked Note encryption
     - Locked notes will now be encrypted using AES

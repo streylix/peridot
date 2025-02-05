@@ -76,7 +76,7 @@
       width: 100%;
       text-align: left;
       padding: 8px 16px;
-      border: none;
+      border: none !important;
       background: none;
       /* color: #c7c7c7; */
       color: #333;
@@ -313,12 +313,6 @@
       background-color: #e0e0e0;
     }
     
-    button.primary {
-      /* background-color: #1c7a43; */
-      background-color: #0aa34f;
-      color: white;
-    }
-    
     button.primary:hover {
       /* background-color: #208f4e; */
       background-color: #0aa34f;
@@ -434,6 +428,7 @@
   }
 
   .dark-mode .section-button {
+    background: #202020;
     color: #c7c7c7;
   }
 
@@ -566,14 +561,17 @@
     color: #808080 !important;
   }
 
-  button {
+  .modal-button {
     background-color: #f0f0f0;
     color: #333;
     border: 1px solid rgba(0, 0, 0, 0.1);
+    
   }
 
-  .dark-mode button {
-    background-color: #202020;
+  .dark-mode .modal-button {
+    /* background-color: #202020; */
+    border: 1px solid rgba(248, 248, 248, 0.151);
+    background: linear-gradient(to bottom, rgba(73, 73, 73, 0.2), transparent);
     color: white;
   }
 
@@ -586,6 +584,7 @@
   }
 
   button.primary {
+    border: 1px solid #0aa34f !important;
     background-color: #0aa34f;
     color: white;
   }
@@ -608,7 +607,9 @@
   }
 
   .dark-mode button.warning {
-    background-color: rgb(168, 0, 0);
+    border: 1px solid #323232;
+    background: linear-gradient(to bottom, #323232, transparent);
+    color: rgb(202, 0, 0);
   }
 
   button.warning:hover {
@@ -616,7 +617,7 @@
   }
 
   .dark-mode button.warning:hover {
-    background-color: rgb(202, 0, 0);
+    background-color: rgba(202, 0, 0, 0.351);
   }
 
   .modal-side-split {

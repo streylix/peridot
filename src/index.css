@@ -290,6 +290,8 @@ header.full-width{
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .note-item .note-title {
@@ -1006,7 +1008,7 @@ input[type="range"]:disabled::-moz-range-thumb {
 }
 
 .resize-handle:hover {
-  background: rgba(0, 122, 204, 0.4) !important;
+  background: #1c7a43 !important;
   opacity: 1 !important;
 }
 

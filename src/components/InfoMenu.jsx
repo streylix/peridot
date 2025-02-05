@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { CircleEllipsis, Lock, Pin, Gift, Trash2, Download } from 'lucide-react';
 import { noteContentService } from '../utils/NoteContentService';
 import { passwordModalUtils } from '../utils/PasswordModalUtils';
+import { noteImportExportService } from '../utils/NoteImportExportService';
 
 const InfoMenu = ({
   selectedId,
@@ -26,27 +27,6 @@ const InfoMenu = ({
   const menuRef = useRef(null);
 
   const selectedNote = notes.find(note => note.id === selectedId);
-
-  useEffect(() => {
-    if (isDownloadable && downloadNoteId) {
-      const noteToDownload = notes.find(note => note.id === downloadNoteId);
-      const preferredFileType = localStorage.getItem('preferredFileType') || 'json';
-      if (noteToDownload) {
-        if (preferredFileType === 'pdf') {
-          setPdfExportNote(noteToDownload);
-          setIsPdfExportModalOpen(true);
-          setDownloadable(false);
-          setDownloadNoteId(null);
-          setIsOpen(false);
-          if (onClose) onClose();
-        } else {
-          noteContentService.performDownload(noteToDownload, preferredFileType);
-          setDownloadable(false);
-          setDownloadNoteId(null);
-        }
-      }
-    }
-  }, [isDownloadable, downloadNoteId, notes, setDownloadable, setDownloadNoteId]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -92,23 +72,33 @@ const InfoMenu = ({
 
   const handleDownloadNote = () => {
     if (!selectedNote) return;
-  
+
     if (selectedNote.locked) {
-      passwordModalUtils.openDownloadUnlockModal(selectedNote.id, selectedNote);
+      passwordModalUtils.openDownloadUnlockModal(
+        selectedNote.id, 
+        selectedNote, 
+        {
+          setPdfExportNote,
+          setIsPdfExportModalOpen
+        }
+      );
       setIsOpen(false);
       return;
     }
   
     const preferredFileType = localStorage.getItem('preferredFileType') || 'json';
+    console.log("Downloading from HandleDownloadNote in infoMenu")
+    noteImportExportService.downloadNote({
+      note: selectedNote,
+      fileType: preferredFileType,
+      isEncrypted: false,
+      onPdfExport: (note) => {
+        setPdfExportNote(note);
+        setIsPdfExportModalOpen(true);
+      }
+    });
     
-    if (preferredFileType === 'pdf') {
-      setPdfExportNote(selectedNote);
-      setIsPdfExportModalOpen(true);
-    } else {
-      noteContentService.performDownload(selectedNote, preferredFileType);
-    }
     setIsOpen(false);
-    if (onClose) onClose();
   };
 
   useEffect(() => {

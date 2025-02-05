@@ -67,7 +67,6 @@ function NoteEditor({ note, onUpdateNote, gifToAdd, onGifAdded }) {
     }
   }, [gifToAdd, note, onGifAdded, debouncedUpdate]);
 
-  // Optimized content input handler
   const handleContentInput = useCallback(() => {
     if (note && contentRef.current) {
       const newContent = contentRef.current.innerHTML;

@@ -1,19 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Lock } from 'lucide-react';
 import { ItemComponents } from './Modal';
 
-function LockedWindow({ onUnlock }) {
+function LockedWindow({ onUnlock, note }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const inputRef = useRef(null);
 
   const styles = {
     container: {
       display: 'flex',
       height: 'calc(100% - 45px)',
       alignItems: 'center',
-      justifyContent: 'center',
-      textAlign: 'center'
+      justifyContent: 'center'
     },
     content: {
       display: 'flex',
@@ -56,27 +56,71 @@ function LockedWindow({ onUnlock }) {
       marginRight: '4px !important'
     }
   };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!password.trim()) {
-      setError('Please enter a password');
-      return;
-    }
-
-    try {
-      const result = await onUnlock(password);
+  
+    // Reset form when note changes
+    useEffect(() => {
+      setPassword('');
+      setError('');
+      setShowPassword(false);
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, [note?.id]);
+  
+    // Handle any keypress when the window is active
+    useEffect(() => {
+      const handleKeyPress = (e) => {
+        // Check if any modal is open
+        const modalOverlay = document.querySelector('.modal-overlay');
+        if (modalOverlay) {
+          return; // Don't focus if a modal is open
+        }
+  
+        // Ignore keypresses if we're already focused on the input
+        if (document.activeElement === inputRef.current) {
+          return;
+        }
+        
+        // Ignore keypresses if user is typing in another input or contenteditable
+        const activeElement = document.activeElement;
+        if (activeElement?.tagName === 'INPUT' || 
+            activeElement?.tagName === 'TEXTAREA' || 
+            activeElement?.isContentEditable) {
+          return;
+        }
+        
+        // Focus the input field when any key is pressed
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
+      };
+  
+      document.addEventListener('keydown', handleKeyPress);
+      return () => document.removeEventListener('keydown', handleKeyPress);
+    }, []);
+  
+    const handleSubmit = async (e) => {
+      e.preventDefault();
       
-      if (!result) {
-        setError('Invalid password');
+      if (!password.trim()) {
+        setError('Please enter a password');
         return;
       }
-    } catch (err) {
-      console.error('Error unlocking note:', err);
-      setError('Failed to unlock note');
-    }
-  };
+  
+      try {
+        const result = await onUnlock(password);
+        
+        if (!result) {
+          setError('Invalid password');
+          setPassword(''); // Clear password on error
+          return;
+        }
+      } catch (err) {
+        console.error('Error unlocking note:', err);
+        setError('Failed to unlock note');
+        setPassword(''); // Clear password on error
+      }
+    };
 
   return (
     <div style={styles.container}>
@@ -88,11 +132,11 @@ function LockedWindow({ onUnlock }) {
         <div className="outer-small" style={styles.form}>
           <form onSubmit={handleSubmit} className="inner-small">
             <input
+              ref={inputRef}
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter password"
-              autoFocus
             />
             {error && <div style={{ color: '#ff4444', fontSize: '12px', marginTop: '4px' }}>{error}</div>}
             

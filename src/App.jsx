@@ -13,6 +13,8 @@ import { passwordStorage } from './utils/PasswordStorageService';
 import { storageService } from './utils/StorageService.js';
 import { noteContentService } from './utils/NoteContentService.js';
 import { noteUpdateService } from './utils/NoteUpdateService.js';
+import { passwordModalUtils } from './utils/PasswordModalUtils.js';
+import { noteImportExportService } from './utils/NoteImportExportService.js';
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -44,24 +46,14 @@ function App() {
     return () => window.removeEventListener('noteUpdate', handleNoteUpdate);
   }, []);
 
-  useEffect(() => {
-    if (isDownloadable && downloadNoteId) {
-      const noteToDownload = notes.find(note => note.id === downloadNoteId);
-      const preferredFileType = localStorage.getItem('preferredFileType') || 'json';
-      if (noteToDownload) {
-        if (preferredFileType === 'pdf') {
-          setPdfExportNote(noteToDownload);
-          setIsPdfExportModalOpen(true);
-          setDownloadable(false);
-          setDownloadNoteId(null);
-        } else {
-          noteContentService.performDownload(noteToDownload, preferredFileType);
-          setDownloadable(false);
-          setDownloadNoteId(null);
-        }
-      }
-    }
-  }, [isDownloadable, downloadNoteId, notes]);
+  const handleDownloadUnlockModalOpen = (noteId) => {
+    const noteToDownload = notes.find(note => note.id === downloadNoteId);
+    const callbacks = {
+      setPdfExportNote,
+      setIsPdfExportModalOpen
+    };
+    passwordModalUtils.openDownloadUnlockModal(noteId, noteToDownload, callbacks);
+  };
 
   const handleDebugModalClose = () => {
     const nextModal = {
@@ -176,50 +168,6 @@ function App() {
     setGifToAdd(gifUrl);
   };
 
-  useEffect(() => {
-    const processUpdates = async () => {
-      if (processingRef.current || updateQueue.length === 0) return;
-      
-      processingRef.current = true;
-      const update = updateQueue[0];
-
-      try {
-
-        const updatedNotes = notes.map(note => {
-          if (note.id === update.noteId) {
-            if (update.updates._isEncryptedUpdate) {
-              // Handle encrypted updates
-              const { _isEncryptedUpdate, ...encryptedUpdates } = update.updates;
-              return encryptedUpdates;
-            }
-            // Handle normal updates
-            return {
-              ...note,
-              ...update.updates,
-              dateModified: update.updateModified ? new Date().toISOString() : note.dateModified
-            };
-          }
-          return note;
-        });
-
-        // Save only the modified note
-        const modifiedNote = updatedNotes.find(note => note.id === update.noteId);
-        if (modifiedNote) {
-          await storageService.writeNote(update.noteId, modifiedNote);
-        }
-
-        setNotes(sortNotes(updatedNotes));
-        setUpdateQueue(prevQueue => prevQueue.slice(1));
-      } catch (error) {
-        console.error('Failed to process update:', error);
-      } finally {
-        processingRef.current = false;
-      }
-    };
-
-    processUpdates();
-  }, [updateQueue, notes]);
-
   const updateNote = async (updates, updateModified = true) => {
     await noteUpdateService.queueUpdate(selectedId, updates, updateModified);
   };
@@ -276,6 +224,7 @@ function App() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         setNotes={setNotes}
+        onNoteSelect={setSelectedId}
       />
       <PasswordModal />
       <GifModal
@@ -288,7 +237,13 @@ function App() {
         onClose={() => setIsPdfExportModalOpen(false)}
         noteTitle={pdfExportNote ? noteContentService.getFirstLine(pdfExportNote.content) : ''}
         onExport={(pdfSettings) => {
-          noteContentService.performDownload(pdfExportNote, 'pdf', pdfSettings);
+          console.log("Downloading from PDFExportModal in app")
+          noteImportExportService.downloadNote({
+            note: pdfExportNote,
+            fileType: 'pdf',
+            isEncrypted: pdfExportNote?.locked || false,
+            pdfSettings
+          });
           setPdfExportNote(null);
         }}
       />

@@ -1,5 +1,6 @@
 import { storageService } from './StorageService';
 import { encryptNote } from './encryption';
+import { noteContentService } from './NoteContentService';
 
 class NoteUpdateService {
   constructor() {
@@ -24,6 +25,7 @@ class NoteUpdateService {
 
   // Queue an update for processing
   async queueUpdate(noteId, updates, updateModified = true, encryptionContext = null) {
+    console.log("processing throgh noteUpdateService")
     this.updateQueue.push({
       noteId,
       updates,

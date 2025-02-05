@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, ItemPresets } from './Modal';
+import { Modal, ItemPresets, ItemComponents } from './Modal';
 import { passwordModalUtils } from '../utils/PasswordModalUtils';
 
 function PasswordModal() {
@@ -46,29 +46,52 @@ function PasswordModal() {
       case 'lock':
         return {
           title: 'Lock Note',
-          content: <ItemPresets.PASSWORD_VERIFY
-            password={password}
-            confirmPassword={confirmPassword}
-            onPasswordChange={(e) => setPassword(e.target.value)}
-            onConfirmChange={(e) => setConfirmPassword(e.target.value)}
-            showPasswords={showPassword}
-            onToggleShow={() => setShowPassword(!showPassword)}
-            error={error}
-            onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
-          />
+          content: (
+            <ItemComponents.SUBSECTION title="Lock Note">
+              <ItemPresets.PASSWORD_VERIFY
+                password={password}
+                confirmPassword={confirmPassword}
+                onPasswordChange={(e) => setPassword(e.target.value)}
+                onConfirmChange={(e) => setConfirmPassword(e.target.value)}
+                showPasswords={showPassword}
+                onToggleShow={() => setShowPassword(!showPassword)}
+                error={error}
+                onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
+              />
+            </ItemComponents.SUBSECTION>
+          )
         };
       case 'unlock':
+        return {
+          title: 'Unlock Note',
+          content: (
+            <ItemComponents.SUBSECTION title="Unlock Note">
+              <ItemPresets.PASSWORD
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                showPassword={showPassword}
+                onToggleShow={() => setShowPassword(!showPassword)}
+                error={error}
+                onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
+              />
+            </ItemComponents.SUBSECTION>
+          )
+        };
       case 'download':
         return {
-          title: modalState.modalType === 'unlock' ? 'Unlock Note' : 'Download Protected Note',
-          content: <ItemPresets.PASSWORD
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            showPassword={showPassword}
-            onToggleShow={() => setShowPassword(!showPassword)}
-            error={error}
-            onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
-          />
+          title: 'Download Protected Note',
+          content: (
+            <ItemComponents.SUBSECTION title="Download Note">
+              <ItemPresets.PASSWORD
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                showPassword={showPassword}
+                onToggleShow={() => setShowPassword(!showPassword)}
+                error={error}
+                onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
+              />
+            </ItemComponents.SUBSECTION>
+          )
         };
       default:
         return null;
@@ -84,10 +107,18 @@ function PasswordModal() {
         <>
           {modalProps.content}
           <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
-            <button onClick={() => passwordModalUtils.closeModal()} style={{ flex: 1 }}>
+            <button 
+              className="modal-button" 
+              onClick={() => passwordModalUtils.closeModal()} 
+              style={{ flex: 1 }}
+            >
               Cancel
             </button>
-            <button className="primary" onClick={handleSubmit} style={{ flex: 1 }}>
+            <button 
+              className="primary" 
+              onClick={handleSubmit} 
+              style={{ flex: 1 }}
+            >
               {modalState.modalType === 'download' ? 'Download' : 'OK'}
             </button>
           </div>

@@ -71,8 +71,8 @@ function MainContent({ note, onUpdateNote, gifToAdd, onGifAdded }) {
       <div className="title-spacer" style={{ height: '40px' }} />
       {note?.locked && !isUnlocked ? (
         <LockedWindow 
-          note={note} 
           onUnlock={handleUnlock}
+          note={note} 
         />
       ) : (
         <NoteEditor

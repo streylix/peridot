@@ -57,8 +57,8 @@ export async function encryptNote(note, password) {
   const encryptedArray = Array.from(new Uint8Array(encryptedContent));
   const encryptedNote = {
     ...note,
-    content: encryptedArray,
     visibleTitle,
+    content: encryptedArray,
     iv: Array.from(iv),
     keyParams: {
       salt: Array.from(salt),
@@ -125,13 +125,13 @@ export async function decryptNote(note, password, permanent = false) {
     // Create decrypted note object
     const decryptedNote = {
       ...note,
+      visibleTitle: undefined,
       content: decryptedContent,
       locked: !permanent,
       encrypted: false,
       // Remove encryption-specific fields
       iv: undefined,
       keyParams: undefined,
-      visibleTitle: undefined
     };
 
     return {

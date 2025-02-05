@@ -2,6 +2,7 @@ import { encryptNote, decryptNote } from './encryption';
 import { noteContentService } from './NoteContentService';
 import { passwordStorage } from './PasswordStorageService';
 import { storageService } from './StorageService';
+import { noteImportExportService } from './NoteImportExportService';
 
 class PasswordModalUtils {
   constructor() {
@@ -9,11 +10,16 @@ class PasswordModalUtils {
     this.modalType = null;
     this.noteId = null;
     this.noteData = null;
+    this.callbacks = null;
   }
 
   subscribe(callback) {
     this.subscribers.add(callback);
     return () => this.subscribers.delete(callback);
+  }
+
+  setCallbacks(callbacks) {
+    this.callbacks = callbacks;
   }
 
   notifySubscribers() {
@@ -37,10 +43,11 @@ class PasswordModalUtils {
     this.notifySubscribers();
   }
 
-  openDownloadUnlockModal(noteId, note) {
+  openDownloadUnlockModal(noteId, note, callbacks = null) {
     this.modalType = 'download';
     this.noteId = noteId;
     this.noteData = note;
+    this.callbacks = callbacks;
     this.notifySubscribers();
   }
 
@@ -108,24 +115,28 @@ class PasswordModalUtils {
           }));
           break;
 
-        case 'download':
-          const downloadStoredPassword = await passwordStorage.getPassword(this.noteData.id);
-          if (!downloadStoredPassword || password !== downloadStoredPassword) {
-            return { success: false, error: 'Invalid password' };
-          }
-
-          const downloadResult = await decryptNote(this.noteData, password, false);
-          if (!downloadResult.success) {
-            return { success: false, error: 'Failed to decrypt note' };
-          }
-
-          const fileType = localStorage.getItem('preferredFileType') || 'json';
-          if (fileType === 'pdf') {
-            break;
-          }
-          
-          await noteContentService.performDownload(downloadResult.note, fileType);
-          break;
+          case 'download':
+            const fileType = localStorage.getItem('preferredFileType') || 'json';
+            
+            try {
+              console.log("Downloading from handlePasswordSubmit in PasswordModalUtils.js")
+              await noteImportExportService.downloadNote({
+                note: this.noteData,
+                fileType,
+                isEncrypted: true,
+                password,
+                onPdfExport: (decryptedNote) => {
+                  if (this.callbacks?.setPdfExportNote) {
+                    this.callbacks.setPdfExportNote(decryptedNote);
+                    this.callbacks.setIsPdfExportModalOpen(true);
+                  }
+                }
+              });
+              this.closeModal();
+              return { success: true };
+            } catch (error) {
+              return { success: false, error: error.message };
+            }
       }
 
       this.closeModal();

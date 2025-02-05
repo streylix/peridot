@@ -3,18 +3,29 @@ import { Modal, ItemPresets } from './Modal';
 import { storageService } from '../utils/StorageService';
 import { Sun, Moon, Bug, Save, Trash2, Upload, Monitor } from 'lucide-react';
 import { passwordStorage } from '../utils/PasswordStorageService';
+import { noteImportExportService } from '../utils/NoteImportExportService';
 
-function Settings({ isOpen, onClose, setNotes }) {
+function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
   const fileInputRef = useRef(null);
   const [theme, setTheme] = useState('system');
   const [fileType, setFileType] = useState(() => localStorage.getItem('preferredFileType') || 'json');
+  const [jsonAsEncrypted, setJsonAsEncrypted] = useState(() => 
+    localStorage.getItem('jsonAsEncrypted') === 'true'
+  );
 
-const handleFileTypeChange = (newType) => {
-  setFileType(newType);
-  localStorage.setItem('preferredFileType', newType);
-};
+  const handleEncryptedJsonChange = (event) => {
+    const newValue = event.target.checked;
+    setJsonAsEncrypted(newValue);
+    localStorage.setItem('jsonAsEncrypted', newValue);
+  };
 
-// Load theme
+
+  const handleFileTypeChange = (newType) => {
+    setFileType(newType);
+    localStorage.setItem('preferredFileType', newType);
+  };
+
+  // Load theme
   useEffect(() => {
     const loadTheme = async () => {
       try {
@@ -72,61 +83,49 @@ const handleFileTypeChange = (newType) => {
   const handleSaveNotes = async () => {
     try {
       const notes = await storageService.getAllNotes();
-      const blob = new Blob([JSON.stringify(notes)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `notes_backup_${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      console.log("Downloading from handleSaveNotes in Settings.jsx")
+      await noteImportExportService.downloadNote({
+        note: notes,
+        fileType: 'json',
+        isBackup: true
+      });
     } catch (error) {
       console.error('Failed to save backup:', error);
     }
   };
 
   const handleImportNotes = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
     try {
-      const text = await file.text();
-      const importedData = JSON.parse(text);
-      
-      const notesToProcess = Array.isArray(importedData) ? importedData : [importedData];
-      
-      if (!notesToProcess.every(note => typeof note === 'object' && note !== null && 'content' in note)) {
-        throw new Error('Invalid note format: Notes must have content');
-      }
-
-      for (const note of notesToProcess) {
-        if (note.id && note.content) {
-          await storageService.writeNote(note.id, {
-            ...note,
-            dateModified: note.dateModified || new Date().toISOString(),
-            pinned: Boolean(note.pinned),
-            caretPosition: Number(note.caretPosition) || 0
-          });
+      const results = await noteImportExportService.importNotes(event.target.files, {
+        openLastImported: true,
+        setSelectedId: onNoteSelect,
+        setNotes: setNotes,
+        onError: (error, filename) => {
+          console.error(`Error importing ${filename}:`, error);
         }
+      });
+  
+      // Construct user feedback message
+      let message = [];
+      if (results.successful.length > 0) {
+        message.push(`Successfully imported ${results.successful.length} notes`);
       }
-
-      const updatedNotes = await storageService.getAllNotes();
-      setNotes(updatedNotes);
-
-      const skippedCount = notesToProcess.length - validNotes.length;
-      if (skippedCount > 0) {
-        alert(`Import completed with warnings:\n${skippedCount} invalid notes were skipped.`);
-      } else {
-        alert('Import completed successfully!');
+      if (results.skipped.length > 0) {
+        message.push(`\nSkipped ${results.skipped.length} invalid notes`);
+      }
+      if (results.failed.length > 0) {
+        message.push(`\nFailed to import ${results.failed.length} files`);
+      }
+  
+      alert(message.join(''));
+  
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
     } catch (error) {
-      console.error('Error importing notes:', error);
-      alert(`Error importing notes: ${error.message}`);
-    }
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      console.error('Import failed:', error);
+      alert(`Failed to import notes: ${error.message}`);
     }
   };
 
@@ -151,13 +150,19 @@ const handleFileTypeChange = (newType) => {
         },
         {
           content: <ItemPresets.SUBSECTION title="Download">
+            <ItemPresets.TEXT_SWITCH
+              label="Download JSON as encrypted"
+              subtext="When enabled, locked notes downloaded to JSON will remain in their encrypted state"
+              value={jsonAsEncrypted}
+              onChange={handleEncryptedJsonChange}
+            />
             <ItemPresets.TEXT_DROPDOWN
               label="Saved File Type"
               subtext="Note: Some attributes may be lost when using formats other than JSON"
               value={fileType}
               options={[
                 { value: 'json', label: 'JSON (.json)' },
-                { value: 'markdown', label: 'Markdown (.md)' },
+                { value: 'md', label: 'Markdown (.md)' },
                 { value: 'text', label: 'Plain Text (.txt)' },
                 { value: 'pdf', label: 'PDF Document (.pdf)' }
               ]}
@@ -198,7 +203,7 @@ const handleFileTypeChange = (newType) => {
               type="file"
               ref={fileInputRef}
               style={{ display: 'none' }}
-              accept=".json"
+              accept=".json, .md, .txt"
               onChange={handleImportNotes}
             />
           </ItemPresets.SUBSECTION>

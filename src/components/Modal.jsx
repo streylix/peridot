@@ -102,7 +102,7 @@ const ItemComponents = {
     
     BUTTON: ({ onClick, primary, children }) => (
       <div className="spacer">
-        <button className={primary} onClick={onClick}>{children}</button>
+        <button className={`modal-button ${primary}`} onClick={onClick}>{children}</button>
       </div>
     ),
     
