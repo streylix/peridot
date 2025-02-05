@@ -12,7 +12,7 @@ v0.12:
     ➕ Filtering notes
     ➕ Folders
     ✅ Resizable
-    ➕ Accepts click+drag txt/json/pdf/etc files as "import"
+    ✅ Accepts click+drag txt/json/pdf/etc files as "import"
 
 v0.13:
 ➕ Improved NoteEditor

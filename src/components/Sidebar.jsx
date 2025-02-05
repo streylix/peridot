@@ -1,13 +1,10 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect, useImperativeHandle } from 'react';
-import { SquarePen, Pin, Lock } from 'lucide-react';
+import { SquarePen, Pin, Lock, FolderPlus, SortDesc } from 'lucide-react';
 import InfoMenu from './InfoMenu';
 import { noteContentService } from '../utils/NoteContentService';
 import logo2 from '../assets/logo2.png';
 import { storageService } from '../utils/StorageService';
 import { noteUpdateService } from '../utils/NoteUpdateService';
-import { noteImportExportService } from '../utils/NoteImportExportService';
-
-// Memoized individual note item component
 const NoteItem = React.memo(({
   note, 
   isSelected, 
@@ -45,7 +42,7 @@ const NoteItem = React.memo(({
       onContextMenu={handleContextMenu}
     >
       <div className="note-header">
-        <div className="item-text" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <span className="note-title">{title}</span>
           <div className="note-preview">{preview}</div>
         </div>
@@ -123,16 +120,55 @@ const useSearch = (initialValue = '') => {
 
   return [searchTerm, handleSearchChange];
 };
+
+const CustomTooltip = ({ children, content }) => (
+  <div className="tooltip-container">
+    {children}
+    <span className="tooltip-content">{content}</span>
+  </div>
+);
+
+const ActionButtons = ({ onCreateNote }) => (
+  <div className="flex justify-center items-center gap-4 w-full">
+    <CustomTooltip content="Create new note">
+      <button 
+        type="button"
+        className="new-note-btn"
+        onClick={onCreateNote}
+      >
+        <SquarePen />
+      </button>
+    </CustomTooltip>
+
+    <CustomTooltip content="Create new folder">
+      <button 
+        type="button"
+        className="new-note-btn"
+        onClick={() => {}}
+      >
+        <FolderPlus />
+      </button>
+    </CustomTooltip>
+
+    <CustomTooltip content="Change sort order">
+      <button 
+        type="button"
+        className="new-note-btn"
+        onClick={() => {}}
+      >
+        <SortDesc />
+      </button>
+    </CustomTooltip>
+  </div>
+);
+
 const Sidebar = React.forwardRef(({
   selectedId,
   onNoteSelect,
   notes,
   setNotes,
-  onUnlockNote,
   onTogglePin,
   onDeleteNote,
-  gifToAdd,
-  onGifAdded,
   downloadNoteId,
   isDownloadable,
   setDownloadable,
@@ -143,7 +179,7 @@ const Sidebar = React.forwardRef(({
   const [searchTerm, setSearchTerm] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
   const [isResizing, setIsResizing] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(280); // Default width
+  const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const sidebarRef = useRef(null);
   const resizeHandleRef = useRef(null);
@@ -357,21 +393,19 @@ const Sidebar = React.forwardRef(({
     });
   }, []);
 
-
-    // Subscribe to updates
-    useEffect(() => {
-      const unsubscribe = noteUpdateService.subscribe((updatedNote) => {
-        setNotes(prevNotes => {
-          const updatedNotes = prevNotes.map(note =>
-            note.id === updatedNote.id ? updatedNote : note
-          );
-          return sortNotes(updatedNotes);
-        });
+  useEffect(() => {
+    const unsubscribe = noteUpdateService.subscribe((updatedNote) => {
+      setNotes(prevNotes => {
+        const updatedNotes = prevNotes.map(note =>
+          note.id === updatedNote.id ? updatedNote : note
+        );
+        return sortNotes(updatedNotes);
       });
-    
-      return () => unsubscribe();
-    }, []);
-  // Filter notes based on search term
+    });
+  
+    return () => unsubscribe();
+  }, []);
+
   const filteredNotes = useMemo(() => {
     return notes.filter(note => {
         if (!searchTerm) return true;
@@ -414,10 +448,13 @@ const Sidebar = React.forwardRef(({
     >
       <div className="sidebar-header">
         <div className="logo">
-          <img src={logo2} alt="biz logo" width="50" height="50" />
+          <img src={logo2} alt="peridot logo" width="50" height="50" />
           <h1>peridot.</h1>
         </div>
         <div className="search">
+        <div className='sidebar-buttons'>
+          <ActionButtons onCreateNote={createNewNote} />
+        </div>
           <input
             type="search"
             id="note-search"
@@ -425,14 +462,6 @@ const Sidebar = React.forwardRef(({
             value={searchTerm}
             onChange={handleSearchChange}
           />
-          <button 
-            type="button" 
-            className="new-note-btn"
-            onClick={createNewNote}
-            title="New Note"
-          >
-            <SquarePen />
-          </button>
         </div>
       </div>
       
@@ -485,6 +514,6 @@ const Sidebar = React.forwardRef(({
       )}
     </div>
   );
-})
+});
 
 export default React.memo(Sidebar);
