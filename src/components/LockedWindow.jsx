@@ -22,7 +22,8 @@ function LockedWindow({ onUnlock, note }) {
       maxWidth: '28rem',
       width: '100%',
       padding: '2rem',
-      marginBottom: '45px'
+      marginBottom: '45px',
+      textAlign: 'center',
     },
     icon: {
       width: '4rem',
