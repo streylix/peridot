@@ -298,6 +298,10 @@ header.full-width{
   text-overflow: ellipsis;
 }
 
+.note-item .item-text {
+  overflow: hidden;
+}
+
 .note-item .note-title {
   font-weight: 500;
   margin-right: 8px;

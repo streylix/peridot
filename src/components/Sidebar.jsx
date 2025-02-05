@@ -44,7 +44,7 @@ const NoteItem = React.memo(({
       onContextMenu={handleContextMenu}
     >
       <div className="note-header">
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div className="item-text" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <span className="note-title">{title}</span>
           <div className="note-preview">{preview}</div>
         </div>
