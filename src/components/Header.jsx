@@ -22,6 +22,13 @@ function Header({
   onToggleSidebar,
 }) {
 
+  const CustomTooltip = ({ children, content, className='' }) => (
+    <div className={`tooltip-container`}>
+      {children}
+      <span className={`tooltip-content ${className}`}>{content}</span>
+    </div>
+  );
+  
   const selectedNote = notes.find(note => note.id === selectedId);
   const noteTitle = useMemo(() => {
     if (selectedNote) {
@@ -46,27 +53,31 @@ function Header({
             gap: '8px'
           }}
         >
-          <button 
-            type="button"
-            id="move-menu"
-            className="menu-btn"
-            onClick={onToggleSidebar}
-            style={{cursor: 'pointer'}}
-          >
-            <PanelLeft />
-          </button>
-          <button
-            type="button"
-            id="back-btn"
-            data-testid="back-btn"
-            onClick={onBack}
-            disabled={!canGoBack}
-            onMouseEnter={e => canGoBack && (e.target.style.opacity = '1')} 
-            onMouseLeave={e => canGoBack && (e.target.style.opacity = '0.6')}
-            style={{ opacity: canGoBack ? 0.6 : 0.3, cursor: canGoBack ? 'pointer' : 'not-allowed' }}
-          >
-            <ChevronLeft />
-          </button>
+          <CustomTooltip content="Toggle sidebar">
+            <button 
+              type="button"
+              id="move-menu"
+              className="menu-btn"
+              onClick={onToggleSidebar}
+              style={{cursor: 'pointer'}}
+            >
+              <PanelLeft />
+            </button>
+          </CustomTooltip>
+          <CustomTooltip content="Previous note">
+            <button
+              type="button"
+              id="back-btn"
+              data-testid="back-btn"
+              onClick={onBack}
+              disabled={!canGoBack}
+              onMouseEnter={e => canGoBack && (e.target.style.opacity = '1')} 
+              onMouseLeave={e => canGoBack && (e.target.style.opacity = '0.6')}
+              style={{ opacity: canGoBack ? 0.6 : 0.3, cursor: canGoBack ? 'pointer' : 'not-allowed' }}
+            >
+              <ChevronLeft />
+            </button>
+          </CustomTooltip>
           {selectedNote && (
             <div className="note-tab">
               <span className="note-tab-title">{noteTitle}</span>
@@ -77,28 +88,34 @@ function Header({
           {/* <button onClick={onDebugClick}>
             <Bug />
           </button> */}
-          <StatsMenu 
-            selectedId={selectedId}
-            notes={notes}
-          />
-          <InfoMenu 
-            selectedId={selectedId}
-            notes={notes}
-            onTogglePin={onTogglePin}
-            onDeleteNote={onDeleteNote}
-            onGifModalOpen={onGifModalOpen}
-            isDownloadable={isDownloadable}
-            setPdfExportNote={setPdfExportNote}
-            setIsPdfExportModalOpen={setIsPdfExportModalOpen}
-          />
-          <button 
-            type="button" 
-            id="settings"
-            className="btn btn-settings"
-            onClick={onSettingsClick}
-          >
-            <SlidersHorizontal />
-          </button>
+          <CustomTooltip content="View note information">
+            <StatsMenu 
+              selectedId={selectedId}
+              notes={notes}
+            />
+          </CustomTooltip>
+          <CustomTooltip content="Modify note">
+            <InfoMenu 
+              selectedId={selectedId}
+              notes={notes}
+              onTogglePin={onTogglePin}
+              onDeleteNote={onDeleteNote}
+              onGifModalOpen={onGifModalOpen}
+              isDownloadable={isDownloadable}
+              setPdfExportNote={setPdfExportNote}
+              setIsPdfExportModalOpen={setIsPdfExportModalOpen}
+            />
+          </CustomTooltip>
+          <CustomTooltip content="Open settings" className={"settings"}>
+            <button 
+              type="button" 
+              id="settings"
+              // className="btn btn-settings"
+              onClick={onSettingsClick}
+            >
+              <SlidersHorizontal />
+            </button>
+          </CustomTooltip>
         </div>
       </div>
     </header>

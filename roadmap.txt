@@ -9,7 +9,7 @@ v0.11:
 
 v0.12:
 ➕ Improved Sidebar
-    ➕ Filtering notes
+    ✅ Filtering notes
     ➕ Folders
     ✅ Resizable
     ✅ Accepts click+drag txt/json/pdf/etc files as "import"

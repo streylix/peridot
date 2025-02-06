@@ -1110,10 +1110,17 @@ input[type="range"]:disabled::-moz-range-thumb {
   transition: opacity 0.2s;
 }
 
+.tooltip-content.settings{
+  bottom: -95%;
+  left: -20%;
+}
+
 .tooltip-container:hover .tooltip-content {
   visibility: visible;
   opacity: 1;
 }
+
+
 
 .sidebar-buttons {
   align-content: center;
