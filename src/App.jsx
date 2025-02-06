@@ -16,6 +16,7 @@ import { noteUpdateService } from './utils/NoteUpdateService.js';
 import { passwordModalUtils } from './utils/PasswordModalUtils.js';
 import { noteImportExportService } from './utils/NoteImportExportService.js';
 import { noteSortingService } from './utils/NoteSortingService.js';
+import RenameModal from './components/RenameModal.jsx';
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -30,6 +31,8 @@ function App() {
   const [pdfExportNote, setPdfExportNote] = useState(null);
   const [updateQueue, setUpdateQueue] = useState([]);
   const processingRef = useRef(false);
+  const [isRenameModalOpen, setRenameModalOpen] = useState(false);
+  const [itemToRename, setItemToRename] = useState(null);
   const [preferredFileType, setPreferredFileType] = useState(
     localStorage.getItem('preferredFileType') || 'json'
   );
@@ -45,6 +48,16 @@ function App() {
   
     window.addEventListener('noteUpdate', handleNoteUpdate);
     return () => window.removeEventListener('noteUpdate', handleNoteUpdate);
+  }, []);
+
+  useEffect(() => {
+    const handleRenameModal = (event) => {
+      setItemToRename(event.detail.item);
+      setRenameModalOpen(true);
+    };
+
+    window.addEventListener('openRenameModal', handleRenameModal);
+    return () => window.removeEventListener('openRenameModal', handleRenameModal);
   }, []);
 
   const handleDownloadUnlockModalOpen = (noteId) => {
@@ -144,15 +157,6 @@ function App() {
   const handleNoteSelect = (noteId) => {
 
     const selectedNote = notes.find(note => note.id === noteId);
-  
-    // if (selectedNote) {
-    //     console.log('Selected Note Contents:', {
-    //     id: selectedNote.id,
-    //     content: selectedNote.content,
-    //     locked: selectedNote.locked,
-    //     encrypted: selectedNote.encrypted
-    //   });
-    // }
     
     noteNavigation.push(noteId);
   };
@@ -248,6 +252,21 @@ function App() {
             pdfSettings
           });
           setPdfExportNote(null);
+        }}
+      />
+      <RenameModal
+        isOpen={isRenameModalOpen}
+        onClose={() => {
+          setRenameModalOpen(false);
+          setItemToRename(null);
+        }}
+        item={itemToRename}
+        onSuccess={(updatedItem) => {
+          setNotes(prevNotes => 
+            prevNotes.map(note => 
+              note.id === updatedItem.id ? updatedItem : note
+            )
+          );
         }}
       />
     </div>

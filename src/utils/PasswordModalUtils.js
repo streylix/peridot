@@ -59,91 +59,87 @@ class PasswordModalUtils {
   }
 
   async handlePasswordSubmit(password, confirmPassword = null) {
-    if (!password) {
-      return { success: false, error: 'Please enter a password' };
-    }
-
+    if (!password) return { success: false, error: 'Please enter a password' };
     if (confirmPassword !== null) {
-      if (!confirmPassword) {
-        return { success: false, error: 'Please fill in both password fields' };
-      }
-      if (password !== confirmPassword) {
-        return { success: false, error: 'Passwords do not match' };
-      }
+      if (!confirmPassword) return { success: false, error: 'Please fill in both password fields' };
+      if (password !== confirmPassword) return { success: false, error: 'Passwords do not match' };
     }
+  
     try {
       switch (this.modalType) {
-        case 'lock':
+        case 'lock': {
+          // First encrypt the note
           const encryptedNote = await encryptNote(this.noteData, password);
+          if (!encryptedNote) {
+            throw new Error('Encryption failed');
+          }
+  
+          // Store password before modifying note
           await passwordStorage.storePassword(this.noteData.id, password);
-
-
-          await storageService.writeNote(this.noteData.id, {
+          
+          const finalNote = {
             ...encryptedNote,
             id: this.noteData.id,
             locked: true,
-            encrypted: true
-          });
-
-          window.dispatchEvent(new CustomEvent('noteUpdate', {
-            detail: { 
-              note: {
-                ...encryptedNote,
-                id: this.noteData.id,
-                locked: true,
-                encrypted: true
-              }
-            }
-          }));
+            encrypted: true,
+            // Preserve visible title for locked state
+            visibleTitle: this.noteData.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 'Untitled'
+          };
+          
+          await storageService.writeNote(this.noteData.id, finalNote);
+          window.dispatchEvent(new CustomEvent('noteUpdate', { detail: { note: finalNote }}));
           break;
-
-        case 'unlock':
-          const decryptResult = await decryptNote(this.noteData, password, true);
+        }
+  
+        case 'unlock': {
+          const decryptResult = await decryptNote(this.noteData, password);
           if (!decryptResult.success) {
             return { success: false, error: 'Invalid password' };
           }
   
-          window.dispatchEvent(new CustomEvent('noteUpdate', {
-            detail: { 
-              note: {
-                ...decryptResult.note,
-                id: this.noteData.id,
-                locked: false,
-                encrypted: false
+          // Remove stored password only after successful decryption
+          try {
+            await passwordStorage.removePassword(this.noteData.id);
+          } catch (e) {
+            console.warn('Password removal failed, proceeding with unlock:', e);
+          }
+          
+          const unlockedNote = {
+            ...decryptResult.note,
+            id: this.noteData.id,
+            locked: false,
+            encrypted: false,
+            visibleTitle: undefined
+          };
+          
+          await storageService.writeNote(this.noteData.id, unlockedNote);
+          window.dispatchEvent(new CustomEvent('noteUpdate', { detail: { note: unlockedNote }}));
+          break;
+        }
+  
+        case 'download': {
+          const fileType = localStorage.getItem('preferredFileType') || 'json';
+          await noteImportExportService.downloadNote({
+            note: this.noteData,
+            fileType,
+            isEncrypted: true,
+            password,
+            onPdfExport: (decryptedNote) => {
+              if (this.callbacks?.setPdfExportNote) {
+                this.callbacks.setPdfExportNote(decryptedNote);
+                this.callbacks.setIsPdfExportModalOpen(true);
               }
             }
-          }));
+          });
           break;
-
-          case 'download':
-            const fileType = localStorage.getItem('preferredFileType') || 'json';
-            
-            try {
-              console.log("Downloading from handlePasswordSubmit in PasswordModalUtils.js")
-              await noteImportExportService.downloadNote({
-                note: this.noteData,
-                fileType,
-                isEncrypted: true,
-                password,
-                onPdfExport: (decryptedNote) => {
-                  if (this.callbacks?.setPdfExportNote) {
-                    this.callbacks.setPdfExportNote(decryptedNote);
-                    this.callbacks.setIsPdfExportModalOpen(true);
-                  }
-                }
-              });
-              this.closeModal();
-              return { success: true };
-            } catch (error) {
-              return { success: false, error: error.message };
-            }
+        }
       }
-
+  
       this.closeModal();
       return { success: true };
     } catch (error) {
       console.error('Operation failed:', error);
-      return { success: false, error: 'Operation failed' };
+      return { success: false, error: error.message || 'Operation failed' };
     }
   }
 }

@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect, useImperativeHandle } from 'react';
-import { SquarePen, Pin, Lock, FolderPlus, SortDesc } from 'lucide-react';
+import { SquarePen, FolderPlus } from 'lucide-react';
+import NoteItem from './NoteItem';
 import InfoMenu from './InfoMenu';
 import { noteContentService } from '../utils/NoteContentService';
 import logo2 from '../assets/logo2.png';
@@ -7,123 +8,7 @@ import { storageService } from '../utils/StorageService';
 import { noteUpdateService } from '../utils/NoteUpdateService';
 import { noteSortingService } from '../utils/NoteSortingService';
 import SortingButton from './SortingButton';
-
-const NoteItem = React.memo(({
-  note, 
-  isSelected, 
-  onNoteSelect, 
-  onContextMenu,
-}) => {
-  const title = useMemo(() => {
-    if (note.locked && note.visibleTitle) {
-      return note.visibleTitle;
-    }
-    return noteContentService.getFirstLine(note.content);
-  }, [note.content, note.locked, note.visibleTitle]);
-
-  const preview = useMemo(() => {
-    if (note.locked) {
-      return 'Unlock to view';
-    }
-    return noteContentService.getPreviewContent(note.content);
-  }, [note.content, note.locked]);
-
-  const handleClick = useCallback(() => {
-    onNoteSelect(note.id);
-  }, [note.id, onNoteSelect]);
-
-  const handleContextMenu = useCallback((e) => {
-    e.preventDefault();
-    onContextMenu(e, note.id);
-  }, [note.id, onContextMenu]);
-
-  return (
-    <li
-      className={`note-item ${isSelected ? 'active' : ''}`}
-      data-testid="note-item"
-      onClick={handleClick}
-      onContextMenu={handleContextMenu}
-    >
-      <div className="note-header">
-        <div className="item-text" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <span className="note-title">{title}</span>
-          <div className="note-preview">{preview}</div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-          {note.pinned && <Pin size={20} className="pin-indicator" />}
-          {note.locked && <Lock size={20} className="lock-indicator" />}
-        </div>
-      </div>
-    </li>
-  );
-});
-
-// Memoized note list component
-const NoteList = React.memo(({ 
-  notes, 
-  searchTerm, 
-  selectedId, 
-  onNoteSelect, 
-  onContextMenu,
-  setNotes,
-}) => {
-  // Memoize filtered and sorted notes
-  const filteredAndSortedNotes = useMemo(() => {
-    console.log("filteredAndSortedNotes in NoteList");
-    return notes
-      .filter(note => {
-        if (!searchTerm) return true;
-        
-        const search = searchTerm.toLowerCase();
-        
-        // For locked notes, only search the visible title
-        if (note.locked) {
-          const visibleTitle = note.visibleTitle || noteContentService.getFirstLine(note.content);
-          return visibleTitle.toLowerCase().includes(search);
-        }
-        
-        // For unlocked notes, search title and content
-        const title = noteContentService.getFirstLine(note.content);
-        const content = noteContentService.getPreviewContent(note.content);
-        console.log(title)
-        console.log(content)
-        
-        return title.toLowerCase().includes(search) || 
-               content.toLowerCase().includes(search);
-      })
-      .sort((a, b) => {
-        // Sort by pinned status then date
-        if (a.pinned && !b.pinned) return -1;
-        if (!a.pinned && b.pinned) return 1;
-        return new Date(b.dateModified) - new Date(a.dateModified);
-      });
-  }, [notes, searchTerm]);
-
-  return (
-    <ul className="note-list">
-      {filteredAndSortedNotes.map(note => (
-        <NoteItem
-          key={note.id}
-          note={note}
-          isSelected={note.id === selectedId}
-          onNoteSelect={onNoteSelect}
-          onContextMenu={onContextMenu}
-        />
-      ))}
-    </ul>
-  );
-});
-
-// Hook for search functionality
-const useSearch = (initialValue = '') => {
-  const [searchTerm, setSearchTerm] = useState(initialValue);
-  
-  const handleSearchChange = useCallback((e) => {
-    setSearchTerm(e.target.value);
-  }, []);
-
-  return [searchTerm, handleSearchChange];
-};
+import { noteImportExportService } from '../utils/NoteImportExportService';
 
 const CustomTooltip = ({ children, content }) => (
   <div className="tooltip-container">
@@ -372,7 +257,8 @@ const Sidebar = React.forwardRef(({
       content: '',
       dateModified: new Date().toISOString(),
       pinned: false,
-      caretPosition: 0
+      caretPosition: 0,
+      visibleTitle: '',
     };
 
     try {
@@ -418,6 +304,7 @@ const Sidebar = React.forwardRef(({
           return visibleTitle.toLowerCase().includes(search);
         }
         const title = noteContentService.getFirstLine(note.content);
+        note.visibleTitle = title;
         const content = noteContentService.getPreviewContent(note.content);
         return title.toLowerCase().includes(search) || content.toLowerCase().includes(search);
       })
@@ -447,9 +334,9 @@ const Sidebar = React.forwardRef(({
           <h1>peridot.</h1>
         </div>
         <div className="search">
-        <div className='sidebar-buttons'>
-          <ActionButtons onCreateNote={createNewNote} onSortChange={handleSortChange} />
-        </div>
+          <div className='sidebar-buttons'>
+            <ActionButtons onCreateNote={createNewNote} onSortChange={handleSortChange} />
+          </div>
           <input
             type="search"
             id="note-search"

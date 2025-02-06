@@ -37,7 +37,8 @@ function Header({
         return selectedNote.visibleTitle || 'Untitled';
       } else {
         // Use the first line of the note content for unlocked notes
-        return noteContentService.getFirstLine(selectedNote.content);
+        selectedNote.visibleTitle = noteContentService.getFirstLine(selectedNote.content)
+        return selectedNote.visibleTitle;
       }
     }
     return '';

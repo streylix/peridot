@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { CircleEllipsis, Lock, Pin, Gift, Trash2, Download } from 'lucide-react';
+import { CircleEllipsis, Lock, Pin, Gift, Trash2, Download, Edit2 } from 'lucide-react';
 import { noteContentService } from '../utils/NoteContentService';
 import { passwordModalUtils } from '../utils/PasswordModalUtils';
 import { noteImportExportService } from '../utils/NoteImportExportService';
+import { FolderService } from '../utils/folderUtils';
+import RenameModal from './RenameModal';
 
-const InfoMenu = ({
+const InfoMenu = ({ 
   selectedId,
   notes,
   onTogglePin,
@@ -26,7 +28,7 @@ const InfoMenu = ({
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
 
-  const selectedNote = notes.find(note => note.id === selectedId);
+  const selectedItem = notes.find(item => item.id === selectedId);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -48,6 +50,10 @@ const InfoMenu = ({
   useEffect(() => {
     if (position) {
       setIsOpen(true);
+      if (menuRef.current) {
+        menuRef.current.style.top = `${position.y}px`;
+        menuRef.current.style.left = `${position.x}px`;
+      }
     }
   }, [position]);
 
@@ -57,10 +63,10 @@ const InfoMenu = ({
 
   const handleLockClick = () => {
     try {
-      if (selectedNote?.locked) {
-        passwordModalUtils.openUnlockModal(selectedNote.id, selectedNote);
+      if (selectedItem?.locked) {
+        passwordModalUtils.openUnlockModal(selectedItem.id, selectedItem);
       } else {
-        passwordModalUtils.openLockModal(selectedNote.id, selectedNote);
+        passwordModalUtils.openLockModal(selectedItem.id, selectedItem);
       }
     } catch (error) {
       console.error('Error in handleLockClick:', error);
@@ -70,13 +76,13 @@ const InfoMenu = ({
     if (onClose) onClose();
   };
 
-  const handleDownloadNote = () => {
-    if (!selectedNote) return;
+  const handleDownload = () => {
+    if (!selectedItem) return;
 
-    if (selectedNote.locked) {
+    if (selectedItem.locked) {
       passwordModalUtils.openDownloadUnlockModal(
-        selectedNote.id, 
-        selectedNote, 
+        selectedItem.id, 
+        selectedItem, 
         {
           setPdfExportNote,
           setIsPdfExportModalOpen
@@ -87,9 +93,8 @@ const InfoMenu = ({
     }
   
     const preferredFileType = localStorage.getItem('preferredFileType') || 'json';
-    console.log("Downloading from HandleDownloadNote in infoMenu")
     noteImportExportService.downloadNote({
-      note: selectedNote,
+      note: selectedItem,
       fileType: preferredFileType,
       isEncrypted: false,
       onPdfExport: (note) => {
@@ -101,105 +106,114 @@ const InfoMenu = ({
     setIsOpen(false);
   };
 
-  useEffect(() => {
-    if (isOpen && menuRef.current) {
-      if (position) {
-        menuRef.current.style.top = `${position.y}px`;
-        menuRef.current.style.left = `${position.x}px`;
-      } else if (buttonRef.current) {
-        const buttonRect = buttonRef.current.getBoundingClientRect();
-        menuRef.current.style.top = `${buttonRect.bottom + 5}px`;
-        menuRef.current.style.left = `${buttonRect.left - 100 + buttonRect.width / 2}px`;
-      }
+  const menuItems = [
+    {
+      icon: Edit2,
+      label: 'Rename',
+      onClick: () => {
+        if (selectedItem) {
+          window.dispatchEvent(new CustomEvent('openRenameModal', { 
+            detail: { item: selectedItem }
+          }));
+          setIsOpen(false);
+          if (onClose) onClose();
+        }
+      },
+      disabled: !!selectedItem,
+      show: true
+    },
+    {
+      icon: Lock,
+      label: selectedItem?.locked ? 'Unlock' : 'Lock',
+      onClick: handleLockClick,
+      disabled: !!selectedItem,
+      show: true
+    },
+    {
+      icon: Pin,
+      label: selectedItem?.pinned ? 'Unpin' : 'Pin',
+      onClick: () => {
+        if (selectedItem) {
+          onTogglePin(selectedItem.id);
+          setIsOpen(false);
+          if (onClose) onClose();
+        }
+      },
+      disabled: !!selectedItem,
+      show: true
+    },
+    {
+      icon: Gift,
+      label: 'Add GIF',
+      onClick: () => {
+        if (selectedItem && onGifModalOpen) {
+          onGifModalOpen();
+          setIsOpen(false);
+          if (onClose) onClose();
+        }
+      },
+      show: !position && !FolderService.isFolder(selectedItem) && !!selectedItem
+    },
+    {
+      icon: Download,
+      label: 'Download',
+      onClick: handleDownload,
+      disabled: !!selectedItem,
+      show: true
+    },
+    {
+      icon: Trash2,
+      label: 'Delete',
+      onClick: () => {
+        if (selectedItem) {
+          onDeleteNote(selectedItem.id);
+          setIsOpen(false);
+          if (onClose) onClose();
+        }
+      },
+      disabled: !!selectedItem,
+      show: true
     }
-  }, [isOpen, position]);
-
-  const handleGifSelect = (gifUrl) => {
-    if (selectedNote) {
-      const gifEmbed = `<img src="${gifUrl}" alt="GIF" style="max-width: 100%; height: auto;">`;
-      const newContent = selectedNote.content + gifEmbed;
-    }
-  };
+  ];
 
   const Menu = () => {
-    if (!isOpen) return null;
+    if ((!isOpen && !position) || (!isOpen && position)) return null;
 
     return createPortal(
       <div
         ref={menuRef}
         className="info-menu"
+        style={{
+          position: 'fixed',
+          top: position ? position.y : 0,
+          left: position ? position.x : 0
+        }}
       >
-        <button
-          className={`info-menu-button ${selectedNote ? '' : 'disabled'}`}
-          onClick={handleLockClick}
-          disabled={!selectedNote}
-        >
-          <Lock className="info-menu-icon" />
-          {selectedNote?.locked ? 'Unlock Note' : 'Lock Note'}
-        </button>
-
-        <button
-          className={`info-menu-button ${selectedNote ? '' : 'disabled'}`}
-          onClick={() => {
-            if (selectedNote) {
-              onTogglePin(selectedNote.id);
-              setIsOpen(false);
-              if (onClose) onClose();
-            }
-          }}
-          disabled={!selectedNote}
-        >
-          <Pin className="info-menu-icon" />
-          {selectedNote?.pinned ? 'Unpin Note' : 'Pin Note'}
-        </button>
-
-        <button
-          className={`info-menu-button ${selectedNote ? '' : 'disabled'}`}
-          onClick={() => {
-            if (selectedNote && onGifModalOpen) {
-              onGifModalOpen();
-              setIsOpen(false);
-              if (onClose) onClose();
-            }
-          }}
-          disabled={!selectedNote}
-        >
-          <Gift className="info-menu-icon" />
-          Add GIF
-        </button>
-
-        <button
-          className={`info-menu-button ${selectedNote ? '' : 'disabled'}`}
-          onClick={handleDownloadNote}
-          disabled={!selectedNote}
-          aria-label="Download Note"
-        >
-          <Download className="info-menu-icon" />
-          Download Note
-        </button>
-
-        <button
-          className={`info-menu-button ${selectedNote ? '' : 'disabled'}`}
-          onClick={() => {
-            if (selectedNote) {
-              onDeleteNote(selectedNote.id);
-              setIsOpen(false);
-              if (onClose) onClose();
-            }
-          }}
-          disabled={!selectedNote}
-        >
-          <Trash2 className="info-menu-icon" />
-          Delete Note
-        </button>
+        {menuItems
+          .filter(item => item.show)
+          .map((item, index) => (
+            <button
+              key={index}
+              className={`info-menu-button ${selectedItem ? '' : 'disabled'}`}
+              onClick={item.onClick}
+              disabled={!selectedItem}
+            >
+              <item.icon className="info-menu-icon" />
+              {item.label}
+            </button>
+          ))}
       </div>,
       document.body
     );
   };
-  
-  if (position) {
-    return <Menu />;
-  }
+
+  useEffect(() => {
+    if (menuRef.current && !position && buttonRef.current) {
+      const buttonRect = buttonRef.current.getBoundingClientRect();
+      menuRef.current.style.top = `${buttonRect.bottom + 5}px`;
+      menuRef.current.style.left = `${buttonRect.left - 100 + buttonRect.width / 2}px`;
+    }
+  }, [isOpen, position]);
 
   return (
     <>
