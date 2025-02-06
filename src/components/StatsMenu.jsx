@@ -78,7 +78,7 @@ const StatsMenu = ({ selectedId, notes }) => {
           position: 'fixed',
           width: '300px',
           borderRadius: '4px',
-          zIndex: 9999,
+          zIndex: 100,
           padding: '16px',
         }}
       >
