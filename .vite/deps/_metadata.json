@@ -1,61 +1,67 @@
 {
-  "hash": "8557a03e",
+  "hash": "2feb8905",
   "configHash": "600f2bb3",
-  "lockfileHash": "22d6b2a0",
-  "browserHash": "18817c5a",
+  "lockfileHash": "1c25e487",
+  "browserHash": "357f26b8",
   "optimized": {
     "react": {
       "src": "../../node_modules/react/index.js",
       "file": "react.js",
-      "fileHash": "f5ffd9f9",
+      "fileHash": "ee4fe103",
       "needsInterop": true
     },
     "react-dom/client": {
       "src": "../../node_modules/react-dom/client.js",
       "file": "react-dom_client.js",
-      "fileHash": "733119e3",
+      "fileHash": "8b463a8f",
       "needsInterop": true
     },
     "html2pdf.js": {
       "src": "../../node_modules/html2pdf.js/dist/html2pdf.js",
       "file": "html2pdf__js.js",
-      "fileHash": "203ceaf8",
+      "fileHash": "cc33265f",
       "needsInterop": true
     },
     "lucide-react": {
       "src": "../../node_modules/lucide-react/dist/esm/lucide-react.js",
       "file": "lucide-react.js",
-      "fileHash": "aa7feaf0",
+      "fileHash": "2a78e174",
       "needsInterop": false
     },
     "react-dom": {
       "src": "../../node_modules/react-dom/index.js",
       "file": "react-dom.js",
-      "fileHash": "dd8fdaf3",
+      "fileHash": "d9a758f1",
+      "needsInterop": true
+    },
+    "jszip": {
+      "src": "../../node_modules/jszip/dist/jszip.min.js",
+      "file": "jszip.js",
+      "fileHash": "0ec2d027",
       "needsInterop": true
     }
   },
   "chunks": {
-    "chunk-LJXWR6UH": {
-      "file": "chunk-LJXWR6UH.js"
+    "index.es-6GDYHXXE": {
+      "file": "index__es-6GDYHXXE.js"
     },
-    "chunk-65KY755N": {
-      "file": "chunk-65KY755N.js"
+    "chunk-C4PD6YIN": {
+      "file": "chunk-C4PD6YIN.js"
     },
-    "html2canvas.esm-VYPOCGSV": {
-      "file": "html2canvas__esm-VYPOCGSV.js"
+    "chunk-T4IDRJE6": {
+      "file": "chunk-T4IDRJE6.js"
     },
-    "purify.es-OO6ZHDLM": {
-      "file": "purify__es-OO6ZHDLM.js"
+    "chunk-KL4SNAOQ": {
+      "file": "chunk-KL4SNAOQ.js"
     },
-    "index.es-RHWSJCVK": {
-      "file": "index__es-RHWSJCVK.js"
+    "html2canvas.esm-NJG34EZE": {
+      "file": "html2canvas__esm-NJG34EZE.js"
     },
-    "chunk-Z54NHHXK": {
-      "file": "chunk-Z54NHHXK.js"
+    "purify.es-LDZXV3SS": {
+      "file": "purify__es-LDZXV3SS.js"
     },
-    "chunk-V4OQ3NZ2": {
-      "file": "chunk-V4OQ3NZ2.js"
+    "chunk-PLDDJCW6": {
+      "file": "chunk-PLDDJCW6.js"
     }
   }
 }

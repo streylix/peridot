@@ -1,6 +1,6 @@
 import {
   __esm
-} from "./chunk-V4OQ3NZ2.js";
+} from "./chunk-PLDDJCW6.js";
 
 // node_modules/html2canvas/dist/html2canvas.esm.js
 function __extends(d, b) {
@@ -7726,4 +7726,4 @@ html2canvas/dist/html2canvas.esm.js:
   PERFORMANCE OF THIS SOFTWARE.
   ***************************************************************************** *)
 */
-//# sourceMappingURL=html2canvas.esm-VYPOCGSV.js.map
+//# sourceMappingURL=html2canvas.esm-NJG34EZE.js.map

@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { CircleEllipsis, Lock, Pin, Gift, Trash2, Download, Edit2, FileText } from 'lucide-react';
-import { noteContentService } from '../utils/NoteContentService';
 import { passwordModalUtils } from '../utils/PasswordModalUtils';
 import { noteImportExportService } from '../utils/NoteImportExportService';
 import { FolderService } from '../utils/folderUtils';
@@ -81,7 +80,8 @@ const InfoMenu = ({
   const handleDownload = () => {
     if (isFolder) {
       try {
-        FolderService.downloadFolder(selectedItem, notes);
+        const preferredFileType = localStorage.getItem('preferredFileType') || 'json';
+        FolderService.downloadFolder(selectedItem, notes, preferredFileType);
       } catch (error) {
         console.error('Folder download failed:', error);
       }

@@ -400,6 +400,27 @@ class NoteImportExportService {
     return formattedContent;
   }
 
+  formatNoteContent(note, fileType) {
+    switch (fileType) {
+      case 'md':
+      case 'text':
+        return this.jsonToText(note.content);
+        
+      case 'json':
+        // Existing JSON formatting logic
+        return JSON.stringify({
+          id: note.id,
+          content: note.content,
+          dateModified: note.dateModified,
+          pinned: note.pinned,
+          locked: note.locked,
+        }, null, 2);
+  
+      default:
+        return note.content;
+    }
+  }
+
   /**
    * Handle JSON file import
    * @param {string} content - File content

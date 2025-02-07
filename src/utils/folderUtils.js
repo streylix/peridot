@@ -1,5 +1,7 @@
 import { storageService } from './StorageService';
+import { noteContentService } from './NoteContentService';
 import { noteImportExportService } from './NoteImportExportService';
+import JSZip from 'jszip';
 
 export class FolderService {
   static createFolder(name = 'Untitled Folder') {
@@ -21,29 +23,82 @@ export class FolderService {
     };
   }
 
-  static async downloadFolder(folder, notes) {
+
+  static async downloadFolder(folder, notes, fileType = 'json') {
     // Filter notes that belong to this folder
     const folderNotes = notes.filter(note => 
       note.parentFolderId === folder.id
     );
 
-    // Prepare folder object for download
-    const folderToDownload = {
-      ...folder,
-      items: folderNotes
-    };
+    // For JSON, include folder and its contents
+    if (fileType === 'json') {
+      const folderToDownload = {
+        ...folder,
+        items: folderNotes
+      };
 
+      try {
+        await noteImportExportService.downloadNote({
+          note: folderToDownload,
+          fileType: 'json',
+          isBackup: true
+        });
+        return;
+      } catch (error) {
+        console.error('Failed to download folder as JSON:', error);
+        throw error;
+      }
+    }
+
+    // For other file types, create a ZIP
+    const zip = new JSZip();
+    const folderName = this.extractFolderName(folder);
+
+    // Add each note to the ZIP
+    for (const note of folderNotes) {
+      try {
+        // Create a unique filename for each note
+        const noteTitle = noteContentService.getFirstLine(note.content)
+          .replace(/[^a-z0-9]/gi, '_')
+          .toLowerCase();
+        const fileName = `${noteTitle}.${fileType}`;
+
+        // Convert note to desired file type
+        const noteContent = await noteImportExportService.formatNoteContent(note, fileType);
+        
+        // Add to ZIP
+        zip.file(fileName, noteContent);
+      } catch (error) {
+        console.error(`Failed to process note for zip: ${note.id}`, error);
+      }
+    }
+
+    // Generate and download ZIP
     try {
-      await noteImportExportService.downloadNote({
-        note: folderToDownload,
-        fileType: 'json',
-        isBackup: true
-      });
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const zipFileName = `${folderName}_notes.zip`;
+      
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = zipFileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Failed to download folder:', error);
+      console.error('Failed to create ZIP file:', error);
       throw error;
     }
   }
+
+  static extractFolderName(folder) {
+    const matches = folder.content.match(/<div[^>]*>(.*?)<\/div>/);
+    return matches 
+      ? matches[1].replace(/[^a-z0-9]/gi, '_').toLowerCase() 
+      : 'untitled_folder';
+  }
+
 
   static async renameItem(item, newName) {
     if (item.locked) {
