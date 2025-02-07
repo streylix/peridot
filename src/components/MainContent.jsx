@@ -71,11 +71,16 @@ function MainContent({
     if (!note) return false;
 
     try {
+      const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true'
       const storedPassword = await passwordStorage.getPassword(note.id);
       
-      if (!storedPassword || password !== storedPassword) {
-        return false;
+      console.log("BYPASS:", verifyBypass);
+      if (!verifyBypass){
+        if ((!storedPassword || password !== storedPassword)) {
+          return false;
+        }
       }
+      console.log("BYPASSED!");
 
       // Attempt to decrypt the note
       const decryptResult = await decryptNote(note, password, false);

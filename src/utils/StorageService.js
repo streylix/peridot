@@ -252,6 +252,70 @@ class StorageService {
       throw error;
     }
   }
+
+  async getStorageInfo() {
+    console.log("StorageService - getStorageInfo() called");
+    try {
+      console.log("StorageService - starting initialization");
+      await this.init();
+      console.log("StorageService - initialization complete");
+      
+      console.log("StorageService - getting notes directory");
+      const notesDir = await this.root.getDirectoryHandle('notes', { create: true });
+      console.log("StorageService - notes directory obtained:", notesDir);
+      
+      const entries = [];
+      let totalSize = 0;
+  
+      console.log("StorageService - starting directory entries iteration");
+      for await (const [name, handle] of notesDir.entries()) {
+        console.log("StorageService - processing entry:", name);
+        try {
+          const file = await handle.getFile();
+          const content = await file.text();
+          entries.push({
+            name,
+            size: file.size,
+            lastModified: new Date(file.lastModified),
+            content: JSON.parse(content)
+          });
+          totalSize += file.size;
+          console.log("StorageService - processed entry:", name);
+        } catch (error) {
+          console.error("StorageService - error processing entry:", name, error);
+          entries.push({
+            name,
+            error: error.message
+          });
+        }
+      }
+      console.log("StorageService - finished processing entries");
+  
+      return {
+        totalSize: totalSize,
+        totalSizeInKB: (totalSize / 1024).toFixed(2),
+        entries: entries
+      };
+    } catch (error) {
+      console.error("StorageService - Critical error in getStorageInfo:", error);
+      throw error;
+    }
+  }
+
+  async checkStorageEstimate() {
+    try {
+      const estimate = await navigator.storage.estimate();
+      console.log("Storage estimate:", {
+        usage: `${(estimate.usage / 1024 / 1024).toFixed(2)} MB`,
+        quota: `${(estimate.quota / 1024 / 1024).toFixed(2)} MB`,
+        percentageUsed: `${((estimate.usage / estimate.quota) * 100).toFixed(2)}%`
+      });
+      return estimate;
+    } catch (error) {
+      console.error("Failed to get storage estimate:", error);
+      throw error;
+    }
+  }
 }
 
 export const storageService = new StorageService();

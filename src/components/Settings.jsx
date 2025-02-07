@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Modal, ItemPresets } from './Modal';
+import { Modal, ItemPresets, ItemComponents } from './Modal';
 import { storageService } from '../utils/StorageService';
 import { Sun, Moon, Bug, Save, Trash2, Upload, Monitor } from 'lucide-react';
 import { passwordStorage } from '../utils/PasswordStorageService';
 import { noteImportExportService } from '../utils/NoteImportExportService';
 import { noteSortingService } from '../utils/NoteSortingService';
+import StorageAnalyzer from './StorageAnalyzer';
+import StorageDiagnostics from './StorageDiagnostics';
+import StorageBar from './StorageBar';
+
 
 function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
   const fileInputRef = useRef(null);
@@ -19,11 +23,21 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
     localStorage.getItem('jsonAsEncrypted') === 'true'
   );
 
+  const [skipPasswordVerification, setSkipPasswordVerification] = useState(() =>
+    localStorage.getItem('skipPasswordVerification') === 'true'
+  );
+
   const handleEncryptedJsonChange = (event) => {
     const newValue = event.target.checked;
     setJsonAsEncrypted(newValue);
     localStorage.setItem('jsonAsEncrypted', newValue);
   };
+
+  const handleSkipPasswordVerificationChange = (event) => {
+    const newValue = event.target.checked;
+    setSkipPasswordVerification(newValue);
+    localStorage.setItem('skipPasswordVerification', newValue);
+  }
 
 
   const handleFileTypeChange = (newType) => {
@@ -135,6 +149,19 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
     }
   };
 
+  const handleForceClean = async () => {
+    if (window.confirm('WARNING: This will completely clear all OPFS storage. This cannot be undone. Continue?')) {
+      try {
+        await storageService.forceCleanStorage();
+        setNotes([]); // Clear notes from state
+        alert('Storage cleared successfully. Please refresh the page.');
+      } catch (error) {
+        console.error('Failed to clear storage:', error);
+        alert('Failed to clear storage: ' + error.message);
+      }
+    }
+  };
+
   const settingsSections = [
     {
       label: 'General',
@@ -230,11 +257,59 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
               onChange={handleImportNotes}
             />
           </ItemPresets.SUBSECTION>
-        }
+        },
+        {
+          content: <ItemPresets.SUBSECTION title="Security Debug">
+            <ItemPresets.TEXT_SWITCH
+              label="Disable internal password confirmation"
+              subtext="If enabled, the system will not verify that their password matches the internal stored password before trying to decrypt the note"
+              value={skipPasswordVerification}
+              onChange={handleSkipPasswordVerificationChange}
+            />
+          </ItemPresets.SUBSECTION>
+        },
+        {
+            content: <ItemPresets.SUBSECTION title="Storage Information">
+              <StorageAnalyzer />
+            </ItemPresets.SUBSECTION>
+        },
+        {
+          content:
+          <ItemComponents.SUBSECTION title={"OPFS"}>
+          <ItemPresets.SUBSECTION title="Storage Information">
+            <ItemPresets.TEXT_BUTTON
+              label="Check Storage Usage"
+              subtext={<StorageBar />}
+              buttonText="Check Usage"
+              onClick={async () => {
+                try {
+                  await storageService.checkStorageEstimate();
+                } catch (error) {
+                  alert(`Failed to check storage: ${error.message}`);
+                }
+              }}
+              />
+            
+            <StorageDiagnostics />
+          </ItemPresets.SUBSECTION>
+          </ItemComponents.SUBSECTION>
+        },
+        {
+          content: 
+          <ItemPresets.SUBSECTION title="Drastic Measures">
+            <ItemPresets.TEXT_BUTTON
+              label="Force Clean Storage"
+              subtext="WARNING: This will completely clear all OPFS data"
+              buttonText="Force Clean"
+              primary="warning"
+              onClick={handleForceClean}
+            />
+          </ItemPresets.SUBSECTION>
+        },
       ]
     }
   ];
-
+  
   if (!isOpen) return null;
 
   return (

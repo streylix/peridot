@@ -14,11 +14,6 @@ export const FolderItem = React.memo(({
   setNotes,
   children
 }) => {
-  // Remove local state for expansion, use folder's isOpen property
-  const toggleExpand = useCallback((e) => {
-    e.stopPropagation();
-    onSelect(folder.id);  // This will toggle the folder's open state
-  }, [onSelect, folder.id]);
 
   const title = useMemo(() => {
     const extractedTitle = folder.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1];
