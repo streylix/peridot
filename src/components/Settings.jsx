@@ -259,7 +259,7 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
           </ItemPresets.SUBSECTION>
         },
         {
-          content: <ItemPresets.SUBSECTION title="Security Debug">
+          content: <ItemPresets.SUBSECTION title="Security">
             <ItemPresets.TEXT_SWITCH
               label="Disable internal password confirmation"
               subtext="If enabled, the system will not verify that their password matches the internal stored password before trying to decrypt the note"

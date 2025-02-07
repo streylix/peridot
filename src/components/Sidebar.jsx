@@ -312,7 +312,9 @@ const Sidebar = React.forwardRef(({
   const filteredNotes = useMemo(() => {
     return noteSortingService.sortNotes(
       notes.filter(item => {
-        if (!searchTerm) return true;
+        // If it's a top-level item (no parent folder)
+        if (!searchTerm) return !item.parentFolderId;
+        
         const search = searchTerm.toLowerCase();
         
         // For folders
@@ -321,15 +323,14 @@ const Sidebar = React.forwardRef(({
           return title.toLowerCase().includes(search);
         }
         
-        // For notes (existing logic)
-        if (item.locked) {
-          const visibleTitle = item.visibleTitle || noteContentService.getFirstLine(item.content);
-          return visibleTitle.toLowerCase().includes(search);
+        // For top-level notes without a parent folder
+        if (!item.parentFolderId) {
+          const title = noteContentService.getFirstLine(item.content);
+          const content = noteContentService.getPreviewContent(item.content);
+          return title.toLowerCase().includes(search) || content.toLowerCase().includes(search);
         }
-        const title = noteContentService.getFirstLine(item.content);
-        item.visibleTitle = title;
-        const content = noteContentService.getPreviewContent(item.content);
-        return title.toLowerCase().includes(search) || content.toLowerCase().includes(search);
+        
+        return false;
       })
     );
   }, [notes, searchTerm, sortMethod]);
@@ -397,40 +398,29 @@ const Sidebar = React.forwardRef(({
       </div>
       
       <ul className="note-list">
-        {filteredNotes.map(item =>
-          FolderService.isFolder(item) ? (
-            <FolderItem
-              key={item.id}
-              folder={item}
-              isSelected={item.id === selectedId}
-              onSelect={handleItemSelect}
-              onNoteSelect={onNoteSelect}
-              onContextMenu={handleContextMenu}
-              setNotes={setNotes}
-            >
-              {/* Render folder contents/nested items */}
-              {item.items.map(nestedItem => (
-                <NoteItem
-                  className="folder-contents"
-                  key={nestedItem.id}
-                  note={nestedItem}
-                  parentFolder={item}
-                  isSelected={nestedItem.id === selectedId}
-                  onNoteSelect={onNoteSelect}
-                  onContextMenu={handleContextMenu}
-                />
-              ))}
-            </FolderItem>
-          ) : (
-            <NoteItem
-              key={item.id}
-              note={item}
-              isSelected={item.id === selectedId}
-              onNoteSelect={onNoteSelect}
-              onContextMenu={handleContextMenu}
-            />
-          )
-        )}
+      {filteredNotes.map(item => 
+        FolderService.isFolder(item) ? (
+          <FolderItem
+            key={item.id}
+            folder={item}
+            isSelected={item.id === selectedId}
+            onSelect={handleItemSelect}
+            onNoteSelect={onNoteSelect}
+            onContextMenu={handleContextMenu}
+            notes={notes.filter(note => note.parentFolderId === item.id)}
+            setNotes={setNotes}
+            selectedId={selectedId}
+          />
+        ) : (
+          <NoteItem
+            key={item.id}
+            note={item}
+            isSelected={item.id === selectedId}
+            onNoteSelect={onNoteSelect}
+            onContextMenu={handleContextMenu}
+          />
+        )
+      )}
       </ul>
 
       {/* Resize Handle */}

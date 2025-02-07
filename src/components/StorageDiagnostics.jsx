@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ItemComponents } from './Modal';
+import { ItemComponents, ItemPresets } from './Modal';
 
 const StorageDiagnostics = () => {
   const [results, setResults] = useState(null);
@@ -85,50 +85,44 @@ const StorageDiagnostics = () => {
 
   return (
     <div className="p-4">
-      <ItemComponents.BUTTON 
-        onClick={runDiagnostics}
-        className="mb-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-      >
-        Run Diagnostics
-      </ItemComponents.BUTTON>
-
-      {error && (
-        <div className="mb-4 p-4 bg-red-100 text-red-700 rounded">
-          Error: {error}
-        </div>
-      )}
-
-      {results && (
-        <div className="space-y-2">
-          <div className="font-semibold">Results:</div>
-          <div className={`flex items-center gap-2 ${results.storageAPI ? 'text-green-600' : 'text-red-600'}`}>
-            ● Storage API: {results.storageAPI ? 'Available' : 'Not Available'}
-          </div>
-          <div className={`flex items-center gap-2 ${results.getDirectory ? 'text-green-600' : 'text-red-600'}`}>
-            ● Get Directory: {results.getDirectory ? 'Working' : 'Failed'}
-          </div>
-          <div className={`flex items-center gap-2 ${results.createDirectory ? 'text-green-600' : 'text-red-600'}`}>
-            ● Create Directory: {results.createDirectory ? 'Working' : 'Failed'}
-          </div>
-          <div className={`flex items-center gap-2 ${results.writeFile ? 'text-green-600' : 'text-red-600'}`}>
-            ● Write File: {results.writeFile ? 'Working' : 'Failed'}
-          </div>
-          <div className={`flex items-center gap-2 ${results.readFile ? 'text-green-600' : 'text-red-600'}`}>
-            ● Read File: {results.readFile ? 'Working' : 'Failed'}
-          </div>
-          
-          {results.quota && (
-            <div className="mt-4">
-              <div className="font-semibold">Storage Usage:</div>
-              <div>Used: {results.quota.usage}MB</div>
-              <div>Total: {results.quota.quota}MB</div>
-              <div>Usage: {results.quota.percent}%</div>
+      <ItemPresets.TEXT_BUTTON
+        label={results ? "Results:" : (error ? "Error" : "Diagnostics")}
+        subtext={
+          results ? (
+            <div className="space-y-2">
+              <div className={`flex items-center gap-2 ${results.storageAPI ? 'text-green-600' : 'text-red-600'}`}>
+                ● Storage API: {results.storageAPI ? 'Available' : 'Not Available'}
+              </div>
+              <div className={`flex items-center gap-2 ${results.getDirectory ? 'text-green-600' : 'text-red-600'}`}>
+                ● Get Directory: {results.getDirectory ? 'Working' : 'Failed'}
+              </div>
+              <div className={`flex items-center gap-2 ${results.createDirectory ? 'text-green-600' : 'text-red-600'}`}>
+                ● Create Directory: {results.createDirectory ? 'Working' : 'Failed'}
+              </div>
+              <div className={`flex items-center gap-2 ${results.writeFile ? 'text-green-600' : 'text-red-600'}`}>
+                ● Write File: {results.writeFile ? 'Working' : 'Failed'}
+              </div>
+              <div className={`flex items-center gap-2 ${results.readFile ? 'text-green-600' : 'text-red-600'}`}>
+                ● Read File: {results.readFile ? 'Working' : 'Failed'}
+              </div>
+              {results.quota && (
+                <div className="mt-2">
+                  <div className="font-semibold">Storage Usage:</div>
+                  <div>Used: {results.quota.usage}MB</div>
+                  <div>Total: {results.quota.quota}MB</div>
+                  <div>Usage: {results.quota.percent}%</div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
+          ) : (
+            error || "No diagnostics run"
+          )
+        }
+        buttonText="Run Diagnostics"
+        onClick={runDiagnostics}
+      />
     </div>
   );
-};
+}
 
 export default StorageDiagnostics;

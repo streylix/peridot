@@ -1,7 +1,6 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import { ChevronRight, ChevronDown, Folder } from 'lucide-react';
+import React, { useCallback, useMemo } from 'react';
+import { ChevronRight, Folder, Pin, Lock } from 'lucide-react';
 import { FolderService } from '../utils/folderUtils';
-import { storageService } from '../utils/StorageService';
 import NoteItem from './NoteItem';
 
 export const FolderItem = React.memo(({
@@ -12,13 +11,18 @@ export const FolderItem = React.memo(({
   onNoteSelect,
   onContextMenu,
   setNotes,
-  children
+  notes = []
 }) => {
-
   const title = useMemo(() => {
     const extractedTitle = folder.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1];
     return extractedTitle || 'Untitled Folder';
   }, [folder.content]);
+
+  const toggleExpand = useCallback((e) => {
+    e.stopPropagation();
+    onSelect(folder.id);
+  }, [onSelect, folder.id]);
+
   const handleContextMenu = useCallback((e) => {
     e.preventDefault();
     onContextMenu(e, folder.id);
@@ -35,51 +39,38 @@ export const FolderItem = React.memo(({
           onSelect(folder.id);
         }}
       >
-        <div
+        <div 
           className="folder-header"
           data-expanded={folder.isOpen}
-          onClick={() => onSelect(folder.id)}
+          onClick={toggleExpand}
         >
-          <div
-            className="folder-expand-icon"
-          >
-            {folder.items && folder.items.length > 0 && <ChevronRight />}
+          <div className="folder-expand-icon">
+            {notes.length > 0 && <ChevronRight />}
           </div>
           <div className="folder-icon">
             <Folder size={20} />
           </div>
-          <div className="folder-title">
+          <div className="folder-title" style={{ flex: 1 }}>
             {title}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+            {folder.pinned && <Pin size={20} className="pin-indicator" />}
+            {folder.locked && <Lock size={20} className="lock-indicator" />}
           </div>
         </div>
       </li>
       
-      {folder.isOpen && folder.items && folder.items.length > 0 && (
-        <>
-          {folder.items.map(item =>
-            FolderService.isFolder(item) ? (
-              <FolderItem
-                key={item.id}
-                folder={item}
-                depth={depth + 1}
-                isSelected={isSelected}
-                onSelect={onSelect}
-                onNoteSelect={onNoteSelect}
-                onContextMenu={onContextMenu}
-                setNotes={setNotes}
-              />
-            ) : (
-              <NoteItem
-                key={item.id}
-                note={item}
-                depth={depth + 1}
-                isSelected={isSelected}
-                onNoteSelect={onNoteSelect}
-                onContextMenu={onContextMenu}
-              />
-            )
-          )}
-        </>
+      {folder.isOpen && notes.length > 0 && (
+        notes.map(note => (
+          <NoteItem
+            key={note.id}
+            note={note}
+            depth={depth + 1}
+            isSelected={isSelected}
+            onNoteSelect={onNoteSelect}
+            onContextMenu={onContextMenu}
+          />
+        ))
       )}
     </>
   );

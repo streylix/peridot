@@ -356,6 +356,7 @@
       align-items: center;
       min-width: fit-content;
       justify-content: flex-end;
+      gap: 8px;
     }
 
     .locked-window-switch {

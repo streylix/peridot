@@ -1,17 +1,48 @@
 import { storageService } from './StorageService';
+import { noteImportExportService } from './NoteImportExportService';
 
 export class FolderService {
-  static createFolder() {
+  static createFolder(name = 'Untitled Folder') {
     return {
       id: Date.now(),
-      content: '<div>Untitled Folder</div>',
+      content: `<div>${name}</div>`,
       dateModified: new Date().toISOString(),
       type: 'folder',
       pinned: false,
       locked: false,
-      items: [],
       isOpen: false
     };
+  }
+
+  static togglePin(folder) {
+    return {
+      ...folder,
+      pinned: !folder.pinned
+    };
+  }
+
+  static async downloadFolder(folder, notes) {
+    // Filter notes that belong to this folder
+    const folderNotes = notes.filter(note => 
+      note.parentFolderId === folder.id
+    );
+
+    // Prepare folder object for download
+    const folderToDownload = {
+      ...folder,
+      items: folderNotes
+    };
+
+    try {
+      await noteImportExportService.downloadNote({
+        note: folderToDownload,
+        fileType: 'json',
+        isBackup: true
+      });
+    } catch (error) {
+      console.error('Failed to download folder:', error);
+      throw error;
+    }
   }
 
   static async renameItem(item, newName) {

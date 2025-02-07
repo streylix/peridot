@@ -322,7 +322,7 @@ header.full-width{
 
 .note-item.active {
   background-color: #dcfaed;
-  border-left: 3px solid #0aa34f;
+  border-left: 3px solid #0aa34f !important;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
@@ -686,7 +686,8 @@ header.full-width{
   position: fixed;
   background-color: #fff;
   border: 1px solid #e0e0e0;
-  width: 150px;
+  width: auto;
+  min-width: 150px;
   border-radius: 4px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   z-index: 9999;
@@ -1165,7 +1166,6 @@ input[type="range"]:disabled::-moz-range-thumb {
 #child {
   margin-left: 24px;
   border-left: 1px solid grey;
-  width: calc(100% - 4.2vh);
 }
 
 .folder-contents > *::before {
@@ -1201,4 +1201,10 @@ input[type="range"]:disabled::-moz-range-thumb {
 .dark-mode .folder-contents::before,
 .dark-mode .folder-contents > *::before {
   background-color: rgba(255, 255, 255, 0.1);
+}
+
+.analyzer {
+  overflow: hidden;
+  text-wrap: nowrap;
+  text-overflow: ellipsis;
 }

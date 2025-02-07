@@ -130,14 +130,14 @@ function App() {
     });
   };
 
-  const togglePin = (noteId) => {
+  const togglePin = (itemId) => {
     setNotes(prevNotes => {
-      const updatedNotes = prevNotes.map(note => 
-        note.id === noteId 
-          ? { ...note, pinned: !note.pinned }
-          : note
+      const updatedNotes = prevNotes.map(item => 
+        item.id === itemId 
+          ? { ...item, pinned: !item.pinned }
+          : item
       );
-      return sortNotes(updatedNotes);
+      return noteSortingService.sortNotes(updatedNotes);
     });
   };
 

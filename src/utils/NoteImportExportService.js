@@ -412,52 +412,74 @@ class NoteImportExportService {
       const parsedContent = JSON.parse(content);
       const notesToProcess = Array.isArray(parsedContent) ? parsedContent : [parsedContent];
       const validNotes = [];
-      const invalidNotes = [];
+      const validFolders = [];
+      const invalidItems = [];
   
-      for (const note of notesToProcess) {
+      for (const item of notesToProcess) {
         try {
           // Basic validation - must be object with content
-          if (typeof note !== 'object' || note === null || !note.content) {
-            invalidNotes.push({ note, reason: 'Missing required content' });
+          if (typeof item !== 'object' || item === null || !item.content) {
+            invalidItems.push({ item, reason: 'Missing required content' });
             continue;
           }
   
-          // Create standardized note object with defaults
-          const processedNote = {
-            id: note.id || fileDate.getTime(),
-            content: note.content,
-            dateModified: note.dateModified || fileDate.toISOString(),
-            dateCreated: note.dateCreated || fileDate.toISOString(),
-            pinned: Boolean(note.pinned),
-            caretPosition: Number(note.caretPosition) || 0,
-            locked: Boolean(note.locked),
-            encrypted: Boolean(note.encrypted)
-          };
+          // Check if it's a folder
+          if (item.type === 'folder') {
+            const processedFolder = {
+              id: item.id || fileDate.getTime(),
+              content: item.content,
+              dateModified: item.dateModified || fileDate.toISOString(),
+              type: 'folder',
+              pinned: Boolean(item.pinned),
+              locked: Boolean(item.locked),
+              isOpen: Boolean(item.isOpen),
+              // Preserve items if present, otherwise default to empty array
+              items: item.items || []
+            };
   
-          // Optional encrypted note properties
-          if (note.encrypted) {
-            processedNote.keyParams = note.keyParams;
-            processedNote.iv = note.iv;
-            processedNote.visibleTitle = note.visibleTitle;
+            validFolders.push(processedFolder);
+          } else {
+            // Process as a note
+            const processedNote = {
+              id: item.id || fileDate.getTime(),
+              content: item.content,
+              dateModified: item.dateModified || fileDate.toISOString(),
+              dateCreated: item.dateCreated || fileDate.toISOString(),
+              pinned: Boolean(item.pinned),
+              caretPosition: Number(item.caretPosition) || 0,
+              parentFolderId: item.parentFolderId || null,
+              locked: Boolean(item.locked),
+              encrypted: Boolean(item.encrypted)
+            };
+  
+            // Optional encrypted note properties
+            if (item.encrypted) {
+              processedNote.keyParams = item.keyParams;
+              processedNote.iv = item.iv;
+              processedNote.visibleTitle = item.visibleTitle;
+            }
+  
+            validNotes.push(processedNote);
           }
-  
-          validNotes.push(processedNote);
-        } catch (noteError) {
-          invalidNotes.push({ note, reason: noteError.message });
+        } catch (itemError) {
+          invalidItems.push({ item, reason: itemError.message });
         }
       }
   
-      // If no valid notes were found, throw error
-      if (validNotes.length === 0) {
-        throw new Error(`No valid notes found in ${filename}`);
+      // Combine and return both folders and notes
+      const combinedItems = [...validFolders, ...validNotes];
+  
+      // If no valid items were found, throw error
+      if (combinedItems.length === 0) {
+        throw new Error(`No valid items found in ${filename}`);
       }
   
-      // Log warning for invalid notes
-      if (invalidNotes.length > 0) {
-        console.warn(`Skipped ${invalidNotes.length} invalid notes during import:`, invalidNotes);
+      // Log warning for invalid items
+      if (invalidItems.length > 0) {
+        console.warn(`Skipped ${invalidItems.length} invalid items during import:`, invalidItems);
       }
   
-      return validNotes;
+      return combinedItems;
     } catch (error) {
       throw new Error(`Invalid JSON format in ${filename}: ${error.message}`);
     }

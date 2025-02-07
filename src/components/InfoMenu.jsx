@@ -79,7 +79,15 @@ const InfoMenu = ({
   };
 
   const handleDownload = () => {
-    if (isFolder) return;
+    if (isFolder) {
+      try {
+        FolderService.downloadFolder(selectedItem, notes);
+      } catch (error) {
+        console.error('Folder download failed:', error);
+      }
+      setIsOpen(false);
+      return;
+    }
 
     if (!selectedItem) return;
 
@@ -118,39 +126,22 @@ const InfoMenu = ({
       id: Date.now(),
       content: '',
       dateModified: new Date().toISOString(),
-      type: 'note',
       pinned: false,
       caretPosition: 0,
       parentFolderId: selectedItem.id,
     };
   
     try {
-      // Save the new note
       await storageService.writeNote(newNote.id, newNote);
-  
-      // Update the folder to include the new note
-      const updatedFolder = {
-        ...selectedItem,
-        items: [...(selectedItem.items || []), newNote],
-        dateModified: new Date().toISOString()
-      };
-  
-      // Save the updated folder
-      await storageService.writeNote(selectedItem.id, updatedFolder);
-  
+      
       // Update notes in the parent component
-      setNotes(prevNotes => {
-        return prevNotes.map(item => 
-          item.id === selectedItem.id ? updatedFolder : 
-          item.id === newNote.id ? newNote : item
-        );
-      });
+      setNotes(prevNotes => [
+        ...prevNotes, 
+        newNote
+      ]);
   
-      // Select the new note using navigation
-      noteNavigation.push(newNote.id);
-  
-      setIsOpen(false);
-      if (onClose) onClose();
+      // Select the new note
+      onNoteSelect(newNote.id);
     } catch (error) {
       console.error('Failed to create note in folder:', error);
     }
@@ -188,7 +179,9 @@ const InfoMenu = ({
     },
     {
       icon: Pin,
-      label: isFolder ? 'Pin' : (selectedItem?.pinned ? 'Unpin' : 'Pin'),
+      label: isFolder 
+      ? (selectedItem?.pinned ? 'Unpin Folder' : 'Pin Folder') 
+      : (selectedItem?.pinned ? 'Unpin' : 'Pin'),
       onClick: () => {
         if (selectedItem) {
           onTogglePin(selectedItem.id);
@@ -196,7 +189,7 @@ const InfoMenu = ({
           if (onClose) onClose();
         }
       },
-      disabled: isFolder && !!selectedItem,
+      disabled: !selectedItem,
       show: true
     },
     {
@@ -214,9 +207,9 @@ const InfoMenu = ({
     },
     {
       icon: Download,
-      label: 'Download',
+      label: isFolder ? 'Download Folder' : 'Download',
       onClick: handleDownload,
-      disabled: isFolder && !!selectedItem,
+      disabled: !selectedItem,
       show: true
     },
     {
@@ -229,7 +222,7 @@ const InfoMenu = ({
           if (onClose) onClose();
         }
       },
-      disabled: isFolder && !!selectedItem,
+      disabled: !selectedItem,
       show: true
     }
   ];

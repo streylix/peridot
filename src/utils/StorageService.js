@@ -253,6 +253,18 @@ class StorageService {
     }
   }
 
+  async checkOPFSAvailability() {
+    try {
+      console.log("Checking OPFS availability");
+      const root = await navigator.storage.getDirectory();
+      console.log("OPFS root obtained:", root);
+      return true;
+    } catch (error) {
+      console.error("OPFS not available:", error);
+      return false;
+    }
+  }
+
   async getStorageInfo() {
     console.log("StorageService - getStorageInfo() called");
     try {
