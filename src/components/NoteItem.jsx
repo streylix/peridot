@@ -3,9 +3,10 @@ import { Pin, Lock } from 'lucide-react';
 import { noteContentService } from '../utils/NoteContentService';
 
 const NoteItem = React.memo(({
-  note, 
-  isSelected, 
-  onNoteSelect, 
+  note,
+  depth = 0,
+  isSelected,
+  onNoteSelect,
   onContextMenu,
 }) => {
   const title = useMemo(() => {
@@ -36,8 +37,10 @@ const NoteItem = React.memo(({
     <li
       className={`note-item ${isSelected ? 'active' : ''}`}
       data-testid="note-item"
+      id={`${depth > 0 ? 'child' : ''}`}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
+      data-depth={depth}
     >
       <div className="note-header">
         <div className="item-text" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>

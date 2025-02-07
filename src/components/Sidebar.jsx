@@ -9,6 +9,8 @@ import { noteUpdateService } from '../utils/NoteUpdateService';
 import { noteSortingService } from '../utils/NoteSortingService';
 import SortingButton from './SortingButton';
 import { noteImportExportService } from '../utils/NoteImportExportService';
+import { FolderService } from '../utils/folderUtils';
+import FolderItem from './FolderItem';
 
 const CustomTooltip = ({ children, content }) => (
   <div className="tooltip-container">
@@ -17,7 +19,7 @@ const CustomTooltip = ({ children, content }) => (
   </div>
 );
 
-const ActionButtons = ({ onCreateNote, onSortChange }) => (
+const ActionButtons = ({ onCreateNote, onCreateFolder, onSortChange }) => (
   <div className="flex justify-center items-center gap-4 w-full">
     <CustomTooltip content="Create new note">
       <button 
@@ -33,7 +35,7 @@ const ActionButtons = ({ onCreateNote, onSortChange }) => (
       <button 
         type="button"
         className="new-note-btn"
-        onClick={() => {}}
+        onClick={onCreateFolder}
       >
         <FolderPlus />
       </button>
@@ -270,6 +272,19 @@ const Sidebar = React.forwardRef(({
     }
   };
 
+  const createNewFolder = async () => {
+    const newFolder = FolderService.createFolder();
+  
+    try {
+      await storageService.writeNote(newFolder.id, newFolder);
+      setNotes(prevNotes => sortNotes([newFolder, ...prevNotes]));
+      onNoteSelect(newFolder.id);
+    } catch (error) {
+      console.error('Failed to create folder:', error);
+    }
+  };
+  
+
   const sortNotes = useCallback((notesToSort) => {
     return noteSortingService.sortNotes(notesToSort);
   }, []);
@@ -296,20 +311,54 @@ const Sidebar = React.forwardRef(({
 
   const filteredNotes = useMemo(() => {
     return noteSortingService.sortNotes(
-      notes.filter(note => {
+      notes.filter(item => {
         if (!searchTerm) return true;
         const search = searchTerm.toLowerCase();
-        if (note.locked) {
-          const visibleTitle = note.visibleTitle || noteContentService.getFirstLine(note.content);
+        
+        // For folders
+        if (FolderService.isFolder(item)) {
+          const title = item.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 'Untitled Folder';
+          return title.toLowerCase().includes(search);
+        }
+        
+        // For notes (existing logic)
+        if (item.locked) {
+          const visibleTitle = item.visibleTitle || noteContentService.getFirstLine(item.content);
           return visibleTitle.toLowerCase().includes(search);
         }
-        const title = noteContentService.getFirstLine(note.content);
-        note.visibleTitle = title;
-        const content = noteContentService.getPreviewContent(note.content);
+        const title = noteContentService.getFirstLine(item.content);
+        item.visibleTitle = title;
+        const content = noteContentService.getPreviewContent(item.content);
         return title.toLowerCase().includes(search) || content.toLowerCase().includes(search);
       })
     );
   }, [notes, searchTerm, sortMethod]);
+
+  const handleItemSelect = useCallback((itemId) => {
+    console.log("selecting: ", itemId);
+    const selectedItem = notes.find(item => item.id === itemId);
+    
+    if (FolderService.isFolder(selectedItem)) {
+      // If it's a folder, toggle its expanded state
+      const updatedNotes = notes.map(item => 
+        item.id === itemId 
+          ? { ...item, isOpen: !item.isOpen }
+          : item
+      );
+      
+      setNotes(updatedNotes);
+      
+      // Optionally save the updated folder state
+      storageService.writeNote(itemId, {
+        ...selectedItem,
+        isOpen: !selectedItem.isOpen
+      });
+    } else {
+      console.log("proceeding")
+      // For notes, proceed with normal selection
+      onNoteSelect(itemId);
+    }
+  }, [notes, onNoteSelect, setNotes]);
 
   const handleSortChange = useCallback((value) => {
     setNotes(prevNotes => noteSortingService.sortNotes(notes, value));
@@ -335,7 +384,7 @@ const Sidebar = React.forwardRef(({
         </div>
         <div className="search">
           <div className='sidebar-buttons'>
-            <ActionButtons onCreateNote={createNewNote} onSortChange={handleSortChange} />
+            <ActionButtons onCreateNote={createNewNote} onCreateFolder={createNewFolder} onSortChange={handleSortChange} />
           </div>
           <input
             type="search"
@@ -348,15 +397,40 @@ const Sidebar = React.forwardRef(({
       </div>
       
       <ul className="note-list">
-        {filteredNotes.map(note => (
-          <NoteItem
-            key={note.id}
-            note={note}
-            isSelected={note.id === selectedId}
-            onNoteSelect={onNoteSelect}
-            onContextMenu={handleContextMenu}
-          />
-        ))}
+        {filteredNotes.map(item =>
+          FolderService.isFolder(item) ? (
+            <FolderItem
+              key={item.id}
+              folder={item}
+              isSelected={item.id === selectedId}
+              onSelect={handleItemSelect}
+              onNoteSelect={onNoteSelect}
+              onContextMenu={handleContextMenu}
+              setNotes={setNotes}
+            >
+              {/* Render folder contents/nested items */}
+              {item.items.map(nestedItem => (
+                <NoteItem
+                  className="folder-contents"
+                  key={nestedItem.id}
+                  note={nestedItem}
+                  parentFolder={item}
+                  isSelected={nestedItem.id === selectedId}
+                  onNoteSelect={onNoteSelect}
+                  onContextMenu={handleContextMenu}
+                />
+              ))}
+            </FolderItem>
+          ) : (
+            <NoteItem
+              key={item.id}
+              note={item}
+              isSelected={item.id === selectedId}
+              onNoteSelect={onNoteSelect}
+              onContextMenu={handleContextMenu}
+            />
+          )
+        )}
       </ul>
 
       {/* Resize Handle */}
@@ -392,6 +466,7 @@ const Sidebar = React.forwardRef(({
           setDownloadNoteId={setDownloadNoteId}
           setPdfExportNote={setPdfExportNote}
           setIsPdfExportModalOpen={setIsPdfExportModalOpen}
+          setNotes={setNotes}
         />
       )}
     </div>

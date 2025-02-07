@@ -1125,3 +1125,80 @@ input[type="range"]:disabled::-moz-range-thumb {
 .sidebar-buttons {
   align-content: center;
 }
+
+
+.folder-item {
+  cursor: pointer;
+  position: relative;
+  display: block;
+  margin: 0;
+  margin-right: 10px;
+  border-radius: 4px;
+  padding: 0;
+}
+
+.folder-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  z-index: 10;
+}
+
+.folder-contents {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  display: block;
+}
+
+.folder-contents::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 12px;
+  width: 1px;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+#child {
+  margin-left: 24px;
+  border-left: 1px solid grey;
+  width: calc(100% - 4.2vh);
+}
+
+.folder-contents > *::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  width: 12px;
+  height: 1px;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.folder-expand-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  opacity: 0.6;
+  transform: rotate(0deg);
+  transition: transform 0.2s ease;
+}
+
+.folder-header[data-expanded="true"] .folder-expand-icon {
+  transform: rotate(90deg);
+}
+
+.folder-item .note-item,
+.folder-item .folder-item {
+  width: 100%;
+}
+
+/* Dark mode adjustments */
+.dark-mode .folder-contents::before,
+.dark-mode .folder-contents > *::before {
+  background-color: rgba(255, 255, 255, 0.1);
+}

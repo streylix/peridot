@@ -7,6 +7,8 @@ import GifModal from './components/GifModal';
 import PDFExportModal from './components/PDFExportModal';
 import MainContent from './components/MainContent.jsx';
 import PasswordModal from './components/PasswordModal.jsx';
+import RenameModal from './components/RenameModal.jsx';
+import { FolderService } from './utils/folderUtils.js';
 
 import { encryptNote, decryptNote, reEncryptNote, permanentlyUnlockNote } from './utils/encryption';
 import { passwordStorage } from './utils/PasswordStorageService';
@@ -16,7 +18,6 @@ import { noteUpdateService } from './utils/NoteUpdateService.js';
 import { passwordModalUtils } from './utils/PasswordModalUtils.js';
 import { noteImportExportService } from './utils/NoteImportExportService.js';
 import { noteSortingService } from './utils/NoteSortingService.js';
-import RenameModal from './components/RenameModal.jsx';
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -154,11 +155,25 @@ function App() {
     }
   };
 
+  const findNoteInNotes = (noteId, notes) => {
+    for (const item of notes) {
+      if (item.id === noteId) return item;
+      
+      if (FolderService.isFolder(item) && item.items) {
+        const foundInFolder = item.items.find(subItem => subItem.id === noteId);
+        console.log(foundInFolder)
+        if (foundInFolder) return foundInFolder;
+      }
+    }
+    return null;
+  };
+  
   const handleNoteSelect = (noteId) => {
-
-    const selectedNote = notes.find(note => note.id === noteId);
+    const selectedNote = findNoteInNotes(noteId, notes);
     
-    noteNavigation.push(noteId);
+    if (selectedNote) {
+      noteNavigation.push(noteId);
+    }
   };
 
   const handleBack = () => {

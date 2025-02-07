@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { CircleEllipsis, Lock, Pin, Gift, Trash2, Download, Edit2 } from 'lucide-react';
+import { CircleEllipsis, Lock, Pin, Gift, Trash2, Download, Edit2, FileText } from 'lucide-react';
 import { noteContentService } from '../utils/NoteContentService';
 import { passwordModalUtils } from '../utils/PasswordModalUtils';
 import { noteImportExportService } from '../utils/NoteImportExportService';
 import { FolderService } from '../utils/folderUtils';
-import RenameModal from './RenameModal';
+import { storageService } from '../utils/StorageService';
 
 const InfoMenu = ({ 
   selectedId,
@@ -14,8 +14,6 @@ const InfoMenu = ({
   onDeleteNote,
   onGifModalOpen,
   position = null,
-  onUnlockNote,
-  onLockNote,
   onClose,
   downloadNoteId,
   isDownloadable,
@@ -23,12 +21,14 @@ const InfoMenu = ({
   setDownloadNoteId,
   setPdfExportNote,
   setIsPdfExportModalOpen,
+  setNotes
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
 
   const selectedItem = notes.find(item => item.id === selectedId);
+  const isFolder = selectedItem && FolderService.isFolder(selectedItem);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -62,6 +62,8 @@ const InfoMenu = ({
   };
 
   const handleLockClick = () => {
+    if (isFolder) return;
+
     try {
       if (selectedItem?.locked) {
         passwordModalUtils.openUnlockModal(selectedItem.id, selectedItem);
@@ -77,6 +79,8 @@ const InfoMenu = ({
   };
 
   const handleDownload = () => {
+    if (isFolder) return;
+
     if (!selectedItem) return;
 
     if (selectedItem.locked) {
@@ -106,7 +110,60 @@ const InfoMenu = ({
     setIsOpen(false);
   };
 
+
+  const createNewNoteInFolder = async () => {
+    if (!isFolder) return;
+  
+    const newNote = {
+      id: Date.now(),
+      content: '',
+      dateModified: new Date().toISOString(),
+      type: 'note',
+      pinned: false,
+      caretPosition: 0,
+      parentFolderId: selectedItem.id,
+    };
+  
+    try {
+      // Save the new note
+      await storageService.writeNote(newNote.id, newNote);
+  
+      // Update the folder to include the new note
+      const updatedFolder = {
+        ...selectedItem,
+        items: [...(selectedItem.items || []), newNote],
+        dateModified: new Date().toISOString()
+      };
+  
+      // Save the updated folder
+      await storageService.writeNote(selectedItem.id, updatedFolder);
+  
+      // Update notes in the parent component
+      setNotes(prevNotes => {
+        return prevNotes.map(item => 
+          item.id === selectedItem.id ? updatedFolder : 
+          item.id === newNote.id ? newNote : item
+        );
+      });
+  
+      // Select the new note using navigation
+      noteNavigation.push(newNote.id);
+  
+      setIsOpen(false);
+      if (onClose) onClose();
+    } catch (error) {
+      console.error('Failed to create note in folder:', error);
+    }
+  };
+
   const menuItems = [
+    {
+      icon: FileText,
+      label: 'New Note',
+      onClick: createNewNoteInFolder,
+      disabled: !isFolder,
+      show: isFolder
+    },
     {
       icon: Edit2,
       label: 'Rename',
@@ -119,19 +176,19 @@ const InfoMenu = ({
           if (onClose) onClose();
         }
       },
-      disabled: !!selectedItem,
+      disabled: !selectedItem,
       show: true
     },
     {
       icon: Lock,
-      label: selectedItem?.locked ? 'Unlock' : 'Lock',
+      label: isFolder ? 'Lock' : (selectedItem?.locked ? 'Unlock' : 'Lock'),
       onClick: handleLockClick,
-      disabled: !!selectedItem,
+      disabled: isFolder && !!selectedItem,
       show: true
     },
     {
       icon: Pin,
-      label: selectedItem?.pinned ? 'Unpin' : 'Pin',
+      label: isFolder ? 'Pin' : (selectedItem?.pinned ? 'Unpin' : 'Pin'),
       onClick: () => {
         if (selectedItem) {
           onTogglePin(selectedItem.id);
@@ -139,26 +196,27 @@ const InfoMenu = ({
           if (onClose) onClose();
         }
       },
-      disabled: !!selectedItem,
+      disabled: isFolder && !!selectedItem,
       show: true
     },
     {
       icon: Gift,
       label: 'Add GIF',
       onClick: () => {
-        if (selectedItem && onGifModalOpen) {
+        if (selectedItem && !isFolder && onGifModalOpen) {
           onGifModalOpen();
           setIsOpen(false);
           if (onClose) onClose();
         }
       },
-      show: !position && !FolderService.isFolder(selectedItem) && !!selectedItem
+      show: !position && !FolderService.isFolder(selectedItem) && !!selectedItem,
+      disabled: isFolder && !!selectedItem,
     },
     {
       icon: Download,
       label: 'Download',
       onClick: handleDownload,
-      disabled: !!selectedItem,
+      disabled: isFolder && !!selectedItem,
       show: true
     },
     {
@@ -171,7 +229,7 @@ const InfoMenu = ({
           if (onClose) onClose();
         }
       },
-      disabled: !!selectedItem,
+      disabled: isFolder && !!selectedItem,
       show: true
     }
   ];
@@ -190,13 +248,13 @@ const InfoMenu = ({
         }}
       >
         {menuItems
-          .filter(item => item.show)
+          .filter(item => item.show !== false)
           .map((item, index) => (
             <button
               key={index}
-              className={`info-menu-button ${selectedItem ? '' : 'disabled'}`}
+              className={`info-menu-button ${item.disabled ? 'disabled' : ''}`}
               onClick={item.onClick}
-              disabled={!selectedItem}
+              disabled={item.disabled}
             >
               <item.icon className="info-menu-icon" />
               {item.label}

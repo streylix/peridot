@@ -9,7 +9,7 @@ export class FolderService {
       type: 'folder',
       pinned: false,
       locked: false,
-      items: [], // Child notes and folders
+      items: [],
       isOpen: false
     };
   }

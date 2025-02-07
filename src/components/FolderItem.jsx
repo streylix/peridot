@@ -2,112 +2,92 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { ChevronRight, ChevronDown, Folder } from 'lucide-react';
 import { FolderService } from '../utils/folderUtils';
 import { storageService } from '../utils/StorageService';
+import NoteItem from './NoteItem';
 
 export const FolderItem = React.memo(({
   folder,
+  depth = 0,
   isSelected,
   onSelect,
+  onNoteSelect,
   onContextMenu,
   setNotes,
   children
 }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState('');
+  // Remove local state for expansion, use folder's isOpen property
+  const toggleExpand = useCallback((e) => {
+    e.stopPropagation();
+    onSelect(folder.id);  // This will toggle the folder's open state
+  }, [onSelect, folder.id]);
 
   const title = useMemo(() => {
-    if (folder.locked && folder.title) {
-      return folder.title;
-    }
-    return folder.title.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 'Untitled Folder';
-  }, [folder.title]);
-
+    const extractedTitle = folder.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1];
+    return extractedTitle || 'Untitled Folder';
+  }, [folder.content]);
   const handleContextMenu = useCallback((e) => {
     e.preventDefault();
     onContextMenu(e, folder.id);
   }, [folder.id, onContextMenu]);
 
   return (
-    <div className={`folder-item ${isSelected ? 'active' : ''}`}>
-      <div
-        className="folder-header"
-        onClick={() => onSelect(folder.id)}
+    <>
+      <li
+        className={`folder-item ${isSelected ? 'active' : ''}`}
+        style={{ marginLeft: `${depth * 16}px` }}
         onContextMenu={handleContextMenu}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect(folder.id);
+        }}
       >
-        <div className="folder-icon">
-          {folder.isOpen ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
-          <Folder size={20} />
+        <div
+          className="folder-header"
+          data-expanded={folder.isOpen}
+          onClick={() => onSelect(folder.id)}
+        >
+          <div
+            className="folder-expand-icon"
+          >
+            {folder.items && folder.items.length > 0 && <ChevronRight />}
+          </div>
+          <div className="folder-icon">
+            <Folder size={20} />
+          </div>
+          <div className="folder-title">
+            {title}
+          </div>
         </div>
-        <div className="folder-title">
-          {title}
-        </div>
-      </div>
-      {folder.isOpen && children}
-    </div>
+      </li>
+      
+      {folder.isOpen && folder.items && folder.items.length > 0 && (
+        <>
+          {folder.items.map(item =>
+            FolderService.isFolder(item) ? (
+              <FolderItem
+                key={item.id}
+                folder={item}
+                depth={depth + 1}
+                isSelected={isSelected}
+                onSelect={onSelect}
+                onNoteSelect={onNoteSelect}
+                onContextMenu={onContextMenu}
+                setNotes={setNotes}
+              />
+            ) : (
+              <NoteItem
+                key={item.id}
+                note={item}
+                depth={depth + 1}
+                isSelected={isSelected}
+                onNoteSelect={onNoteSelect}
+                onContextMenu={onContextMenu}
+              />
+            )
+          )}
+        </>
+      )}
+    </>
   );
 });
-
-FolderItem.utils = {
-  async createFolder() {
-    const newFolder = {
-        id: Date.now(),
-        content: '',
-        dateModified: new Date().toISOString(),
-        pinned: false,
-        caretPosition: 0,
-        type: 'folder',
-        items: [],
-        isOpen: false
-    }
-
-    try {
-        await storageService.writeNote(newFolder.id, newFolder);
-        setNotes(prevNotes => sortNotes([newFolder, ...prevNotes]));
-        onNoteSelect(newFolder.id);
-      } catch (error) {
-        console.error('Failed to create note:', error);
-      }
-  },
-
-  isFolder(item) {
-    return item?.type === 'folder';
-  },
-
-  toggleFolder(folder) {
-    return {
-      ...folder,
-      isOpen: !folder.isOpen
-    };
-  },
-
-  addToFolder(folder, item) {
-    if (!folder.items.some(i => i.id === item.id)) {
-      return {
-        ...folder,
-        items: [...folder.items, item],
-        dateModified: new Date().toISOString()
-      };
-    }
-    return folder;
-  },
-
-  removeFromFolder(folder, itemId) {
-    return {
-      ...folder,
-      items: folder.items.filter(item => item.id !== itemId),
-      dateModified: new Date().toISOString()
-    };
-  },
-
-  async deleteFolder(folder) {
-    for (const item of folder.items) {
-      if (this.isFolder(item)) {
-        await this.deleteFolder(item);
-      } else {
-        await storageService.deleteNote(item.id);
-      }
-    }
-    await storageService.deleteNote(folder.id);
-  }
-};
 
 export default FolderItem;
