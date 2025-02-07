@@ -1208,3 +1208,28 @@ input[type="range"]:disabled::-moz-range-thumb {
   text-wrap: nowrap;
   text-overflow: ellipsis;
 }
+
+.folder-item.drag-over {
+  background: rgba(10, 163, 79, 0.1);
+  border: 2px dashed #0aa34f;
+}
+
+.dark-mode .folder-item.drag-over {
+  background: rgba(28, 122, 67, 0.1);
+  border: 2px dashed #1c7a43;
+}
+
+.folder-item[draggable="true"],
+.note-item[draggable="true"] {
+  cursor: grab;
+}
+
+.folder-item[draggable="true"]:active,
+.note-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.note-item, .folder-item {
+  transition: all 0.2s ease;
+  user-select: none;
+}

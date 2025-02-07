@@ -11,6 +11,11 @@ v0.12:
 ➕ Improved Sidebar
     ✅ Filtering notes
     ➕ Folders
+        ➕ Set custom folder color
+        ➕ click and drag
+        ➕ lock folders
+        ➕ search in folders
+        ➕ folders in folders
     ✅ Resizable
     ✅ Accepts click+drag txt/json/pdf/etc files as "import"
 

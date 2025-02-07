@@ -1,9 +1,9 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { ChevronRight, Folder, Pin, Lock } from 'lucide-react';
-import { FolderService } from '../utils/folderUtils';
 import NoteItem from './NoteItem';
+import { storageService } from '../utils/StorageService';
 
-export const FolderItem = React.memo(({
+const FolderItem = React.memo(({
   folder,
   depth = 0,
   isSelected,
@@ -11,8 +11,28 @@ export const FolderItem = React.memo(({
   onNoteSelect,
   onContextMenu,
   setNotes,
-  notes = []
+  selectedId,
+  notes,
+  folderNotes = []
 }) => {
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDragStart = (e) => {
+    e.dataTransfer.setData('text/plain', JSON.stringify({
+      id: folder.id,
+      type: 'folder'
+    }));
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+
   const title = useMemo(() => {
     const extractedTitle = folder.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1];
     return extractedTitle || 'Untitled Folder';
@@ -28,11 +48,42 @@ export const FolderItem = React.memo(({
     onContextMenu(e, folder.id);
   }, [folder.id, onContextMenu]);
 
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    const data = e.dataTransfer.getData('text/plain');
+    if (!data) return;
+
+    const { id } = JSON.parse(data);
+    const draggedItem = notes.find(n => n.id === id);
+    if (!draggedItem) return;
+    
+    draggedItem.parentFolderId = folder.id;
+    draggedItem.dateModified = new Date().toISOString();
+
+    setNotes(prevNotes => prevNotes.map(note => 
+      note.id === id ? draggedItem : note
+    ));
+
+    try {
+      await storageService.writeNote(id, draggedItem);
+    } catch (error) {
+      console.error('Failed to update note:', error);
+    }
+  };
+
+
   return (
     <>
       <li
-        className={`folder-item ${isSelected ? 'active' : ''}`}
+        className={`folder-item ${isSelected ? 'active' : ''} ${isDragOver ? 'drag-over' : ''}`}
         style={{ marginLeft: `${depth * 16}px` }}
+        draggable
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         onContextMenu={handleContextMenu}
         onClick={(e) => {
           e.stopPropagation();
@@ -45,7 +96,7 @@ export const FolderItem = React.memo(({
           onClick={toggleExpand}
         >
           <div className="folder-expand-icon">
-            {notes.length > 0 && <ChevronRight />}
+            {folderNotes.length > 0 && <ChevronRight />}
           </div>
           <div className="folder-icon">
             <Folder size={20} />
@@ -60,13 +111,13 @@ export const FolderItem = React.memo(({
         </div>
       </li>
       
-      {folder.isOpen && notes.length > 0 && (
-        notes.map(note => (
+      {folder.isOpen && folderNotes.length > 0 && (
+        folderNotes.map(note => (
           <NoteItem
             key={note.id}
             note={note}
             depth={depth + 1}
-            isSelected={isSelected}
+            isSelected={note.id === selectedId}
             onNoteSelect={onNoteSelect}
             onContextMenu={onContextMenu}
           />

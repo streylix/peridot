@@ -7,8 +7,15 @@ const NoteItem = React.memo(({
   depth = 0,
   isSelected,
   onNoteSelect,
-  onContextMenu,
+  onContextMenu
 }) => {
+  const handleDragStart = (e) => {
+    e.dataTransfer.setData('text/plain', JSON.stringify({
+      id: note.id,
+      type: 'note'
+    }));
+  };
+
   const title = useMemo(() => {
     if (note.locked && note.visibleTitle) {
       return note.visibleTitle;
@@ -36,11 +43,11 @@ const NoteItem = React.memo(({
   return (
     <li
       className={`note-item ${isSelected ? 'active' : ''}`}
-      data-testid="note-item"
-      id={`${depth > 0 ? 'child' : ''}`}
-      onClick={handleClick}
-      onContextMenu={handleContextMenu}
-      data-depth={depth}
+      style={{ marginLeft: `${depth * 16}px` }}
+      draggable
+      onDragStart={handleDragStart}
+      onContextMenu={(e) => onContextMenu(e, note.id)}
+      onClick={() => onNoteSelect(note.id)}
     >
       <div className="note-header">
         <div className="item-text" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>

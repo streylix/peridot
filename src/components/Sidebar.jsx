@@ -75,9 +75,25 @@ const Sidebar = React.forwardRef(({
   const MAX_WIDTH_PERCENTAGE = 75;
 
   const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(true);
+    const hasFiles = Array.from(e.dataTransfer.types).includes('Files');
+  
+    if (hasFiles) {
+      const items = Array.from(e.dataTransfer.items);
+      const hasValidFile = items.some(item => {
+        return item.kind === 'file' && [
+          'application/json',
+          'text/markdown',
+          'text/x-markdown', 
+          'text/plain'
+        ].includes(item.type);
+      });
+  
+      if (hasValidFile) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(true);
+      }
+    }
   };
 
   const handleDragLeave = (e) => {
@@ -240,6 +256,32 @@ const Sidebar = React.forwardRef(({
     }
   }));
 
+  const handleSidebarDrop = async (e) => {
+    e.preventDefault();
+    // Only handle drops on the sidebar itself, not its children
+    if (e.target !== e.currentTarget) return;
+    
+    try {
+      const data = e.dataTransfer.getData('text/plain');
+      const { id } = JSON.parse(data);
+      const draggedItem = notes.find(n => n.id === id);
+      
+      if (!draggedItem) return;
+      
+      // Remove parentFolderId to move out of folder
+      draggedItem.parentFolderId = null;
+      draggedItem.dateModified = new Date().toISOString();
+  
+      setNotes(prevNotes => prevNotes.map(note => 
+        note.id === id ? draggedItem : note
+      ));
+  
+      await storageService.writeNote(id, draggedItem);
+    } catch (error) {
+      console.error('Failed to move item:', error);
+    }
+  };
+
   const handleSearchChange = useCallback((e) => {
     setSearchTerm(e.target.value);
   }, []);
@@ -397,7 +439,11 @@ const Sidebar = React.forwardRef(({
         </div>
       </div>
       
-      <ul className="note-list">
+      <ul 
+        className="note-list"
+        onDrop={handleSidebarDrop}
+        onDragOver={(e) => e.preventDefault()}
+      >
       {filteredNotes.map(item => 
         FolderService.isFolder(item) ? (
           <FolderItem
@@ -407,7 +453,8 @@ const Sidebar = React.forwardRef(({
             onSelect={handleItemSelect}
             onNoteSelect={onNoteSelect}
             onContextMenu={handleContextMenu}
-            notes={notes.filter(note => note.parentFolderId === item.id)}
+            notes={notes}
+            folderNotes={notes.filter(note => note.parentFolderId === item.id)}
             setNotes={setNotes}
             selectedId={selectedId}
           />
