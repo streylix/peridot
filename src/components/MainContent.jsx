@@ -21,9 +21,25 @@ function MainContent({
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(true);
+    const hasFiles = Array.from(e.dataTransfer.types).includes('Files');
+  
+    if (hasFiles) {
+      const items = Array.from(e.dataTransfer.items);
+      const hasValidFile = items.some(item => {
+        return item.kind === 'file' && [
+          'application/json',
+          'text/markdown',
+          'text/x-markdown', 
+          'text/plain'
+        ].includes(item.type);
+      });
+  
+      if (hasValidFile) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(true);
+      }
+    }
   };
 
   const handleDragLeave = (e) => {
@@ -45,7 +61,7 @@ function MainContent({
 
     if (files.length > 0) {
       try {
-        const results = await noteImportExportService.importNotes(files, {
+        await noteImportExportService.importNotes(files, {
           openLastImported: true,
           setSelectedId: onNoteSelect,
           setNotes,

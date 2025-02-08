@@ -354,8 +354,10 @@ const Sidebar = React.forwardRef(({
   const filteredNotes = useMemo(() => {
     return noteSortingService.sortNotes(
       notes.filter(item => {
-        // If it's a top-level item (no parent folder)
-        if (!searchTerm) return !item.parentFolderId;
+        if (!searchTerm) {
+          // If no search term, only show top-level items without a parent folder
+          return !item.parentFolderId;
+        }
         
         const search = searchTerm.toLowerCase();
         
@@ -365,14 +367,16 @@ const Sidebar = React.forwardRef(({
           return title.toLowerCase().includes(search);
         }
         
-        // For top-level notes without a parent folder
-        if (!item.parentFolderId) {
-          const title = noteContentService.getFirstLine(item.content);
-          const content = noteContentService.getPreviewContent(item.content);
-          return title.toLowerCase().includes(search) || content.toLowerCase().includes(search);
-        }
+        // For notes - check if it matches the search term (and if locked, search for the title)
+        const title = (item.locked ? item.visibleTitle : noteContentService.getFirstLine(item.content));
+        const content = noteContentService.getPreviewContent(item.content);
         
-        return false;
+        return title.toLowerCase().includes(search) || 
+               content.toLowerCase().includes(search) ||
+               // Include notes within folders that match the search term
+               (item.parentFolderId && 
+                (title.toLowerCase().includes(search) || 
+                 content.toLowerCase().includes(search)));
       })
     );
   }, [notes, searchTerm, sortMethod]);

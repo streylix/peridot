@@ -1,4 +1,5 @@
 import { noteContentService } from './NoteContentService';
+import { FolderService } from './folderUtils';
 
 class NoteSortingService {
   constructor() {
@@ -18,7 +19,6 @@ class NoteSortingService {
 
   setSortMethod(method) {
     localStorage.setItem('sortMethod', method);
-    // Reset filtered notes when switching to non-filter sort
     if (method !== 'locked' && method !== 'unlocked') {
       this.lastFilteredNotes = null;
     }
@@ -26,24 +26,42 @@ class NoteSortingService {
 
   sortNotes(notes, method = this.getSortMethod()) {
     if (!notes || notes.length === 0) return [];
-    
     let workingNotes = [...notes];
-    
+
+    // Always sort folders first
+    workingNotes.sort((a, b) => {
+      if (FolderService.isFolder(a) && !FolderService.isFolder(b)) return -1;
+      if (!FolderService.isFolder(a) && FolderService.isFolder(b)) return 1;
+      return 0;
+    });
+
+    // Split into folders and non-folders
+    const folders = workingNotes.filter(n => FolderService.isFolder(n));
+    const nonFolders = workingNotes.filter(n => !FolderService.isFolder(n));
+
+    // Sort each group
+    const sortedNonFolders = this.applySortMethod(nonFolders, method);
+    const sortedFolders = this.applySortMethod(folders, method);
+
+    return [...sortedFolders, ...sortedNonFolders];
+  }
+
+  applySortMethod(notes, method) {
     switch (method) {
       case 'alpha-asc':
-        return this.sortByAlpha(workingNotes, true);
+        return this.sortByAlpha(notes, true);
       case 'alpha-desc':
-        return this.sortByAlpha(workingNotes, false);
+        return this.sortByAlpha(notes, false);
       case 'dateModified-desc':
-        return this.sortByDateModified(workingNotes, false);
+        return this.sortByDateModified(notes, false);
       case 'dateModified-asc':
-        return this.sortByDateModified(workingNotes, true);
+        return this.sortByDateModified(notes, true);
       case 'dateCreated-desc':
-        return this.sortByDateCreated(workingNotes, false);
+        return this.sortByDateCreated(notes, false);
       case 'dateCreated-asc':
-        return this.sortByDateCreated(workingNotes, true);
+        return this.sortByDateCreated(notes, true);
       default:
-        return this.sortByDateModified(workingNotes, false);
+        return this.sortByDateModified(notes, false);
     }
   }
 
@@ -53,14 +71,18 @@ class NoteSortingService {
         return a.pinned ? -1 : 1;
       }
 
-      const titleA = a.locked ? 
-        (a.visibleTitle || noteContentService.getFirstLine(a.content)) : 
-        noteContentService.getFirstLine(a.content);
-      
-      const titleB = b.locked ? 
-        (b.visibleTitle || noteContentService.getFirstLine(b.content)) : 
-        noteContentService.getFirstLine(b.content);
+      const getTitle = item => {
+        if (FolderService.isFolder(item)) {
+          return item.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 'Untitled Folder';
+        }
+        return item.locked ? 
+          (item.visibleTitle || noteContentService.getFirstLine(item.content)) :
+          noteContentService.getFirstLine(item.content);
+      };
 
+      const titleA = getTitle(a);
+      const titleB = getTitle(b);
+      
       return ascending ? 
         titleA.localeCompare(titleB) : 
         titleB.localeCompare(titleA);
@@ -72,8 +94,8 @@ class NoteSortingService {
       if (a.pinned !== b.pinned) {
         return a.pinned ? -1 : 1;
       }
-      return ascending ? 
-        new Date(a.dateModified) - new Date(b.dateModified) : 
+      return ascending ?
+        new Date(a.dateModified) - new Date(b.dateModified) :
         new Date(b.dateModified) - new Date(a.dateModified);
     });
   }

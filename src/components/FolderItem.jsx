@@ -2,16 +2,17 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { ChevronRight, Folder, Pin, Lock } from 'lucide-react';
 import NoteItem from './NoteItem';
 import { storageService } from '../utils/StorageService';
+import { FolderService } from '../utils/folderUtils';
 
 const FolderItem = React.memo(({
   folder,
   depth = 0,
+  selectedId,
   isSelected,
   onSelect,
   onNoteSelect,
   onContextMenu,
   setNotes,
-  selectedId,
   notes,
   folderNotes = []
 }) => {
@@ -55,10 +56,11 @@ const FolderItem = React.memo(({
     const data = e.dataTransfer.getData('text/plain');
     if (!data) return;
 
-    const { id } = JSON.parse(data);
+    const { id, type } = JSON.parse(data);
     const draggedItem = notes.find(n => n.id === id);
-    if (!draggedItem) return;
+    if (!draggedItem || draggedItem.id === folder.id) return;
     
+    // If dragging a folder, maintain its type
     draggedItem.parentFolderId = folder.id;
     draggedItem.dateModified = new Date().toISOString();
 
@@ -69,7 +71,7 @@ const FolderItem = React.memo(({
     try {
       await storageService.writeNote(id, draggedItem);
     } catch (error) {
-      console.error('Failed to update note:', error);
+      console.error('Failed to update item:', error);
     }
   };
 
@@ -112,15 +114,38 @@ const FolderItem = React.memo(({
       </li>
       
       {folder.isOpen && folderNotes.length > 0 && (
-        folderNotes.map(note => (
-          <NoteItem
-            key={note.id}
-            note={note}
-            depth={depth + 1}
-            isSelected={note.id === selectedId}
-            onNoteSelect={onNoteSelect}
-            onContextMenu={onContextMenu}
-          />
+          [...folderNotes]
+          .sort((a, b) => {
+            // Sort folders before notes
+            if (FolderService.isFolder(a) && !FolderService.isFolder(b)) return -1;
+            if (!FolderService.isFolder(a) && FolderService.isFolder(b)) return 1;
+            return 0;
+          })
+          .map(item => (
+          FolderService.isFolder(item) ? (
+            <FolderItem
+              key={item.id}
+              folder={item}
+              selectedId={selectedId}
+              isSelected={item.id === selectedId}
+              onSelect={onSelect}
+              onNoteSelect={onNoteSelect}
+              onContextMenu={onContextMenu}
+              setNotes={setNotes}
+              notes={notes}
+              folderNotes={notes.filter(note => note.parentFolderId === item.id)}
+              depth={depth + 1}
+            />
+          ) : (
+            <NoteItem
+              key={item.id}
+              note={item}
+              depth={depth + 1}
+              isSelected={item.id === selectedId}
+              onNoteSelect={onNoteSelect}
+              onContextMenu={onContextMenu}
+            />
+          )
         ))
       )}
     </>

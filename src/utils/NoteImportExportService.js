@@ -34,6 +34,7 @@ class NoteImportExportService {
   }
 
   jsonToText(content) {
+    console.log(content)
     content = content.replace(/<\/div>/gi, '\n');
     content = content.replace(/<br\s*\/?>/gi, '');
     let lines = content.split('\n');
@@ -201,7 +202,22 @@ class NoteImportExportService {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `notes_backup_${new Date().toISOString().split('T')[0]}.json`;
+  
+        // If it's a backup from settings, use backup naming
+        // Otherwise, use the folder name
+        let fileName;
+        if (isBackup) {
+          fileName = `notes_backup_${new Date().toISOString().split('T')[0]}.json`;
+        } else {
+          // Find the folder (should be first item in array)
+          const folder = note.find(item => item.type === 'folder');
+          const folderName = folder ? 
+            (folder.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 'folder') : 
+            'folder';
+          fileName = `${folderName}.json`;
+        }
+        
+        a.download = fileName;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -404,10 +420,11 @@ class NoteImportExportService {
     switch (fileType) {
       case 'md':
       case 'text':
-        return this.jsonToText(note.content);
-        
+        if (!note.locked){
+          return this.jsonToText(note.content);
+        }
+
       case 'json':
-        // Existing JSON formatting logic
         return JSON.stringify({
           id: note.id,
           content: note.content,
@@ -436,6 +453,7 @@ class NoteImportExportService {
       const validFolders = [];
       const invalidItems = [];
   
+      // First pass: Process all items and separate folders from notes
       for (const item of notesToProcess) {
         try {
           // Basic validation - must be object with content
@@ -454,8 +472,7 @@ class NoteImportExportService {
               pinned: Boolean(item.pinned),
               locked: Boolean(item.locked),
               isOpen: Boolean(item.isOpen),
-              // Preserve items if present, otherwise default to empty array
-              items: item.items || []
+              parentFolderId: item.parentFolderId || null
             };
   
             validFolders.push(processedFolder);
@@ -486,6 +503,17 @@ class NoteImportExportService {
           invalidItems.push({ item, reason: itemError.message });
         }
       }
+  
+      // Create a map of folder IDs to ensure parent folders exist
+      const folderMap = new Map(validFolders.map(folder => [folder.id, folder]));
+  
+      // Verify and fix parentFolderId references
+      [...validNotes, ...validFolders].forEach(item => {
+        if (item.parentFolderId && !folderMap.has(item.parentFolderId)) {
+          // If parent folder doesn't exist in the import, remove the reference
+          item.parentFolderId = null;
+        }
+      });
   
       // Combine and return both folders and notes
       const combinedItems = [...validFolders, ...validNotes];

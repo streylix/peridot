@@ -1,4 +1,11 @@
 current version:
+v0.12.6:
+- Note Folders v1
+    - Organize notes in folders
+    - Download folders as zip files containing the notes downloaded to the desired file type
+        - (Still WIP)
+    - Pin folders
+
 v0.12.5:
 - Sort notes
     - Sort by A-Z (Z-A)

@@ -25,23 +25,51 @@ export class FolderService {
 
 
   static async downloadFolder(folder, notes, fileType = 'json') {
-    // Filter notes that belong to this folder
-    const folderNotes = notes.filter(note => 
-      note.parentFolderId === folder.id
-    );
+    const getFolderContents = (folderId) => {
+      const contents = notes.filter(item => item.parentFolderId === folderId);
+      return contents.map(item => {
+        if (this.isFolder(item)) {
+          return {
+            ...item,
+            items: getFolderContents(item.id)
+          };
+        }
+        return item;
+      });
+    };
 
-    // For JSON, include folder and its contents
-    if (fileType === 'json') {
-      const folderToDownload = {
-        ...folder,
-        items: folderNotes
-      };
-
+    // jsonify the folder if the option is 'pdf' as the "default option"
+    if (fileType === 'json' || fileType == 'pdf') {
       try {
+        // Get all items in this folder
+        const folderContents = getFolderContents(folder.id);
+        
+        // Create an array to hold all notes and folders
+        const allItems = [folder]; // Start with the parent folder
+        
+        // Helper function to flatten the folder structure
+        const flattenContents = (items) => {
+          items.forEach(item => {
+            if (this.isFolder(item)) {
+              const { items: subItems, ...folderWithoutItems } = item;
+              allItems.push(folderWithoutItems);
+              if (subItems) {
+                flattenContents(subItems);
+              }
+            } else {
+              allItems.push(item);
+            }
+          });
+        };
+  
+        // Flatten the folder structure into array
+        flattenContents(folderContents);
+  
+        // Now download as array of notes/folders
         await noteImportExportService.downloadNote({
-          note: folderToDownload,
+          note: allItems,
           fileType: 'json',
-          isBackup: true
+          isBackup: false
         });
         return;
       } catch (error) {
@@ -49,34 +77,48 @@ export class FolderService {
         throw error;
       }
     }
-
-    // For other file types, create a ZIP
+  
+    // For md/txt, create ZIP with folder structure
     const zip = new JSZip();
-    const folderName = this.extractFolderName(folder);
-
-    // Add each note to the ZIP
-    for (const note of folderNotes) {
-      try {
-        // Create a unique filename for each note
-        const noteTitle = noteContentService.getFirstLine(note.content)
-          .replace(/[^a-z0-9]/gi, '_')
-          .toLowerCase();
-        const fileName = `${noteTitle}.${fileType}`;
-
-        // Convert note to desired file type
-        const noteContent = await noteImportExportService.formatNoteContent(note, fileType);
-        
-        // Add to ZIP
-        zip.file(fileName, noteContent);
-      } catch (error) {
-        console.error(`Failed to process note for zip: ${note.id}`, error);
-      }
-    }
-
+    const rootFolderName = folder.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 'folder';
+    
+    // Create the root folder first
+    const rootFolder = zip.folder(rootFolderName);
+    
+    const addToZip = (items, parentFolder) => {
+      items.forEach(item => {
+        if (this.isFolder(item)) {
+          const folderName = item.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 'Untitled Folder';
+          // Create new folder inside the parent folder
+          const newFolder = parentFolder.folder(folderName);
+          const folderContents = notes.filter(n => n.parentFolderId === item.id);
+          addToZip(folderContents, newFolder);
+        } else {
+          // If note is locked, download as encrypted JSON
+          if (item.locked && item.encrypted) {
+            const jsonContent = JSON.stringify(item, null, 2);
+            const title = item.visibleTitle;
+            parentFolder.file(`${title}.json`, jsonContent);
+          } else {
+            // Convert note to desired file type
+            const noteContent = noteImportExportService.formatNoteContent(item, fileType);
+            const title = noteContentService.getFirstLine(item.content)
+              .replace(/[^a-z0-9]/gi, '_')
+              .toLowerCase();
+            parentFolder.file(`${title}.${fileType}`, noteContent);
+          }
+        }
+      });
+    };
+  
+    // Start adding contents to the root folder
+    const rootContents = notes.filter(n => n.parentFolderId === folder.id);
+    addToZip(rootContents, rootFolder);
+  
     // Generate and download ZIP
     try {
       const zipBlob = await zip.generateAsync({ type: 'blob' });
-      const zipFileName = `${folderName}_notes.zip`;
+      const zipFileName = `${rootFolderName}.zip`;
       
       const url = URL.createObjectURL(zipBlob);
       const a = document.createElement('a');
@@ -87,7 +129,7 @@ export class FolderService {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Failed to create ZIP file:', error);
+      console.error('Failed to create ZIP:', error);
       throw error;
     }
   }

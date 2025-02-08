@@ -1,6 +1,6 @@
 ➕✅
 current version: unreleased
-version#: 0.12.1
+version#: 0.12.6
 
 v0.11:
 ✅ Better localstorage (OPFS)
@@ -12,10 +12,10 @@ v0.12:
     ✅ Filtering notes
     ➕ Folders
         ➕ Set custom folder color
-        ➕ click and drag
+        ✅ click and drag
         ➕ lock folders
         ➕ search in folders
-        ➕ folders in folders
+        ✅ folders in folders
     ✅ Resizable
     ✅ Accepts click+drag txt/json/pdf/etc files as "import"
 
