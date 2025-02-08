@@ -80,12 +80,15 @@ const Sidebar = React.forwardRef(({
     if (hasFiles) {
       const items = Array.from(e.dataTransfer.items);
       const hasValidFile = items.some(item => {
-        return item.kind === 'file' && [
+        return item.kind === 'file' && ([
           'application/json',
           'text/markdown',
           'text/x-markdown', 
-          'text/plain'
-        ].includes(item.type);
+          'text/plain',
+          'application/zip',
+          'application/x-zip-compressed'
+        ].includes(item.type) || 
+        item.type === '' && item.getAsFile().name.toLowerCase().endsWith('.zip'));
       });
   
       if (hasValidFile) {
@@ -106,23 +109,36 @@ const Sidebar = React.forwardRef(({
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
-
+  
     const files = Array.from(e.dataTransfer.files)
       .filter(file => {
         const ext = file.name.split('.').pop().toLowerCase();
-        return ['json', 'md', 'txt'].includes(ext);
+        return ['json', 'md', 'txt', 'zip'].includes(ext);
       });
-
+  
     if (files.length > 0) {
       try {
-        await noteImportExportService.importNotes(files, {
-          openLastImported: true,
-          setSelectedId: onNoteSelect,
-          setNotes,
-          onError: (error, filename) => {
-            console.error(`Error importing ${filename}:`, error);
-          }
-        });
+        const zipFiles = files.filter(file => file.name.toLowerCase().endsWith('.zip'));
+        const otherFiles = files.filter(file => !file.name.toLowerCase().endsWith('.zip'));
+  
+        if (otherFiles.length > 0) {
+          await noteImportExportService.importNotes(otherFiles, {
+            openLastImported: true,
+            setSelectedId: onNoteSelect,
+            setNotes,
+            onError: (error, filename) => {
+              console.error(`Error importing ${filename}:`, error);
+            }
+          });
+        }
+  
+        for (const zipFile of zipFiles) {
+          const { ZipImportHandler } = await import('../utils/ZipImportHandler');
+          await ZipImportHandler.importZip(zipFile, {
+            setNotes,
+            onNoteSelect
+          });
+        }
       } catch (error) {
         console.error('Import failed:', error);
       }
@@ -332,7 +348,6 @@ const Sidebar = React.forwardRef(({
   }, []);
 
   useEffect(() => {
-    console.log("useEffect in sidebar for subscribing to sorts")
     const unsubscribe = noteUpdateService.subscribe((updatedNote) => {
       setNotes(prevNotes => {
         const updatedNotes = prevNotes.map(note =>
@@ -346,7 +361,6 @@ const Sidebar = React.forwardRef(({
   }, []);
 
   useEffect(() => {
-    console.log("useEffect in sidebar for getting sort method")
     const method = noteSortingService.getSortMethod();
     setNotes(prevNotes => [...noteSortingService.sortNotes(prevNotes, method)]);
   }, [noteSortingService.getSortMethod()]);
@@ -382,7 +396,6 @@ const Sidebar = React.forwardRef(({
   }, [notes, searchTerm, sortMethod]);
 
   const handleItemSelect = useCallback((itemId) => {
-    console.log("selecting: ", itemId);
     const selectedItem = notes.find(item => item.id === itemId);
     
     if (FolderService.isFolder(selectedItem)) {
@@ -401,7 +414,6 @@ const Sidebar = React.forwardRef(({
         isOpen: !selectedItem.isOpen
       });
     } else {
-      console.log("proceeding")
       // For notes, proceed with normal selection
       onNoteSelect(itemId);
     }

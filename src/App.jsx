@@ -8,7 +8,6 @@ import PDFExportModal from './components/PDFExportModal';
 import MainContent from './components/MainContent.jsx';
 import PasswordModal from './components/PasswordModal.jsx';
 import RenameModal from './components/RenameModal.jsx';
-import { FolderService } from './utils/folderUtils.js';
 
 import { encryptNote, decryptNote, reEncryptNote, permanentlyUnlockNote } from './utils/encryption';
 import { passwordStorage } from './utils/PasswordStorageService';
@@ -18,6 +17,7 @@ import { noteUpdateService } from './utils/NoteUpdateService.js';
 import { passwordModalUtils } from './utils/PasswordModalUtils.js';
 import { noteImportExportService } from './utils/NoteImportExportService.js';
 import { noteSortingService } from './utils/NoteSortingService.js';
+import { FolderService } from './utils/folderUtils.js';
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -144,8 +144,30 @@ function App() {
   const deleteNote = async (noteId) => {
     if (window.confirm('Are you sure you want to delete this note?')) {
       try {
+        const itemToDelete = notes.find(note => note.id === noteId);
+        
+        if (FolderService.isFolder(itemToDelete)) {
+          // If it's a folder, delete all its contents first
+          const childItems = notes.filter(note => note.parentFolderId === noteId);
+          
+          // Delete all child items
+          for (const childItem of childItems) {
+            await storageService.deleteNote(childItem.id);
+          }
+        }
+        
+        // Delete the note/folder itself
         await storageService.deleteNote(noteId);
-        setNotes(prevNotes => prevNotes.filter(note => note.id !== noteId));
+        
+        // Update notes state, removing the deleted item and its children
+        setNotes(prevNotes => 
+          prevNotes.filter(note => 
+            note.id !== noteId && 
+            note.parentFolderId !== noteId
+          )
+        );
+        
+        // Clear selection if the deleted item was selected
         if (noteId === selectedId) {
           setSelectedId(null);
         }
@@ -161,7 +183,6 @@ function App() {
       
       if (FolderService.isFolder(item) && item.items) {
         const foundInFolder = item.items.find(subItem => subItem.id === noteId);
-        console.log(foundInFolder)
         if (foundInFolder) return foundInFolder;
       }
     }
@@ -259,7 +280,6 @@ function App() {
         onClose={() => setIsPdfExportModalOpen(false)}
         noteTitle={pdfExportNote ? noteContentService.getFirstLine(pdfExportNote.content) : ''}
         onExport={(pdfSettings) => {
-          console.log("Downloading from PDFExportModal in app")
           noteImportExportService.downloadNote({
             note: pdfExportNote,
             fileType: 'pdf',

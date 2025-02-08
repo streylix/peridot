@@ -5,6 +5,7 @@ import { Sun, Moon, Bug, Save, Trash2, Upload, Monitor } from 'lucide-react';
 import { passwordStorage } from '../utils/PasswordStorageService';
 import { noteImportExportService } from '../utils/NoteImportExportService';
 import { noteSortingService } from '../utils/NoteSortingService';
+import { ZipImportHandler } from '../utils/ZipImportHandler';
 import StorageAnalyzer from './StorageAnalyzer';
 import StorageDiagnostics from './StorageDiagnostics';
 import StorageBar from './StorageBar';
@@ -103,7 +104,6 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
   const handleSaveNotes = async () => {
     try {
       const notes = await storageService.getAllNotes();
-      console.log("Downloading from handleSaveNotes in Settings.jsx")
       await noteImportExportService.downloadNote({
         note: notes,
         fileType: 'json',
@@ -116,28 +116,71 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
 
   const handleImportNotes = async (event) => {
     try {
-      const results = await noteImportExportService.importNotes(event.target.files, {
-        openLastImported: true,
-        setSelectedId: onNoteSelect,
-        setNotes: setNotes,
-        onError: (error, filename) => {
-          console.error(`Error importing ${filename}:`, error);
+      const files = Array.from(event.target.files);
+      
+      // Separate ZIP files from other files
+      const zipFiles = files.filter(file => 
+        file.type === 'application/zip' || 
+        file.type === 'application/x-zip-compressed' ||
+        file.name.toLowerCase().endsWith('.zip')
+      );
+      const otherFiles = files.filter(file => !zipFiles.includes(file));
+      
+      let totalImported = 0;
+      let totalSkipped = 0;
+      let totalFailed = 0;
+  
+      // Handle regular files first
+      if (otherFiles.length > 0) {
+        const results = await noteImportExportService.importNotes(otherFiles, {
+          openLastImported: true,
+          setSelectedId: onNoteSelect,
+          setNotes,
+          onError: (error, filename) => {
+            console.error(`Error importing ${filename}:`, error);
+          }
+        });
+  
+        totalImported += results.successful.length;
+        totalSkipped += results.skipped.length;
+        totalFailed += results.failed.length;
+      }
+  
+      // Handle ZIP files
+      for (const zipFile of zipFiles) {
+        try {
+          const { ZipImportHandler } = await import('../utils/ZipImportHandler');
+          const result = await ZipImportHandler.importZip(zipFile, {
+            setNotes,
+            onNoteSelect
+          });
+          
+          if (result.success) {
+            totalImported += result.imported;
+          }
+        } catch (error) {
+          console.error(`Failed to import ZIP file ${zipFile.name}:`, error);
+          totalFailed++;
         }
-      });
+      }
   
       // Construct user feedback message
       let message = [];
-      if (results.successful.length > 0) {
-        message.push(`Successfully imported ${results.successful.length} notes`);
+      if (totalImported > 0) {
+        message.push(`Successfully imported ${totalImported} items`);
       }
-      if (results.skipped.length > 0) {
-        message.push(`\nSkipped ${results.skipped.length} invalid notes`);
+      if (totalSkipped > 0) {
+        message.push(`\nSkipped ${totalSkipped} invalid items`);
       }
-      if (results.failed.length > 0) {
-        message.push(`\nFailed to import ${results.failed.length} files`);
+      if (totalFailed > 0) {
+        message.push(`\nFailed to import ${totalFailed} files`);
       }
   
-      alert(message.join(''));
+      if (message.length > 0) {
+        alert(message.join(''));
+      } else {
+        alert('No valid files were found to import');
+      }
   
       // Reset file input
       if (fileInputRef.current) {
@@ -145,7 +188,12 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
       }
     } catch (error) {
       console.error('Import failed:', error);
-      alert(`Failed to import notes: ${error.message}`);
+      alert(`Failed to import files: ${error.message}`);
+      
+      // Reset file input on error
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -253,7 +301,7 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
               type="file"
               ref={fileInputRef}
               style={{ display: 'none' }}
-              accept=".json, .md, .txt"
+              accept=".json, .md, .txt, .zip"
               onChange={handleImportNotes}
             />
           </ItemPresets.SUBSECTION>

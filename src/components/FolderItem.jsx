@@ -80,7 +80,7 @@ const FolderItem = React.memo(({
     <>
       <li
         className={`folder-item ${isSelected ? 'active' : ''} ${isDragOver ? 'drag-over' : ''}`}
-        style={{ marginLeft: `${depth * 16}px` }}
+        style={{ marginLeft: `${depth * 40}px` }}
         draggable
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
@@ -114,7 +114,11 @@ const FolderItem = React.memo(({
       </li>
       
       {folder.isOpen && folderNotes.length > 0 && (
-          [...folderNotes]
+        <div 
+        className={`folder-content ${folder.isOpen ? 'expanded' : ''}`}
+      >
+        <div className="folder-line" style={{ left: `${depth * 40 + 21}px` }} />
+          {[...folderNotes]
           .sort((a, b) => {
             // Sort folders before notes
             if (FolderService.isFolder(a) && !FolderService.isFolder(b)) return -1;
@@ -146,7 +150,8 @@ const FolderItem = React.memo(({
               onContextMenu={onContextMenu}
             />
           )
-        ))
+        ))}
+        </div>
       )}
     </>
   );

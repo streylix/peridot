@@ -52,7 +52,6 @@ function NoteEditor({ note, onUpdateNote, gifToAdd, onGifAdded }) {
   // Optimized caret position handler with debounce
   const handleSelect = useCallback(
     debounce(() => {
-      console.log(noteContentService.getFirstLine(note.content));
       if (!contentRef.current) return;
       const sel = window.getSelection();
       if (sel.rangeCount > 0) {

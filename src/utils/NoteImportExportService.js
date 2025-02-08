@@ -34,7 +34,6 @@ class NoteImportExportService {
   }
 
   jsonToText(content) {
-    console.log(content)
     content = content.replace(/<\/div>/gi, '\n');
     content = content.replace(/<br\s*\/?>/gi, '');
     let lines = content.split('\n');
@@ -146,27 +145,37 @@ class NoteImportExportService {
    * @private
    */
   formatNoteContent(note, fileType) {
+    // For locked/encrypted notes, return the original content
+    if (note.locked && note.encrypted) {
+      return JSON.stringify(note, null, 2);
+    }
+  
+    // Metadata to preserve
+    const metadata = {
+      id: note.id,
+      dateCreated: note.dateCreated || (typeof note.id === 'number' ? note.id.toString() : Date.now().toString()),
+      dateModified: note.dateModified,
+      pinned: note.pinned,
+      caretPosition: note.caretPosition,
+      parentFolderId: note.parentFolderId,
+      locked: note.locked
+    };
+  
     switch (fileType) {
       case 'md':
       case 'text':
-        return this.jsonToText(note.content);
-        
-      case 'json':
-        if (note.locked && note.encrypted) {
-          // Keep encrypted content intact for encrypted JSON
-          return JSON.stringify(note, null, 2);
-        } else {
-          // Clean export for unencrypted JSON
-          const cleanNote = {
-            id: note.id,
-            content: note.content,
-            dateModified: note.dateModified,
-            pinned: note.pinned,
-            locked: note.locked,
-          };
-          return JSON.stringify(cleanNote, null, 2);
+        if (!note.locked) {
+          // Always include metadata block
+          const metadataHeader = `---\n${JSON.stringify(metadata, null, 2)}\n---\n\n`;
+          return metadataHeader + this.jsonToText(note.content);
         }
-
+  
+      case 'json':
+        return JSON.stringify({
+          ...metadata,
+          content: note.content
+        }, null, 2);
+  
       default:
         return note.content;
     }
@@ -379,15 +388,23 @@ class NoteImportExportService {
    * @param {Date} fileDate - File creation/modification date
    * @returns {Object} - New note object
    */
-  createNoteObject(content, title = '', fileDate = new Date()) {
+  createNoteObject(content, title = '', fileDate = new Date(), originalNote = null) {
     const timestamp = fileDate.getTime();
+    
     return {
-      id: timestamp,
+      id: originalNote?.id || timestamp,
       content: content,
       dateModified: fileDate.toISOString(),
-      dateCreated: fileDate.toISOString(),
-      pinned: false,
-      caretPosition: 0
+      dateCreated: 
+        // Prefer metadata dateCreated 
+        originalNote?.dateCreated || 
+        // If no metadata, try note's ID as a timestamp
+        (typeof originalNote?.id === 'number' ? originalNote.id.toString() : 
+        // If all else fails, use current timestamp
+        timestamp.toString()), 
+      pinned: originalNote?.pinned || false,
+      caretPosition: originalNote?.caretPosition || 0,
+      parentFolderId: originalNote?.parentFolderId || null
     };
   }
 
@@ -482,7 +499,7 @@ class NoteImportExportService {
               id: item.id || fileDate.getTime(),
               content: item.content,
               dateModified: item.dateModified || fileDate.toISOString(),
-              dateCreated: item.dateCreated || fileDate.toISOString(),
+              dateCreated: item.dateCreated || item.id || fileDate.toISOString(),
               pinned: Boolean(item.pinned),
               caretPosition: Number(item.caretPosition) || 0,
               parentFolderId: item.parentFolderId || null,
@@ -490,7 +507,7 @@ class NoteImportExportService {
               encrypted: Boolean(item.encrypted)
             };
   
-            // Optional encrypted note properties
+            // Preserve encrypted note properties
             if (item.encrypted) {
               processedNote.keyParams = item.keyParams;
               processedNote.iv = item.iv;
@@ -530,6 +547,11 @@ class NoteImportExportService {
   
       return combinedItems;
     } catch (error) {
+      console.error('Error importing JSON:', {
+        filename,
+        errorMessage: error.message,
+        errorStack: error.stack
+      });
       throw new Error(`Invalid JSON format in ${filename}: ${error.message}`);
     }
   }
@@ -542,10 +564,38 @@ class NoteImportExportService {
    * @returns {Object} - Processed note object
    */
   async handleMarkdownImport(content, filename, fileDate) {
+  
     const processedContent = this.processEmbeddedContent(content);
     const title = filename.replace(/\.md$/, '');
+    
+    // Try to extract metadata
+    const metadataMatch = content.match(/^---\n(.*?)\n---/s);
+    let originalNote = null;
+    
+    if (metadataMatch) {
+      try {
+        const metadata = JSON.parse(metadataMatch[1]);
+        
+        originalNote = {
+          id: metadata.id || Date.now(),
+          dateCreated: metadata.dateCreated || fileDate.toISOString(),
+          pinned: metadata.pinned || false,
+          caretPosition: metadata.caretPosition || 0,
+          parentFolderId: metadata.parentFolderId || null
+        };
+        
+      } catch (e) {
+        console.warn('Failed to parse metadata in markdown file:', e);
+      }
+    }
+  
+    // Remove metadata from content before formatting
+    const contentWithoutMetadata = content.replace(/^---\n.*?\n---\n\n/s, '');
     const formattedContent = this.formatContent(processedContent, title);
-    return [this.createNoteObject(formattedContent, title, fileDate)];
+  
+    const importedNote = this.createNoteObject(formattedContent, title, fileDate, originalNote);
+    
+    return [importedNote];
   }
 
   /**
@@ -555,11 +605,40 @@ class NoteImportExportService {
    * @param {Date} fileDate - File creation/modification date
    * @returns {Object} - Processed note object
    */
+
   async handleTextImport(content, filename, fileDate) {
+  
     const processedContent = this.processEmbeddedContent(content);
     const title = filename.replace(/\.txt$/, '');
+    
+    // Try to extract metadata
+    const metadataMatch = content.match(/^---\n(.*?)\n---/s);
+    let originalNote = null;
+    
+    if (metadataMatch) {
+      try {
+        const metadata = JSON.parse(metadataMatch[1]);
+        
+        originalNote = {
+          id: metadata.id || Date.now(),
+          dateCreated: metadata.dateCreated || fileDate.toISOString(),
+          pinned: metadata.pinned || false,
+          caretPosition: metadata.caretPosition || 0,
+          parentFolderId: metadata.parentFolderId || null
+        };
+        
+      } catch (e) {
+        console.warn('Failed to parse metadata in text file:', e);
+      }
+    }
+  
+    // Remove metadata from content before formatting
+    const contentWithoutMetadata = content.replace(/^---\n.*?\n---\n\n/s, '');
     const formattedContent = this.formatContent(processedContent, title);
-    return [this.createNoteObject(formattedContent, title, fileDate)];
+  
+    const importedNote = this.createNoteObject(formattedContent, title, fileDate, originalNote);
+    
+    return [importedNote];
   }
 
   /**

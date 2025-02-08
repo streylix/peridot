@@ -1,6 +1,6 @@
 ➕✅
 current version: unreleased
-version#: 0.12.6
+version#: 0.12.7
 
 v0.11:
 ✅ Better localstorage (OPFS)
@@ -14,7 +14,7 @@ v0.12:
         ➕ Set custom folder color
         ✅ click and drag
         ➕ lock folders
-        ➕ search in folders
+        ✅ search in folders
         ✅ folders in folders
     ✅ Resizable
     ✅ Accepts click+drag txt/json/pdf/etc files as "import"
@@ -24,9 +24,9 @@ v0.13:
     ➕ Better gif functionality
     ➕ Image/Link/Video embedding
     ➕ Formatting
-    ➕ Save option creates a text file
-        ➕ this includes embedded conent
-    ➕ Imported notes understand embedding
+    ✅ Save option creates a text file
+        ✅ this includes embedded conent
+    ✅ Imported notes understand embedding
     ➕ Custom Check marker
 
 v1.0:

@@ -43,7 +43,7 @@ const NoteItem = React.memo(({
   return (
     <li
       className={`note-item ${isSelected ? 'active' : ''}`}
-      style={{ marginLeft: `${depth * 16}px` }}
+      style={{ marginLeft: `${depth * 40}px` }}
       draggable
       onDragStart={handleDragStart}
       onContextMenu={(e) => onContextMenu(e, note.id)}

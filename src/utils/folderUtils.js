@@ -146,13 +146,10 @@ export class FolderService {
     if (item.locked) {
       throw new Error('Item is locked');
     }
-    console.log(item)
     
     const contentDiv = document.createElement('div');
     contentDiv.innerHTML = item.content;
     const firstDiv = contentDiv.querySelector('div');
-
-    console.log(firstDiv);
     
     if (firstDiv) {
       firstDiv.textContent = newName;
@@ -204,15 +201,20 @@ export class FolderService {
     };
   }
 
-  static async deleteFolder(folder) {
-    // Recursively delete all items in folder
-    for (const item of folder.items) {
+  static async deleteFolder(folder, notes) {
+    // Find all items (notes and subfolders) that belong to this folder
+    const childItems = notes.filter(item => item.parentFolderId === folder.id);
+  
+    // Recursively delete child items
+    for (const item of childItems) {
       if (this.isFolder(item)) {
-        await this.deleteFolder(item);
+        await this.deleteFolder(item, notes);
       } else {
         await storageService.deleteNote(item.id);
       }
     }
+  
+    // Delete the folder itself
     await storageService.deleteNote(folder.id);
   }
 }

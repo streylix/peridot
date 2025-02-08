@@ -26,12 +26,15 @@ function MainContent({
     if (hasFiles) {
       const items = Array.from(e.dataTransfer.items);
       const hasValidFile = items.some(item => {
-        return item.kind === 'file' && [
+        return item.kind === 'file' && ([
           'application/json',
           'text/markdown',
           'text/x-markdown', 
-          'text/plain'
-        ].includes(item.type);
+          'text/plain',
+          'application/zip',
+          'application/x-zip-compressed'
+        ].includes(item.type) || 
+        item.type === '' && item.getAsFile().name.toLowerCase().endsWith('.zip'));
       });
   
       if (hasValidFile) {
@@ -52,23 +55,38 @@ function MainContent({
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
-
-    const files = Array.from(e.dataTransfer.files)
-      .filter(file => {
-        const ext = file.name.split('.').pop().toLowerCase();
-        return ['json', 'md', 'txt'].includes(ext);
-      });
-
-    if (files.length > 0) {
+  
+    const files = Array.from(e.dataTransfer.files);
+    const validFiles = files.filter(file => {
+      const ext = file.name.split('.').pop().toLowerCase();
+      return ['json', 'md', 'txt', 'zip'].includes(ext);
+    });
+  
+    if (validFiles.length > 0) {
       try {
-        await noteImportExportService.importNotes(files, {
-          openLastImported: true,
-          setSelectedId: onNoteSelect,
-          setNotes,
-          onError: (error, filename) => {
-            console.error(`Error importing ${filename}:`, error);
-          }
-        });
+        const zipFiles = validFiles.filter(file => file.name.toLowerCase().endsWith('.zip'));
+        const otherFiles = validFiles.filter(file => !file.name.toLowerCase().endsWith('.zip'));
+  
+        // Handle regular files
+        if (otherFiles.length > 0) {
+          await noteImportExportService.importNotes(otherFiles, {
+            openLastImported: true,
+            setSelectedId: onNoteSelect,
+            setNotes,
+            onError: (error, filename) => {
+              console.error(`Error importing ${filename}:`, error);
+            }
+          });
+        }
+  
+        // Handle ZIP files
+        for (const zipFile of zipFiles) {
+          const { ZipImportHandler } = await import('../utils/ZipImportHandler');
+          await ZipImportHandler.importZip(zipFile, {
+            setNotes,
+            onNoteSelect
+          });
+        }
       } catch (error) {
         console.error('Import failed:', error);
       }
@@ -90,13 +108,11 @@ function MainContent({
       const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true'
       const storedPassword = await passwordStorage.getPassword(note.id);
       
-      console.log("BYPASS:", verifyBypass);
       if (!verifyBypass){
         if ((!storedPassword || password !== storedPassword)) {
           return false;
         }
       }
-      console.log("BYPASSED!");
 
       // Attempt to decrypt the note
       const decryptResult = await decryptNote(note, password, false);
