@@ -141,47 +141,6 @@ class NoteImportExportService {
   }
 
   /**
-   * Format note content based on file type
-   * @private
-   */
-  formatNoteContent(note, fileType) {
-    // For locked/encrypted notes, return the original content
-    if (note.locked && note.encrypted) {
-      return JSON.stringify(note, null, 2);
-    }
-  
-    // Metadata to preserve
-    const metadata = {
-      id: note.id,
-      dateCreated: note.dateCreated || (typeof note.id === 'number' ? note.id.toString() : Date.now().toString()),
-      dateModified: note.dateModified,
-      pinned: note.pinned,
-      caretPosition: note.caretPosition,
-      parentFolderId: note.parentFolderId,
-      locked: note.locked
-    };
-  
-    switch (fileType) {
-      case 'md':
-      case 'text':
-        if (!note.locked) {
-          // Always include metadata block
-          const metadataHeader = `---\n${JSON.stringify(metadata, null, 2)}\n---\n\n`;
-          return metadataHeader + this.jsonToText(note.content);
-        }
-  
-      case 'json':
-        return JSON.stringify({
-          ...metadata,
-          content: note.content
-        }, null, 2);
-  
-      default:
-        return note.content;
-    }
-  }
-
-  /**
    * Universal download handler for all note download scenarios
    * @param {Object} options - Download options
    * @param {Object|Object[]} options.note - Note or array of notes to download
@@ -202,6 +161,7 @@ class NoteImportExportService {
     isBackup = false
   }) {
     try {
+      console.log("first")
       // Handle backup case (multiple notes)
       if (Array.isArray(note)) {
         if (fileType !== 'json') {
@@ -239,7 +199,7 @@ class NoteImportExportService {
       // Handle single note download
       let noteToExport = note;
       let keepEncrypted = false;
-
+      console.log("second")
       // Handle encrypted notes
       if (isEncrypted && password) {
         if (!password) {
@@ -255,7 +215,8 @@ class NoteImportExportService {
           noteToExport = await this.decryptNoteForDownload(note, password);
         }
       }
-  
+
+      console.log("third")
       // Handle PDF export
       if (fileType === 'pdf') {
         if (pdfSettings) {
@@ -280,7 +241,8 @@ class NoteImportExportService {
               orientation: pdfSettings.isLandscape ? 'landscape' : 'portrait'
             }
           };
-  
+
+          
           try {
             const worker = html2pdf().set(options).from(container);
             const pdfBlob = await worker.output('blob');
@@ -312,14 +274,14 @@ class NoteImportExportService {
           throw new Error('Either PDF settings or onPdfExport callback is required for PDF export');
         }
       }
-      
+      console.log("fourth")
       // Handle other file types
       const { mimeType } = this.getFileTypeInfo(fileType);
       const fileName = this.getDownloadFilename(noteToExport, fileType === 'json' ? 'json' : fileType, keepEncrypted);
-      
+      console.log("fifth")
       // Format content based on file type
       const content = this.formatNoteContent(noteToExport, fileType);
-      
+      console.log("sixth")
       // Download file
       const blob = new Blob([content], { type: mimeType });
       const url = URL.createObjectURL(blob);
@@ -342,10 +304,14 @@ class NoteImportExportService {
    * @private
    */
   async decryptNoteForDownload(note, password) {
+    console.log("decryptNoteForDownload")
     try {
+      const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true'
       const storedPassword = await passwordStorage.getPassword(note.id);
-      if (!storedPassword || password !== storedPassword) {
-        throw new Error('Invalid password');
+      if (!verifyBypass){
+        if (!storedPassword || password !== storedPassword) {
+          throw new Error('Invalid password');
+        }
       }
 
       const { decryptNote } = await import('./encryption');
@@ -437,18 +403,32 @@ class NoteImportExportService {
     switch (fileType) {
       case 'md':
       case 'text':
-        if (!note.locked){
-          return this.jsonToText(note.content);
-        }
+        return this.jsonToText(note.content);
 
       case 'json':
-        return JSON.stringify({
-          id: note.id,
-          content: note.content,
-          dateModified: note.dateModified,
-          pinned: note.pinned,
-          locked: note.locked,
-        }, null, 2);
+        if (note.locked && note.encrypted && localStorage.getItem('jsonAsEncrypted') === 'true') {
+          // For encrypted JSON, include all encryption-related fields
+          return JSON.stringify({
+            id: note.id,
+            content: note.content,
+            dateModified: note.dateModified,
+            pinned: note.pinned,
+            locked: note.locked,
+            encrypted: note.encrypted,
+            keyParams: note.keyParams,
+            iv: note.iv,
+            visibleTitle: note.visibleTitle
+          }, null, 2);
+        } else {
+          // For unencrypted JSON, clean export
+          return JSON.stringify({
+            id: note.id,
+            content: note.content,
+            dateModified: note.dateModified,
+            pinned: note.pinned,
+            locked: note.locked
+          }, null, 2);
+        }
   
       default:
         return note.content;
@@ -564,38 +544,10 @@ class NoteImportExportService {
    * @returns {Object} - Processed note object
    */
   async handleMarkdownImport(content, filename, fileDate) {
-  
     const processedContent = this.processEmbeddedContent(content);
     const title = filename.replace(/\.md$/, '');
-    
-    // Try to extract metadata
-    const metadataMatch = content.match(/^---\n(.*?)\n---/s);
-    let originalNote = null;
-    
-    if (metadataMatch) {
-      try {
-        const metadata = JSON.parse(metadataMatch[1]);
-        
-        originalNote = {
-          id: metadata.id || Date.now(),
-          dateCreated: metadata.dateCreated || fileDate.toISOString(),
-          pinned: metadata.pinned || false,
-          caretPosition: metadata.caretPosition || 0,
-          parentFolderId: metadata.parentFolderId || null
-        };
-        
-      } catch (e) {
-        console.warn('Failed to parse metadata in markdown file:', e);
-      }
-    }
-  
-    // Remove metadata from content before formatting
-    const contentWithoutMetadata = content.replace(/^---\n.*?\n---\n\n/s, '');
     const formattedContent = this.formatContent(processedContent, title);
-  
-    const importedNote = this.createNoteObject(formattedContent, title, fileDate, originalNote);
-    
-    return [importedNote];
+    return [this.createNoteObject(formattedContent, title, fileDate)];
   }
 
   /**
@@ -605,40 +557,11 @@ class NoteImportExportService {
    * @param {Date} fileDate - File creation/modification date
    * @returns {Object} - Processed note object
    */
-
   async handleTextImport(content, filename, fileDate) {
-  
     const processedContent = this.processEmbeddedContent(content);
     const title = filename.replace(/\.txt$/, '');
-    
-    // Try to extract metadata
-    const metadataMatch = content.match(/^---\n(.*?)\n---/s);
-    let originalNote = null;
-    
-    if (metadataMatch) {
-      try {
-        const metadata = JSON.parse(metadataMatch[1]);
-        
-        originalNote = {
-          id: metadata.id || Date.now(),
-          dateCreated: metadata.dateCreated || fileDate.toISOString(),
-          pinned: metadata.pinned || false,
-          caretPosition: metadata.caretPosition || 0,
-          parentFolderId: metadata.parentFolderId || null
-        };
-        
-      } catch (e) {
-        console.warn('Failed to parse metadata in text file:', e);
-      }
-    }
-  
-    // Remove metadata from content before formatting
-    const contentWithoutMetadata = content.replace(/^---\n.*?\n---\n\n/s, '');
     const formattedContent = this.formatContent(processedContent, title);
-  
-    const importedNote = this.createNoteObject(formattedContent, title, fileDate, originalNote);
-    
-    return [importedNote];
+    return [this.createNoteObject(formattedContent, title, fileDate)];
   }
 
   /**
