@@ -34,3 +34,4 @@
 
 known bugs:
 - Notes saved as .md or .txt lose their dateCreated/dateModified values
+- Embedded content doesn't save to .md or .txt properly (i.e formatting, some links not being reformatted)
