@@ -621,6 +621,8 @@ header.full-width{
     padding: 4px 12px;
     border-radius: 4px;
     margin-left: 4px;
+    position: absolute;
+    left: 14vh;
   }
   
   .note-tab-title {
@@ -1136,6 +1138,10 @@ input[type="range"]:disabled::-moz-range-thumb {
   margin-right: 10px;
   border-radius: 4px;
   padding: 0;
+}
+
+.folder-icon {
+  padding-top: 3px;
 }
 
 .folder-header {

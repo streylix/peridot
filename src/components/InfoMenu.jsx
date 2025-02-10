@@ -61,13 +61,20 @@ const InfoMenu = ({
   };
 
   const handleLockClick = () => {
-    if (isFolder) return;
-
     try {
-      if (selectedItem?.locked) {
-        passwordModalUtils.openUnlockModal(selectedItem.id, selectedItem);
+      if (isFolder) {
+        if (selectedItem?.locked) {
+          passwordModalUtils.openUnlockFolderPermanentModal(selectedItem.id, selectedItem);
+        } else {
+          console.log("open lock folder modal")
+          passwordModalUtils.openLockFolderModal(selectedItem.id, selectedItem);
+        }
       } else {
-        passwordModalUtils.openLockModal(selectedItem.id, selectedItem);
+        if (selectedItem?.locked) {
+          passwordModalUtils.openUnlockModal(selectedItem.id, selectedItem);
+        } else {
+          passwordModalUtils.openLockModal(selectedItem.id, selectedItem);
+        }
       }
     } catch (error) {
       console.error('Error in handleLockClick:', error);
@@ -172,9 +179,11 @@ const InfoMenu = ({
     },
     {
       icon: Lock,
-      label: isFolder ? 'Lock' : (selectedItem?.locked ? 'Unlock' : 'Lock'),
+      label: isFolder 
+        ? (selectedItem?.locked ? 'Unlock Folder' : 'Lock Folder')
+        : (selectedItem?.locked ? 'Unlock' : 'Lock'),
       onClick: handleLockClick,
-      disabled: isFolder && !!selectedItem,
+      disabled: !selectedItem,
       show: true
     },
     {

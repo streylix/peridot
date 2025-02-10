@@ -3,6 +3,7 @@ import { noteContentService } from './NoteContentService';
 import { passwordStorage } from './PasswordStorageService';
 import { storageService } from './StorageService';
 import { noteImportExportService } from './NoteImportExportService';
+import { FolderService } from './folderUtils';
 
 class PasswordModalUtils {
   constructor() {
@@ -40,6 +41,27 @@ class PasswordModalUtils {
     this.modalType = 'unlock';
     this.noteId = noteId;
     this.noteData = note;
+    this.notifySubscribers();
+  }
+
+  openLockFolderModal(folderId, folder) {
+    this.modalType = 'lockFolder';
+    this.noteId = folderId;
+    this.noteData = folder;
+    this.notifySubscribers();
+  }
+
+  openUnlockFolderModal(folderId, folder) {
+    this.modalType = 'unlockFolder';
+    this.noteId = folderId;
+    this.noteData = folder;
+    this.notifySubscribers();
+  }
+
+  openUnlockFolderPermanentModal(folderId, folder) {
+    this.modalType = 'unlockFolderPermanent';
+    this.noteId = folderId;
+    this.noteData = folder;
     this.notifySubscribers();
   }
 
@@ -131,6 +153,48 @@ class PasswordModalUtils {
               }
             }
           });
+          break;
+        }
+
+        case 'lockFolder': {
+          const lockedFolder = await FolderService.lockFolder(this.noteData, password);
+          window.dispatchEvent(new CustomEvent('noteUpdate', { 
+            detail: { note: lockedFolder }
+          }));
+          break;
+        }
+
+        case 'unlockFolder': {
+          const result = await FolderService.unlockFolder(this.noteData, password);
+          if (!result.success) {
+            return { success: false, error: result.error };
+          }
+  
+          window.dispatchEvent(new CustomEvent('folderUnlocked', { 
+            detail: { folderId: this.noteData.id }
+          }));
+          break;
+        }
+
+        case 'unlockFolderPermanent': {
+          const result = await FolderService.unlockFolder(this.noteData, password);
+          if (!result.success) {
+            return { success: false, error: result.error };
+          }
+    
+          // Permanently unlock the folder
+          const unlockedFolder = {
+            ...this.noteData,
+            locked: false,
+            isOpen: true
+          };
+    
+          await storageService.writeNote(this.noteData.id, unlockedFolder);
+          await passwordStorage.removePassword(this.noteData.id);
+          
+          window.dispatchEvent(new CustomEvent('noteUpdate', { 
+            detail: { note: unlockedFolder }
+          }));
           break;
         }
       }

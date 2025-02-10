@@ -93,6 +93,41 @@ function PasswordModal() {
             </ItemComponents.SUBSECTION>
           )
         };
+      case 'lockFolder':
+        return {
+          title: 'Lock Folder',
+          content: (
+            <ItemComponents.SUBSECTION title="Lock Folder">
+              <ItemPresets.PASSWORD_VERIFY
+                password={password}
+                confirmPassword={confirmPassword}
+                onPasswordChange={(e) => setPassword(e.target.value)}
+                onConfirmChange={(e) => setConfirmPassword(e.target.value)}
+                showPasswords={showPassword}
+                onToggleShow={() => setShowPassword(!showPassword)}
+                error={error}
+                onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
+              />
+            </ItemComponents.SUBSECTION>
+          )
+        };
+      case 'unlockFolderPermanent':
+      case 'unlockFolder':
+        return {
+          title: 'Unlock Folder',
+          content: (
+            <ItemComponents.SUBSECTION title="Unlock Folder">
+              <ItemPresets.PASSWORD
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                showPassword={showPassword}
+                onToggleShow={() => setShowPassword(!showPassword)}
+                error={error}
+                onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
+              />
+            </ItemComponents.SUBSECTION>
+          )
+        };
       default:
         return null;
     }

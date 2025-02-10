@@ -1,8 +1,10 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import { ChevronRight, Folder, Pin, Lock } from 'lucide-react';
 import NoteItem from './NoteItem';
 import { storageService } from '../utils/StorageService';
 import { FolderService } from '../utils/folderUtils';
+import { passwordModalUtils } from '../utils/PasswordModalUtils';
+
 
 const FolderItem = React.memo(({
   folder,
@@ -17,6 +19,41 @@ const FolderItem = React.memo(({
   folderNotes = []
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isUnlocked, setIsUnlocked] = useState(!folder.locked);
+
+  const showExpandIcon = useMemo(() => {
+    return folderNotes.length > 0 && (!folder.locked || (folder.locked && isUnlocked && folder.isOpen));
+  }, [folderNotes.length, folder.locked, isUnlocked, folder.isOpen]);
+
+  const toggleExpand = useCallback((e) => {
+    e.stopPropagation();
+    
+    if (folder.locked && !isUnlocked) {
+      passwordModalUtils.openUnlockFolderModal(folder.id, folder);
+      return;
+    }
+
+    if (folder.locked && isUnlocked){
+      setIsUnlocked(false);
+    }
+    
+    onSelect(folder.id);
+  }, [folder, isUnlocked, onSelect]);
+
+  // Subscribe to unlock events
+  useEffect(() => {
+    const handleUnlock = (event) => {
+      if (event.detail.folderId === folder.id) {
+        setIsUnlocked(true);
+        setNotes(prev => prev.map(note => 
+          note.id === folder.id ? { ...note, isOpen: true } : note
+        ));
+      }
+    };
+
+    window.addEventListener('folderUnlocked', handleUnlock);
+    return () => window.removeEventListener('folderUnlocked', handleUnlock);
+  }, [folder.id, setNotes]);
 
   const handleDragStart = (e) => {
     e.dataTransfer.setData('text/plain', JSON.stringify({
@@ -35,14 +72,12 @@ const FolderItem = React.memo(({
   };
 
   const title = useMemo(() => {
-    const extractedTitle = folder.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1];
-    return extractedTitle || 'Untitled Folder';
-  }, [folder.content]);
-
-  const toggleExpand = useCallback((e) => {
-    e.stopPropagation();
-    onSelect(folder.id);
-  }, [onSelect, folder.id]);
+    if (folder?.content?.match) {
+      const extractedTitle = folder.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1];
+      return extractedTitle || folder.visibleTitle;
+    }
+    return folder.visibleTitle || 'Untitled Folder';
+  }, [folder?.content, folder?.visibleTitle]);
 
   const handleContextMenu = useCallback((e) => {
     e.preventDefault();
@@ -87,14 +122,10 @@ const FolderItem = React.memo(({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onContextMenu={handleContextMenu}
-        onClick={(e) => {
-          e.stopPropagation();
-          onSelect(folder.id);
-        }}
       >
         <div 
           className="folder-header"
-          data-expanded={folder.isOpen}
+          data-expanded={folder.isOpen && isUnlocked}
           onClick={toggleExpand}
         >
           <div className="folder-expand-icon">
@@ -113,7 +144,7 @@ const FolderItem = React.memo(({
         </div>
       </li>
       
-      {folder.isOpen && folderNotes.length > 0 && (
+      {(!folder.locked || isUnlocked) && folder.isOpen && folderNotes.length > 0 && (
         <div 
         className={`folder-content ${folder.isOpen ? 'expanded' : ''}`}
       >
@@ -150,11 +181,11 @@ const FolderItem = React.memo(({
               onContextMenu={onContextMenu}
             />
           )
-        ))}
-        </div>
-      )}
-    </>
-  );
-});
+          ))}
+          </div>
+        )}
+      </>
+    );
+  });
 
 export default FolderItem;

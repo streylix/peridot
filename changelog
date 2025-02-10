@@ -1,5 +1,9 @@
 current version:
+v0.12.8:
+- Lockable Folders
+- Minor bugfixes
 
+previous versions:
 v0.12.7:
 - Folders v2
     - UI update (added a directory line for visibility)
@@ -7,7 +11,6 @@ v0.12.7:
         - fixed importing zip files
     - fixed an issue where deleting a folder wasn't also deleting its children
 
-previous versions:
 v0.12.6:
 - Note Folders v1
     - Organize notes in folders

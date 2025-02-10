@@ -161,7 +161,6 @@ class NoteImportExportService {
     isBackup = false
   }) {
     try {
-      console.log("first")
       // Handle backup case (multiple notes)
       if (Array.isArray(note)) {
         if (fileType !== 'json') {
@@ -199,7 +198,6 @@ class NoteImportExportService {
       // Handle single note download
       let noteToExport = note;
       let keepEncrypted = false;
-      console.log("second")
       // Handle encrypted notes
       if (isEncrypted && password) {
         if (!password) {
@@ -216,7 +214,6 @@ class NoteImportExportService {
         }
       }
 
-      console.log("third")
       // Handle PDF export
       if (fileType === 'pdf') {
         if (pdfSettings) {
@@ -274,14 +271,11 @@ class NoteImportExportService {
           throw new Error('Either PDF settings or onPdfExport callback is required for PDF export');
         }
       }
-      console.log("fourth")
       // Handle other file types
       const { mimeType } = this.getFileTypeInfo(fileType);
       const fileName = this.getDownloadFilename(noteToExport, fileType === 'json' ? 'json' : fileType, keepEncrypted);
-      console.log("fifth")
       // Format content based on file type
       const content = this.formatNoteContent(noteToExport, fileType);
-      console.log("sixth")
       // Download file
       const blob = new Blob([content], { type: mimeType });
       const url = URL.createObjectURL(blob);
@@ -304,7 +298,6 @@ class NoteImportExportService {
    * @private
    */
   async decryptNoteForDownload(note, password) {
-    console.log("decryptNoteForDownload")
     try {
       const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true'
       const storedPassword = await passwordStorage.getPassword(note.id);

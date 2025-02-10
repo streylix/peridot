@@ -28,6 +28,10 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
     localStorage.getItem('skipPasswordVerification') === 'true'
   );
 
+  // const [autoCollapseLockedFolders, setAutoCollapseLockedFolders] = useState(() => 
+  //   localStorage.getItem('autoCollapseLockedFolders') !== 'false'
+  // );
+
   const handleEncryptedJsonChange = (event) => {
     const newValue = event.target.checked;
     setJsonAsEncrypted(newValue);
@@ -246,6 +250,21 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
             />
           </ItemPresets.SUBSECTION>
         },
+        // {
+        //   content: 
+        //   <ItemPresets.SUBSECTION title="Folders">
+        //     <ItemPresets.TEXT_SWITCH
+        //       label="Auto-collapse locked folders"
+        //       subtext="Automatically collapse locked folders when page refreshes"
+        //       value={autoCollapseLockedFolders}
+        //       onChange={(e) => {
+        //         const newValue = e.target.checked;
+        //         setAutoCollapseLockedFolders(newValue);
+        //         localStorage.setItem('autoCollapseLockedFolders', newValue);
+        //       }}
+        //     />
+        //   </ItemPresets.SUBSECTION>
+        // },
         {
           content: <ItemPresets.SUBSECTION title="Download">
             <ItemPresets.TEXT_SWITCH

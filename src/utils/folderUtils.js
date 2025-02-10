@@ -1,6 +1,7 @@
 import { storageService } from './StorageService';
 import { noteContentService } from './NoteContentService';
 import { noteImportExportService } from './NoteImportExportService';
+import { passwordStorage } from './PasswordStorageService';
 import JSZip from 'jszip';
 
 export class FolderService {
@@ -23,6 +24,41 @@ export class FolderService {
     };
   }
 
+  static async lockFolder(folder, password) {
+    if (!folder || !this.isFolder(folder)) {
+      throw new Error('Invalid folder');
+    }
+
+    await passwordStorage.storePassword(folder.id, password);
+
+    return {
+      ...folder,
+      locked: true,
+      isOpen: false
+    };
+  }
+
+  static async unlockFolder(folder, password) {
+    if (!folder || !this.isFolder(folder)) {
+      throw new Error('Invalid folder');
+    }
+
+    const storedPassword = await passwordStorage.getPassword(folder.id);
+    const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true';
+
+    if (!verifyBypass && (!storedPassword || password !== storedPassword)) {
+      return { success: false, error: 'Invalid password' };
+    }
+
+    return {
+      success: true,
+      folder: {
+        ...folder,
+        locked: false,
+        isOpen: true
+      }
+    };
+  }
 
   static async downloadFolder(folder, notes, fileType = 'json') {
     const getFolderContents = (folderId) => {
@@ -143,7 +179,7 @@ export class FolderService {
 
 
   static async renameItem(item, newName) {
-    if (item.locked) {
+    if (item.locked && !FolderService.isFolder(item)) {
       throw new Error('Item is locked');
     }
     
@@ -166,7 +202,8 @@ export class FolderService {
     const updatedItem = {
       ...item,
       content: newName,
-      dateModified: new Date().toISOString()
+      dateModified: new Date().toISOString(),
+      visibleTitle: newName
     }
     return updatedItem;
   }
