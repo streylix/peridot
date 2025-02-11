@@ -66,7 +66,6 @@ const InfoMenu = ({
         if (selectedItem?.locked) {
           passwordModalUtils.openUnlockFolderPermanentModal(selectedItem.id, selectedItem);
         } else {
-          console.log("open lock folder modal")
           passwordModalUtils.openLockFolderModal(selectedItem.id, selectedItem);
         }
       } else {
@@ -86,6 +85,13 @@ const InfoMenu = ({
 
   const handleDownload = () => {
     if (isFolder) {
+      if (selectedItem.locked) {
+        // For locked folders, open password modal
+        passwordModalUtils.openDownloadLockModal(selectedItem.id, selectedItem);
+        setIsOpen(false);
+        return;
+      }
+
       try {
         const preferredFileType = localStorage.getItem('preferredFileType') || 'json';
         FolderService.downloadFolder(selectedItem, notes, preferredFileType);

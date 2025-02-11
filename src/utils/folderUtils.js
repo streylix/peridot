@@ -61,6 +61,37 @@ export class FolderService {
   }
 
   static async downloadFolder(folder, notes, fileType = 'json') {
+    // Handle locked folders
+    if (folder.locked) {
+      // Get the stored password
+      const storedPassword = await passwordStorage.getPassword(folder.id);
+      if (!storedPassword) {
+        console.error('No stored password found for locked folder');
+        return;
+      }
+
+      const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true';
+      if (!verifyBypass) {
+        // Verify the password matches before proceeding
+        const { passwordModalUtils } = await import('./PasswordModalUtils');
+        passwordModalUtils.openDownloadFolderModal(folder.id, folder, {
+          onSuccess: async (password) => {
+            if (password === storedPassword) {
+              await this.processDownload(folder, notes, fileType);
+            } else {
+              console.error('Invalid password for folder download');
+            }
+          }
+        });
+        return;
+      }
+    }
+
+    // If folder is not locked or verification is bypassed, proceed with download
+    await this.processDownload(folder, notes, fileType);
+  }
+
+  static async processDownload(folder, notes, fileType) {
     const getFolderContents = (folderId) => {
       const contents = notes.filter(item => item.parentFolderId === folderId);
       return contents.map(item => {
@@ -74,16 +105,12 @@ export class FolderService {
       });
     };
 
-    // jsonify the folder if the option is 'pdf' as the "default option"
-    if (fileType === 'json' || fileType == 'pdf') {
+    // For JSON or PDF, create a flat structure
+    if (fileType === 'json' || fileType === 'pdf') {
       try {
-        // Get all items in this folder
         const folderContents = getFolderContents(folder.id);
+        const allItems = [folder];
         
-        // Create an array to hold all notes and folders
-        const allItems = [folder]; // Start with the parent folder
-        
-        // Helper function to flatten the folder structure
         const flattenContents = (items) => {
           items.forEach(item => {
             if (this.isFolder(item)) {
@@ -97,11 +124,9 @@ export class FolderService {
             }
           });
         };
-  
-        // Flatten the folder structure into array
+
         flattenContents(folderContents);
-  
-        // Now download as array of notes/folders
+
         await noteImportExportService.downloadNote({
           note: allItems,
           fileType: 'json',
@@ -113,30 +138,25 @@ export class FolderService {
         throw error;
       }
     }
-  
-    // For md/txt, create ZIP with folder structure
+
+    // For other formats, create a ZIP with folder structure
     const zip = new JSZip();
     const rootFolderName = folder.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 'folder';
-    
-    // Create the root folder first
     const rootFolder = zip.folder(rootFolderName);
-    
-    const addToZip = (items, parentFolder) => {
-      items.forEach(item => {
+
+    const addToZip = async (items, parentFolder) => {
+      for (const item of items) {
         if (this.isFolder(item)) {
           const folderName = item.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 'Untitled Folder';
-          // Create new folder inside the parent folder
           const newFolder = parentFolder.folder(folderName);
           const folderContents = notes.filter(n => n.parentFolderId === item.id);
-          addToZip(folderContents, newFolder);
+          await addToZip(folderContents, newFolder);
         } else {
-          // If note is locked, download as encrypted JSON
           if (item.locked && item.encrypted) {
             const jsonContent = JSON.stringify(item, null, 2);
             const title = item.visibleTitle;
             parentFolder.file(`${title}.json`, jsonContent);
           } else {
-            // Convert note to desired file type
             const noteContent = noteImportExportService.formatNoteContent(item, fileType);
             const title = noteContentService.getFirstLine(item.content)
               .replace(/[^a-z0-9]/gi, '_')
@@ -144,14 +164,12 @@ export class FolderService {
             parentFolder.file(`${title}.${fileType}`, noteContent);
           }
         }
-      });
+      }
     };
-  
-    // Start adding contents to the root folder
+
     const rootContents = notes.filter(n => n.parentFolderId === folder.id);
-    addToZip(rootContents, rootFolder);
-  
-    // Generate and download ZIP
+    await addToZip(rootContents, rootFolder);
+
     try {
       const zipBlob = await zip.generateAsync({ type: 'blob' });
       const zipFileName = `${rootFolderName}.zip`;

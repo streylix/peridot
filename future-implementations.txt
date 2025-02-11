@@ -35,3 +35,109 @@
 known bugs:
 - Notes saved as .md or .txt lose their dateCreated/dateModified values
 - Embedded content doesn't save to .md or .txt properly (i.e formatting, some links not being reformatted)
+
+Core Components to Build:
+
+1. Authentication & User Management:
+- Login/Registration pages and forms
+- Password reset functionality
+- User profile management
+- Session management
+- JWT or similar token-based authentication system
+- Email verification system
+
+2. Data Migration:
+- Convert the current OPFS (Origin Private File System) storage to a database system
+- Create database schemas for:
+  - Users
+  - Notes
+  - Folders
+  - Password/encryption keys
+  - User preferences
+  - Sharing permissions
+
+3. API Development:
+- RESTful or GraphQL API endpoints for:
+  - Note CRUD operations
+  - Folder management
+  - User management
+  - File uploads/attachments
+  - Search functionality
+  - Encryption/decryption handlers
+
+4. Current Services to Migrate:
+- StorageService → Database operations
+- PasswordStorage → Secure credential management
+- NoteUpdateService → Real-time updates system
+- NoteSortingService → Server-side sorting options
+- NoteImportExportService → File handling system
+
+5. New Features to Consider:
+- Multi-device synchronization
+- Collaborative editing
+- Sharing capabilities
+- Version history
+- Backup system
+- Rate limiting
+- Usage analytics
+
+Estimated Timeline:
+
+1. Initial Setup (1-2 weeks):
+- Database design and setup
+- Basic API architecture
+- Authentication system
+- Development environment configuration
+
+2. Core Functionality Migration (2-3 weeks):
+- Basic CRUD operations
+- User management
+- File storage system
+- Encryption system migration
+
+3. Advanced Features (2-3 weeks):
+- Real-time updates
+- Search functionality
+- Import/export systems
+- Sharing capabilities
+
+4. Testing & Optimization (1-2 weeks):
+- Security testing
+- Performance optimization
+- API documentation
+- Error handling
+
+5. Frontend Updates (1-2 weeks):
+- Service integration
+- Authentication UI
+- Error handling
+- Loading states
+
+Total Estimated Time: 7-12 weeks for a production-ready system
+
+Key Technical Considerations:
+
+1. Backend Technology Stack:
+- Node.js/Express or similar for API
+- PostgreSQL/MongoDB for database
+- Redis for caching
+- Socket.io for real-time features
+
+2. Security:
+- Move encryption to server-side
+- Implement proper key management
+- Set up CORS policies
+- Add rate limiting
+- Implement input validation
+
+3. Performance:
+- Implement proper caching
+- Add pagination
+- Optimize database queries
+- Consider CDN for assets
+
+4. Infrastructure:
+- Set up CI/CD pipeline
+- Configure monitoring
+- Set up backup systems
+- Plan scaling strategy

@@ -73,6 +73,13 @@ class PasswordModalUtils {
     this.notifySubscribers();
   }
 
+  openDownloadLockModal(folderId, folder) {
+    this.modalType = 'download-folder';
+    this.noteId = folderId;
+    this.noteData = folder;
+    this.notifySubscribers();
+  }
+
   closeModal() {
     this.modalType = null;
     this.noteId = null;
@@ -195,6 +202,28 @@ class PasswordModalUtils {
           window.dispatchEvent(new CustomEvent('noteUpdate', { 
             detail: { note: unlockedFolder }
           }));
+          break;
+        }
+
+        case 'download-folder': {
+          // Verify the password
+          const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true';
+          if (!verifyBypass) {
+            const storedPassword = await passwordStorage.getPassword(this.noteId);
+            if (!storedPassword || password !== storedPassword) {
+              return { success: false, error: 'Invalid password' };
+            }
+          }
+  
+          // Get all notes for the folder download
+          const notes = await storageService.getAllNotes();
+          
+          // Get preferred file type
+          const fileType = localStorage.getItem('preferredFileType') || 'json';
+          
+          // Import and use FolderService
+          const { FolderService } = await import('./folderUtils');
+          await FolderService.downloadFolder(this.noteData, notes, fileType);
           break;
         }
       }

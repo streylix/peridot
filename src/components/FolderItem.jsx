@@ -74,6 +74,7 @@ const FolderItem = React.memo(({
   const title = useMemo(() => {
     if (folder?.content?.match) {
       const extractedTitle = folder.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1];
+      folder.content = folder.visibleTitle
       return extractedTitle || folder.visibleTitle;
     }
     return folder.visibleTitle || 'Untitled Folder';
@@ -122,11 +123,11 @@ const FolderItem = React.memo(({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onContextMenu={handleContextMenu}
+        onClick={toggleExpand}
       >
         <div 
           className="folder-header"
           data-expanded={folder.isOpen && isUnlocked}
-          onClick={toggleExpand}
         >
           <div className="folder-expand-icon">
             {folderNotes.length > 0 && <ChevronRight />}

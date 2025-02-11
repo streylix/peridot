@@ -128,6 +128,22 @@ function PasswordModal() {
             </ItemComponents.SUBSECTION>
           )
         };
+      case 'download-folder':
+        return {
+          title: 'Download Protected Folder',
+          content: (
+            <ItemComponents.SUBSECTION title="Download Folder">
+              <ItemPresets.PASSWORD
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                showPassword={showPassword}
+                onToggleShow={() => setShowPassword(!showPassword)}
+                error={error}
+                onKeyPress={(e) => e.key === 'Enter' && handleSubmit()}
+              />
+            </ItemComponents.SUBSECTION>
+          )
+        };
       default:
         return null;
     }

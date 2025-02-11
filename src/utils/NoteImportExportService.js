@@ -180,7 +180,10 @@ class NoteImportExportService {
           // Find the folder (should be first item in array)
           const folder = note.find(item => item.type === 'folder');
           const folderName = folder ? 
-            (folder.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 'folder') : 
+            (folder.visibleTitle || 
+             (typeof folder.content === 'string' ? 
+               folder.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] : null) || 
+             'folder') : 
             'folder';
           fileName = `${folderName}.json`;
         }
@@ -397,9 +400,33 @@ class NoteImportExportService {
       case 'md':
       case 'text':
         return this.jsonToText(note.content);
-
+  
       case 'json':
-        if (note.locked && note.encrypted && localStorage.getItem('jsonAsEncrypted') === 'true') {
+        if (note.type === 'folder') {
+          // For folders, include the visibleTitle, handle both locked and unlocked states
+          const exportData = {
+            id: note.id,
+            content: note.content,
+            dateModified: note.dateModified,
+            type: 'folder',
+            pinned: note.pinned,
+            locked: note.locked,
+            isOpen: note.isOpen,
+            parentFolderId: note.parentFolderId,
+          };
+  
+          // If folder is locked, ensure we preserve the visibleTitle
+          if (note.locked) {
+            exportData.visibleTitle = note.visibleTitle;
+          } else {
+            // For unlocked folders, extract title from content if no visibleTitle exists
+            exportData.visibleTitle = note.visibleTitle || 
+                                    note.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 
+                                    'Untitled Folder';
+          }
+  
+          return JSON.stringify(exportData, null, 2);
+        } else if (note.locked && note.encrypted && localStorage.getItem('jsonAsEncrypted') === 'true') {
           // For encrypted JSON, include all encryption-related fields
           return JSON.stringify({
             id: note.id,
@@ -443,27 +470,41 @@ class NoteImportExportService {
       const validFolders = [];
       const invalidItems = [];
   
-      // First pass: Process all items and separate folders from notes
       for (const item of notesToProcess) {
         try {
-          // Basic validation - must be object with content
           if (typeof item !== 'object' || item === null || !item.content) {
             invalidItems.push({ item, reason: 'Missing required content' });
             continue;
           }
   
-          // Check if it's a folder
           if (item.type === 'folder') {
+            // Get the folder title from visibleTitle or extract from content
+            let folderTitle = item.visibleTitle;
+            
+            if (!folderTitle && typeof item.content === 'string') {
+              const titleMatch = item.content.match(/<div[^>]*>(.*?)<\/div>/);
+              folderTitle = titleMatch ? titleMatch[1] : 'Untitled Folder';
+            }
+            
+            // Always ensure the folder's content is properly formatted HTML
             const processedFolder = {
               id: item.id || fileDate.getTime(),
-              content: item.content,
+              content: `<div>${folderTitle}</div>`,
               dateModified: item.dateModified || fileDate.toISOString(),
               type: 'folder',
               pinned: Boolean(item.pinned),
               locked: Boolean(item.locked),
               isOpen: Boolean(item.isOpen),
-              parentFolderId: item.parentFolderId || null
+              parentFolderId: item.parentFolderId || null,
+              visibleTitle: folderTitle
             };
+
+            // If folder is locked, preserve encryption-related fields
+            if (item.locked) {
+              processedFolder.iv = item.iv;
+              processedFolder.keyParams = item.keyParams;
+              processedFolder.encrypted = Boolean(item.encrypted);
+            }
   
             validFolders.push(processedFolder);
           } else {
@@ -500,20 +541,16 @@ class NoteImportExportService {
       // Verify and fix parentFolderId references
       [...validNotes, ...validFolders].forEach(item => {
         if (item.parentFolderId && !folderMap.has(item.parentFolderId)) {
-          // If parent folder doesn't exist in the import, remove the reference
           item.parentFolderId = null;
         }
       });
   
-      // Combine and return both folders and notes
       const combinedItems = [...validFolders, ...validNotes];
   
-      // If no valid items were found, throw error
       if (combinedItems.length === 0) {
         throw new Error(`No valid items found in ${filename}`);
       }
   
-      // Log warning for invalid items
       if (invalidItems.length > 0) {
         console.warn(`Skipped ${invalidItems.length} invalid items during import:`, invalidItems);
       }
