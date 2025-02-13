@@ -20,6 +20,21 @@ const FolderItem = React.memo(({
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUnlocked, setIsUnlocked] = useState(!folder.locked);
+  const [isAnimatingOut, setIsAnimatingOut] = useState(false);
+  const [shouldRender, setShouldRender] = useState(folder.isOpen);
+
+  useEffect(() => {
+    if (folder.isOpen) {
+      setShouldRender(true);
+      setIsAnimatingOut(false);
+    } else {
+      setIsAnimatingOut(true);
+      const timer = setTimeout(() => {
+        setShouldRender(false);
+      }, 200); // Match this with CSS animation duration
+      return () => clearTimeout(timer);
+    }
+  }, [folder.isOpen]);
 
   const showExpandIcon = useMemo(() => {
     return folderNotes.length > 0 && (!folder.locked || (folder.locked && isUnlocked && folder.isOpen));
@@ -74,7 +89,7 @@ const FolderItem = React.memo(({
   const title = useMemo(() => {
     if (folder?.content?.match) {
       const extractedTitle = folder.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1];
-      folder.content = folder.visibleTitle
+      folder.content = folder.visibleTitle;
       return extractedTitle || folder.visibleTitle;
     }
     return folder.visibleTitle || 'Untitled Folder';
@@ -145,48 +160,47 @@ const FolderItem = React.memo(({
         </div>
       </li>
       
-      {(!folder.locked || isUnlocked) && folder.isOpen && folderNotes.length > 0 && (
+      {(!folder.locked || isUnlocked) && shouldRender && folderNotes.length > 0 && (
         <div 
-        className={`folder-content ${folder.isOpen ? 'expanded' : ''}`}
-      >
-        <div className="folder-line" style={{ left: `${depth * 40 + 21}px` }} />
+          className={`folder-content ${isAnimatingOut ? 'closing' : 'expanded'}`}
+        >
+          <div className="folder-line" style={{ left: `${depth * 40 + 21}px` }} />
           {[...folderNotes]
-          .sort((a, b) => {
-            // Sort folders before notes
-            if (FolderService.isFolder(a) && !FolderService.isFolder(b)) return -1;
-            if (!FolderService.isFolder(a) && FolderService.isFolder(b)) return 1;
-            return 0;
-          })
-          .map(item => (
-          FolderService.isFolder(item) ? (
-            <FolderItem
-              key={item.id}
-              folder={item}
-              selectedId={selectedId}
-              isSelected={item.id === selectedId}
-              onSelect={onSelect}
-              onNoteSelect={onNoteSelect}
-              onContextMenu={onContextMenu}
-              setNotes={setNotes}
-              notes={notes}
-              folderNotes={notes.filter(note => note.parentFolderId === item.id)}
-              depth={depth + 1}
-            />
-          ) : (
-            <NoteItem
-              key={item.id}
-              note={item}
-              depth={depth + 1}
-              isSelected={item.id === selectedId}
-              onNoteSelect={onNoteSelect}
-              onContextMenu={onContextMenu}
-            />
-          )
-          ))}
-          </div>
-        )}
-      </>
-    );
-  });
+            .sort((a, b) => {
+              if (FolderService.isFolder(a) && !FolderService.isFolder(b)) return -1;
+              if (!FolderService.isFolder(a) && FolderService.isFolder(b)) return 1;
+              return 0;
+            })
+            .map(item => (
+              FolderService.isFolder(item) ? (
+                <FolderItem
+                  key={item.id}
+                  folder={item}
+                  selectedId={selectedId}
+                  isSelected={item.id === selectedId}
+                  onSelect={onSelect}
+                  onNoteSelect={onNoteSelect}
+                  onContextMenu={onContextMenu}
+                  setNotes={setNotes}
+                  notes={notes}
+                  folderNotes={notes.filter(note => note.parentFolderId === item.id)}
+                  depth={depth + 1}
+                />
+              ) : (
+                <NoteItem
+                  key={item.id}
+                  note={item}
+                  depth={depth + 1}
+                  isSelected={item.id === selectedId}
+                  onNoteSelect={onNoteSelect}
+                  onContextMenu={onContextMenu}
+                />
+              )
+            ))}
+        </div>
+      )}
+    </>
+  );
+});
 
 export default FolderItem;

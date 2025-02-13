@@ -1209,6 +1209,41 @@ input[type="range"]:disabled::-moz-range-thumb {
 
 .folder-content {
   position: relative;
+  opacity: 0;
+  transform: translateY(-10px);
+  animation: folderContentExpand 0.2s ease forwards;
+}
+
+.folder-content.expanded {
+  opacity: 1;
+  transform: translateY(0);
+  animation: folderContentExpand 0.2s ease forwards;
+}
+
+.folder-content.closing {
+  animation: folderContentCollapse 0.2s ease forwards;
+}
+
+@keyframes folderContentExpand {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes folderContentCollapse {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
 }
 
 .folder-line {
@@ -1217,6 +1252,17 @@ input[type="range"]:disabled::-moz-range-thumb {
   bottom: 0;
   width: 2px;
   background-color: rgba(255, 255, 255, 0.1);
+  opacity: 0;
+  animation: fadeIn 0.2s ease forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .folder-title {
