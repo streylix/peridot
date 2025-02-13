@@ -2,6 +2,10 @@
 
 A secure, feature-rich note-taking application built with React.
 
+## Test it yourself!
+
+[View website here](https://peridot-iota.vercel.app/)
+
 ## Features
 
 - 📝 Rich text editing
