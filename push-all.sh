@@ -2,7 +2,7 @@
 
 # Push to peridot repository (origin)
 echo "Pushing to Peridot repository..."
-git push origin main
+git push origin react-overhaul:main
 
 # Check if the push was successful
 if [ $? -eq 0 ]; then

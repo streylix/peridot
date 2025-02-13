@@ -1,6 +1,3 @@
-import { noteContentService } from './NoteContentService';
-import { FolderService } from './folderUtils';
-
 class NoteSortingService {
   constructor() {
     this.defaultSortMethod = 'dateModified-desc';
@@ -25,25 +22,61 @@ class NoteSortingService {
   }
 
   sortNotes(notes, method = this.getSortMethod()) {
-    if (!notes || notes.length === 0) return [];
-    let workingNotes = [...notes];
+    if (!notes || !Array.isArray(notes) || notes.length === 0) return [];
+    
+    // Filter out invalid notes
+    const validNotes = notes.filter(note => note && typeof note === 'object');
+    let workingNotes = [...validNotes];
 
-    // Always sort folders first
-    workingNotes.sort((a, b) => {
-      if (FolderService.isFolder(a) && !FolderService.isFolder(b)) return -1;
-      if (!FolderService.isFolder(a) && FolderService.isFolder(b)) return 1;
-      return 0;
+    // Get all top-level items (items without a parent folder)
+    const topLevelItems = workingNotes.filter(item => !item.parentFolderId);
+    
+    // Sort top-level items
+    const sortedTopLevel = this.applySortMethod(topLevelItems, method);
+    
+    // For items with parent folders, we need to sort them within their folders
+    const itemsByFolder = {};
+    workingNotes.forEach(item => {
+      if (item.parentFolderId) {
+        if (!itemsByFolder[item.parentFolderId]) {
+          itemsByFolder[item.parentFolderId] = [];
+        }
+        itemsByFolder[item.parentFolderId].push(item);
+      }
     });
 
-    // Split into folders and non-folders
-    const folders = workingNotes.filter(n => FolderService.isFolder(n));
-    const nonFolders = workingNotes.filter(n => !FolderService.isFolder(n));
+    // Sort items within each folder
+    Object.keys(itemsByFolder).forEach(folderId => {
+      itemsByFolder[folderId] = this.applySortMethod(itemsByFolder[folderId], method);
+    });
 
-    // Sort each group
-    const sortedNonFolders = this.applySortMethod(nonFolders, method);
-    const sortedFolders = this.applySortMethod(folders, method);
+    // Create final sorted array
+    const sortedNotes = [];
+    const processed = new Set();
 
-    return [...sortedFolders, ...sortedNonFolders];
+    const addItemAndChildren = (item) => {
+      if (processed.has(item.id)) return;
+      processed.add(item.id);
+      sortedNotes.push(item);
+
+      // If this is a folder, add its sorted children
+      if (this.isFolder(item) && itemsByFolder[item.id]) {
+        itemsByFolder[item.id].forEach(child => {
+          addItemAndChildren(child);
+        });
+      }
+    };
+
+    // Process all top-level items and their children
+    sortedTopLevel.forEach(item => {
+      addItemAndChildren(item);
+    });
+
+    return sortedNotes;
+  }
+
+  isFolder(item) {
+    return item && item.type === 'folder';
   }
 
   applySortMethod(notes, method) {
@@ -65,23 +98,40 @@ class NoteSortingService {
     }
   }
 
+  getItemTitle(item) {
+    if (!item || !item.content) return 'Untitled';
+
+    if (this.isFolder(item)) {
+      const match = item.content.match(/<div[^>]*>(.*?)<\/div>/);
+      return match ? match[1] : 'Untitled Folder';
+    }
+
+    if (item.locked && item.visibleTitle) {
+      return item.visibleTitle;
+    }
+
+    // Extract first line from content
+    const match = item.content.match(/<div[^>]*>(.*?)<\/div>/);
+    return match ? match[1] : 'Untitled';
+  }
+
   sortByAlpha(notes, ascending) {
-    return notes.sort((a, b) => {
+    return [...notes].sort((a, b) => {
+      // First handle pinned items
       if (this.prioritizePinned && a.pinned !== b.pinned) {
         return a.pinned ? -1 : 1;
       }
 
-      const getTitle = item => {
-        if (FolderService.isFolder(item)) {
-          return item.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 'Untitled Folder';
-        }
-        return item.locked ? 
-          (item.visibleTitle || noteContentService.getFirstLine(item.content)) :
-          noteContentService.getFirstLine(item.content);
-      };
+      // Then sort by folder/non-folder
+      const aIsFolder = this.isFolder(a);
+      const bIsFolder = this.isFolder(b);
+      if (aIsFolder !== bIsFolder) {
+        return aIsFolder ? -1 : 1;
+      }
 
-      const titleA = getTitle(a);
-      const titleB = getTitle(b);
+      // Then sort by title
+      const titleA = this.getItemTitle(a);
+      const titleB = this.getItemTitle(b);
       
       return ascending ? 
         titleA.localeCompare(titleB) : 
@@ -90,23 +140,45 @@ class NoteSortingService {
   }
 
   sortByDateModified(notes, ascending) {
-    return notes.sort((a, b) => {
+    return [...notes].sort((a, b) => {
+      // First sort by pinned
       if (a.pinned !== b.pinned) {
         return a.pinned ? -1 : 1;
       }
+
+      // Then sort by folder/non-folder
+      const aIsFolder = this.isFolder(a);
+      const bIsFolder = this.isFolder(b);
+      if (aIsFolder !== bIsFolder) {
+        return aIsFolder ? -1 : 1;
+      }
+      
+      const dateA = new Date(a.dateModified || a.id || 0);
+      const dateB = new Date(b.dateModified || b.id || 0);
+      
       return ascending ?
-        new Date(a.dateModified) - new Date(b.dateModified) :
-        new Date(b.dateModified) - new Date(a.dateModified);
+        dateA - dateB :
+        dateB - dateA;
     });
   }
 
   sortByDateCreated(notes, ascending) {
-    return notes.sort((a, b) => {
+    return [...notes].sort((a, b) => {
+      // First sort by pinned
       if (this.prioritizePinned && a.pinned !== b.pinned) {
         return a.pinned ? -1 : 1;
       }
-      const dateA = new Date(a.id);
-      const dateB = new Date(b.id);
+
+      // Then sort by folder/non-folder
+      const aIsFolder = this.isFolder(a);
+      const bIsFolder = this.isFolder(b);
+      if (aIsFolder !== bIsFolder) {
+        return aIsFolder ? -1 : 1;
+      }
+      
+      const dateA = new Date(a.id || 0);
+      const dateB = new Date(b.id || 0);
+      
       return ascending ? dateA - dateB : dateB - dateA;
     });
   }
