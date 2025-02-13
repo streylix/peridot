@@ -1,12 +1,16 @@
 import { storageService } from './StorageService';
 import { encryptNote } from './encryption';
-import { noteContentService } from './NoteContentService';
 
 class NoteUpdateService {
   constructor() {
-    this.updateQueue = [];
-    this.processingRef = false;
+    this.updateTimers = new Map();
+    this.pendingUpdates = new Map();
     this.subscribers = new Set();
+    this.isProcessingUnload = false;
+
+    // Bind the unload handler to ensure correct context
+    this.handleBeforeUnload = this.handleBeforeUnload.bind(this);
+    window.addEventListener('beforeunload', this.handleBeforeUnload);
   }
 
   subscribe(callback) {
@@ -17,62 +21,51 @@ class NoteUpdateService {
   notifySubscribers(updatedNote) {
     this.subscribers.forEach(callback => callback(updatedNote));
     
-    // Also dispatch a DOM event for compatibility
     window.dispatchEvent(new CustomEvent('noteUpdate', {
       detail: { note: updatedNote }
     }));
   }
 
-  // Queue an update for processing
-  async queueUpdate(noteId, updates, updateModified = true, encryptionContext = null) {
-    this.updateQueue.push({
-      noteId,
-      updates,
-      updateModified,
-      encryptionContext
-    });
+  async handleBeforeUnload(event) {
+    if (this.pendingUpdates.size === 0) return;
 
-    // Start processing if not already running
-    if (!this.processingRef) {
-      this.processUpdates();
+    this.isProcessingUnload = true;
+
+    try {
+      // Process all pending updates synchronously
+      for (const [noteId, updates] of this.pendingUpdates.entries()) {
+        await this.processImmediateUpdate(noteId, updates);
+      }
+    } catch (error) {
+      console.error('Error processing updates on unload:', error);
+    } finally {
+      this.isProcessingUnload = false;
+      this.pendingUpdates.clear();
+      this.updateTimers.clear();
     }
   }
 
-  // Process the update queue
-  async processUpdates() {
-    if (this.processingRef || this.updateQueue.length === 0) return;
-    
-    this.processingRef = true;
-    const update = this.updateQueue[0];
-
+  async processImmediateUpdate(noteId, updates, updateModified = true, encryptionContext = null) {
     try {
       // Get current note state
-      const currentNote = await storageService.readNote(update.noteId);
-      if (!currentNote) throw new Error('Note not found');
+      const currentNote = await storageService.readNote(noteId);
+      if (!currentNote) return;
 
       let updatedNote = {
         ...currentNote,
-        ...update.updates,
-        dateModified: update.updateModified ? new Date().toISOString() : currentNote.dateModified
+        ...updates,
+        dateModified: updateModified ? new Date().toISOString() : currentNote.dateModified
       };
 
       // Handle encryption if needed
-      if (update.encryptionContext?.shouldEncrypt) {
-        try {
-          if (typeof updatedNote.content === 'string'){
-            updatedNote = await encryptNote(
-              updatedNote, 
-              update.encryptionContext.password
-            );
-          }
-        } catch (error) {
-          // If encryption fails, continue with unencrypted update
-          console.warn('Encryption failed, continuing with unencrypted update');
+      if (encryptionContext?.shouldEncrypt) {
+        if (typeof updatedNote.content === 'string') {
+          updatedNote = await encryptNote(updatedNote, encryptionContext.password);
         }
       }
 
       // Clean up encryption fields if needed
-      if (!updatedNote.locked && !update.updates.locked) {
+      if (!updatedNote.locked && !updates.locked) {
         delete updatedNote.encrypted;
         delete updatedNote.keyParams;
         delete updatedNote.iv;
@@ -80,37 +73,95 @@ class NoteUpdateService {
       }
 
       // Save to storage
-      await storageService.writeNote(update.noteId, updatedNote);
+      await storageService.writeNote(noteId, updatedNote);
 
       // Notify subscribers
       this.notifySubscribers(updatedNote);
 
     } catch (error) {
-      console.error('Failed to process update:', error);
-    } finally {
-      // Remove processed update and continue if more updates exist
-      this.updateQueue.shift();
-      this.processingRef = false;
-
-      if (this.updateQueue.length > 0) {
-        setTimeout(() => this.processUpdates(), 0);
-      }
+      console.error('Failed to process immediate note update:', error);
     }
   }
 
-  // Helper to clean encrypted fields
-  cleanEncryptedFields(note) {
-    const cleaned = { ...note };
-    delete cleaned.encrypted;
-    delete cleaned.keyParams;
-    delete cleaned.iv;
-    delete cleaned.visibleTitle;
-    return cleaned;
+  async queueUpdate(noteId, updates, updateModified = true, encryptionContext = null) {
+    // If unload is in progress, process immediately
+    if (this.isProcessingUnload) {
+      return this.processImmediateUpdate(noteId, updates, updateModified, encryptionContext);
+    }
+
+    // Merge with any existing pending updates for this note
+    const existingUpdates = this.pendingUpdates.get(noteId) || {};
+    const mergedUpdates = { ...existingUpdates, ...updates };
+    this.pendingUpdates.set(noteId, mergedUpdates);
+
+    // Cancel any existing timer for this note
+    if (this.updateTimers.has(noteId)) {
+      clearTimeout(this.updateTimers.get(noteId));
+    }
+
+    // Set a new timer
+    const timer = setTimeout(async () => {
+      try {
+        // Get current note state
+        const currentNote = await storageService.readNote(noteId);
+        if (!currentNote) return;
+
+        // Get the final merged updates
+        const finalUpdates = this.pendingUpdates.get(noteId) || {};
+        this.pendingUpdates.delete(noteId);
+
+        let updatedNote = {
+          ...currentNote,
+          ...finalUpdates,
+          dateModified: updateModified ? new Date().toISOString() : currentNote.dateModified
+        };
+
+        // Handle encryption if needed
+        if (encryptionContext?.shouldEncrypt) {
+          if (typeof updatedNote.content === 'string') {
+            updatedNote = await encryptNote(updatedNote, encryptionContext.password);
+          }
+        }
+
+        // Clean up encryption fields if needed
+        if (!updatedNote.locked && !finalUpdates.locked) {
+          delete updatedNote.encrypted;
+          delete updatedNote.keyParams;
+          delete updatedNote.iv;
+          delete updatedNote.visibleTitle;
+        }
+
+        // Save to storage
+        await storageService.writeNote(noteId, updatedNote);
+
+        // Notify subscribers
+        this.notifySubscribers(updatedNote);
+
+        // Remove the timer
+        this.updateTimers.delete(noteId);
+
+      } catch (error) {
+        console.error('Failed to process note update:', error);
+        this.updateTimers.delete(noteId);
+        this.pendingUpdates.delete(noteId);
+      }
+    }, 200);
+
+    // Store the timer
+    this.updateTimers.set(noteId, timer);
   }
 
-  // Clear all pending updates for a note
   clearUpdatesForNote(noteId) {
-    this.updateQueue = this.updateQueue.filter(update => update.noteId !== noteId);
+    if (this.updateTimers.has(noteId)) {
+      clearTimeout(this.updateTimers.get(noteId));
+      this.updateTimers.delete(noteId);
+    }
+    this.pendingUpdates.delete(noteId);
+  }
+
+  // Cleanup method to remove event listener when service is no longer needed
+  cleanup() {
+    window.removeEventListener('beforeunload', this.handleBeforeUnload);
   }
 }
 
