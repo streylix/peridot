@@ -152,9 +152,9 @@ function MainContent({
 
     try {
       const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true'
-      const storedPassword = await passwordStorage.getPassword(note.id);
       
       if (!verifyBypass){
+        const storedPassword = await passwordStorage.getPassword(note.id);
         if ((!storedPassword || password !== storedPassword)) {
           return false;
         }

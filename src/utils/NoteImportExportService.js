@@ -455,6 +455,46 @@ class NoteImportExportService {
     }
   }
 
+  sanitizeLegacyContent(content) {
+    if (!content) return '';
+    
+    let sanitized = content;
+    
+    // Create a temporary div to parse HTML content
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = content;
+    
+    // Remove all embed tags and add a placeholder message
+    const embeds = tempDiv.getElementsByTagName('embed');
+    while (embeds.length > 0) {
+      const embed = embeds[0];
+      const src = embed.getAttribute('src');
+      const placeholder = document.createElement('div');
+      placeholder.innerHTML = `<div style="padding: 10px; margin: 5px 0; color: #666; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px;">Embedded content from: ${src} (no longer supported)</div>`;
+      embed.parentNode.replaceChild(placeholder, embed);
+    }
+    
+    // Remove any iframe tags
+    const iframes = tempDiv.getElementsByTagName('iframe');
+    while (iframes.length > 0) {
+      const iframe = iframes[0];
+      const src = iframe.getAttribute('src');
+      const placeholder = document.createElement('div');
+      placeholder.innerHTML = `<div style="padding: 10px; margin: 5px 0; color: #666; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px;">Embedded content from: ${src} (no longer supported)</div>`;
+      iframe.parentNode.replaceChild(placeholder, iframe);
+    }
+    
+    // Get the sanitized content
+    sanitized = tempDiv.innerHTML;
+    
+    // Clean up any remaining problematic tags or attributes
+    sanitized = sanitized.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    sanitized = sanitized.replace(/<embed\b[^<]*(?:(?!<\/embed>)<[^<]*)*<\/embed>/gi, '');
+    sanitized = sanitized.replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '');
+    
+    return sanitized;
+  }
+
   /**
    * Handle JSON file import
    * @param {string} content - File content
@@ -480,7 +520,7 @@ class NoteImportExportService {
           if (item.type === 'folder') {
             // Get the folder title from visibleTitle or extract from content
             let folderTitle = item.visibleTitle;
-            
+
             if (!folderTitle && typeof item.content === 'string') {
               const titleMatch = item.content.match(/<div[^>]*>(.*?)<\/div>/);
               folderTitle = titleMatch ? titleMatch[1] : 'Untitled Folder';
@@ -511,21 +551,36 @@ class NoteImportExportService {
             // Process as a note
             const processedNote = {
               id: item.id || fileDate.getTime(),
-              content: item.content,
               dateModified: item.dateModified || fileDate.toISOString(),
               dateCreated: item.dateCreated || item.id || fileDate.toISOString(),
               pinned: Boolean(item.pinned),
               caretPosition: Number(item.caretPosition) || 0,
               parentFolderId: item.parentFolderId || null,
               locked: Boolean(item.locked),
-              encrypted: Boolean(item.encrypted)
+              encrypted: Boolean(item.encrypted),
+              visibleTitle: item.visibleTitle || item.title
             };
   
-            // Preserve encrypted note properties
-            if (item.encrypted) {
+            // Handle encrypted content
+            if (item.encrypted || item.encryptedContent) {
+              // Use encryptedContent if available, otherwise use content
+              processedNote.content = item.encryptedContent || item.content;
               processedNote.keyParams = item.keyParams;
               processedNote.iv = item.iv;
-              processedNote.visibleTitle = item.visibleTitle;
+            } else {
+              // Handle title in unencrypted content
+              let processedContent = this.sanitizeLegacyContent(item.content);
+              if (item.title && typeof item.title === 'string') {
+                if (processedContent.trim().startsWith('<div>')) {
+                  processedContent = processedContent.replace(
+                    /<div[^>]*>.*?<\/div>/, 
+                    `<div>${item.title}</div>`
+                  );
+                } else {
+                  processedContent = `<div>${item.title}</div>${processedContent}`;
+                }
+              }
+              processedNote.content = processedContent;
             }
   
             validNotes.push(processedNote);
