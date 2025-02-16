@@ -284,7 +284,6 @@ header.full-width{
 .note-item {
   display: flex;
   flex-direction: column;
-  margin-right: 10px;
   margin-bottom: 5px;
   cursor: pointer;
   border-radius: 4px;
@@ -623,6 +622,7 @@ header.full-width{
     margin-left: 4px;
     position: absolute;
     left: 14vh;
+    max-width: calc(100% - 200px);
   }
   
   .note-tab-title {
@@ -633,7 +633,7 @@ header.full-width{
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 200px;
+    min-width: 200px;
   }
 
 
@@ -1135,7 +1135,6 @@ input[type="range"]:disabled::-moz-range-thumb {
   position: relative;
   display: block;
   margin: 0;
-  margin-right: 10px;
   border-radius: 4px;
   padding: 0;
 }

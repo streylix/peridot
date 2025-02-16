@@ -25,7 +25,6 @@ const RenameModal = ({ isOpen, onClose, item, onSuccess }) => {
 
   const handleSubmit = async () => {
     if (!title.trim()) return;
-    console.log(title.trim())
     
     try {
       const updatedItem = await FolderService.renameItem(item, title.trim());

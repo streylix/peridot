@@ -30,19 +30,38 @@ function Header({
   );
   
   const selectedNote = notes.find(note => note.id === selectedId);
+  
   const noteTitle = useMemo(() => {
     if (selectedNote) {
-      if (selectedNote.locked) {
-        // Use the visibleTitle property for locked notes
-        return selectedNote.visibleTitle || 'Untitled';
-      } else {
-        // Use the first line of the note content for unlocked notes
-        selectedNote.visibleTitle = noteContentService.getFirstLine(selectedNote.content)
-        return selectedNote.visibleTitle;
+      const path = [];
+      let currentItem = selectedNote;
+      
+      // Get the current note's title
+      const currentTitle = currentItem.locked ? 
+        currentItem.visibleTitle : 
+        (currentItem.content ? 
+          (currentItem.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || currentItem.visibleTitle) : 
+          'Untitled'
+        );
+      path.unshift(currentTitle);
+  
+      // Traverse up through parent folders
+      while (currentItem.parentFolderId) {
+        const parentFolder = notes.find(n => n.id === currentItem.parentFolderId);
+        if (!parentFolder) break;
+  
+        const folderTitle = parentFolder.content ? 
+          (parentFolder.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || parentFolder.visibleTitle) : 
+          'Untitled';
+        
+        path.unshift(folderTitle);
+        currentItem = parentFolder;
       }
+  
+      return path.join(' > ');
     }
     return '';
-  }, [selectedNote?.content, selectedNote?.locked, selectedNote?.visibleTitle]);
+  }, [selectedNote?.content, selectedNote?.locked, selectedNote?.visibleTitle, selectedNote?.parentFolderId, notes]);
 
   return (
     <header>

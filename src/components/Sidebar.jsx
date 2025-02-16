@@ -11,6 +11,7 @@ import SortingButton from './SortingButton';
 import { noteImportExportService } from '../utils/NoteImportExportService';
 import { FolderService } from '../utils/folderUtils';
 import FolderItem from './FolderItem';
+import { searchService } from '../utils/SearchService';
 
 const CustomTooltip = ({ children, content }) => (
   <div className="tooltip-container">
@@ -368,33 +369,7 @@ const Sidebar = React.forwardRef(({
   }, [noteSortingService.getSortMethod()]);
 
   const filteredNotes = useMemo(() => {
-    return noteSortingService.sortNotes(
-      notes.filter(item => {
-        if (!searchTerm) {
-          // If no search term, only show top-level items without a parent folder
-          return !item.parentFolderId;
-        }
-        
-        const search = searchTerm.toLowerCase();
-        
-        // For folders
-        if (FolderService.isFolder(item)) {
-          const title = item.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 'Untitled Folder';
-          return title.toLowerCase().includes(search);
-        }
-        
-        // For notes - check if it matches the search term (and if locked, search for the title)
-        const title = (item.locked ? item.visibleTitle : noteContentService.getFirstLine(item.content));
-        const content = noteContentService.getPreviewContent(item.content);
-        
-        return title.toLowerCase().includes(search) || 
-               content.toLowerCase().includes(search) ||
-               // Include notes within folders that match the search term
-               (item.parentFolderId && 
-                (title.toLowerCase().includes(search) || 
-                 content.toLowerCase().includes(search)));
-      })
-    );
+    return searchService.searchNotes(notes, searchTerm);
   }, [notes, searchTerm, sortMethod]);
 
   const handleItemSelect = useCallback((itemId) => {
