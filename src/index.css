@@ -198,6 +198,7 @@ header.full-width{
   overflow-y: auto;
   width: 100%;
   height: 100vh;
+  scrollbar-gutter: stable;
 }
 
 .note-list li {
@@ -552,11 +553,6 @@ header.full-width{
 .note-list {
   scrollbar-width: thin;
   scrollbar-color: rgba(155, 155, 155, 0.2) transparent;
-}
-
-/* Hide scrollbar by default but show on hover */
-.note-list {
-  overflow-y: overlay; /* Creates a layered scrollbar */
 }
 
 #back-btn {
