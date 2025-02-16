@@ -13,7 +13,7 @@ v0.12:
     ➕ Folders
         ➕ Set custom folder color
         ✅ click and drag
-        ➕ lock folders
+        ✅ lock folders
         ✅ search in folders
         ✅ folders in folders
     ✅ Resizable

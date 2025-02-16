@@ -190,11 +190,8 @@ function App() {
   };
   
   const handleNoteSelect = (noteId) => {
-    const selectedNote = findNoteInNotes(noteId, notes);
-    
-    if (selectedNote) {
-      noteNavigation.push(noteId);
-    }
+    setSelectedId(noteId);
+    noteNavigation.push(noteId);
   };
 
   const handleBack = () => {

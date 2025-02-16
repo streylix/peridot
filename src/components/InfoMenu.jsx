@@ -20,7 +20,8 @@ const InfoMenu = ({
   setDownloadNoteId,
   setPdfExportNote,
   setIsPdfExportModalOpen,
-  setNotes
+  setNotes,
+  onNoteSelect
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef(null);

@@ -59,7 +59,7 @@ const Sidebar = React.forwardRef(({
   setDownloadable,
   setDownloadNoteId,
   setPdfExportNote,
-  setIsPdfExportModalOpen
+  setIsPdfExportModalOpen,
 }, ref) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [contextMenu, setContextMenu] = useState(null);
@@ -323,7 +323,10 @@ const Sidebar = React.forwardRef(({
 
     try {
       await storageService.writeNote(newNote.id, newNote);
-      setNotes(prevNotes => sortNotes([newNote, ...prevNotes]));
+      setNotes(prevNotes => {
+        const updatedNotes = sortNotes([newNote, ...prevNotes]);
+        return updatedNotes;
+      });
       onNoteSelect(newNote.id);
     } catch (error) {
       console.error('Failed to create note:', error);
@@ -336,7 +339,6 @@ const Sidebar = React.forwardRef(({
     try {
       await storageService.writeNote(newFolder.id, newFolder);
       setNotes(prevNotes => sortNotes([newFolder, ...prevNotes]));
-      onNoteSelect(newFolder.id);
     } catch (error) {
       console.error('Failed to create folder:', error);
     }
@@ -520,6 +522,7 @@ const Sidebar = React.forwardRef(({
           setPdfExportNote={setPdfExportNote}
           setIsPdfExportModalOpen={setIsPdfExportModalOpen}
           setNotes={setNotes}
+          onNoteSelect={onNoteSelect}
         />
       )}
     </div>
