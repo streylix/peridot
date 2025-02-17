@@ -1,72 +1,180 @@
 /* Mobile styles - All styles under 600px viewport width */
 @media (max-width: 600px) {
-    /* Top bar adjustments */
-    .top-bar {
-      height: 40px;
-      padding: 2px 5px;
-    }
-  
-    /* Sidebar adjustments */
-    .sidebar {
-      position: fixed;
-      height: calc(100vh - 45px);
-      top: 45px;
-      left: 0;
-      z-index: 1000;
-      width: 100vw;
-    }
-  
-    /* Search box adjustments */
-    .sidebar .search input[type="search"] {
-      padding: 2px 5px;
-    }
-  
-    /* Note toolbar adjustments */
-    .note-toolbar button {
-      font-size: 14px;
-      padding: 2px 5px;
-    }
-  
-    /* Main content adjustments */
-    .main-content {
-      width: 100%;
-      max-width: 100%;
-      padding-left: 5px;
-      padding-right: 5px;
-    }
-  
-    /* Editable area adjustments */
-    .editable {
-      height: calc(100% - 35px);
-    }
-  
-    .editable h1 {
-      margin-bottom: 10px;
-    }
-  
-    .editable div {
-      height: calc(100% - 12vh);
-      overflow-y: auto;
-      color: #0aa34f6a
-      -webkit-linear-gradient(45deg, #0aa34f6a, rgba(172, 255, 47, 0.451), rgba(255, 255, 0, 0.398));
-    }
-  
-    /* Animation classes */
-    .animate-right {
-      animation: moveRight .1s forwards ease-in-out;
-    }
-  
-    .animate-left {
-      animation: moveLeft .1s forwards ease-in-out;
-    }
-  
-    @keyframes moveRight {
-      from { transform: translateX(-100%); }
-      to { transform: translateX(0%); }
-    }
-  
-    @keyframes moveLeft {
-      from { transform: translateX(0%); }
-      to { transform: translateX(-100%); }
-    }
+  body {
+      overflow-x: hidden;
   }
+
+  /* Sidebar initial state - full screen */
+  .sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1000;
+      transform: translateX(0);
+      transition: transform 0.3s ease-in-out;
+      overflow-y: auto;
+  }
+
+  .sidebar-buttons {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 20px;
+      padding: 10px 0;
+      background: none;
+      border: none;
+  }
+
+  .sidebar-buttons .new-note-btn {
+      background: none;
+      border: none;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+  }
+
+  /* Sidebar hidden state */
+  .sidebar.hidden {
+      transform: translateX(-100%);
+  }
+
+  .sidebar-header {
+    border-bottom: 1px solid #3c3c3c;
+    padding-bottom: 5px;
+    width: 100%;
+  }
+
+
+
+  /* Top bar adjustments */
+  .top-bar {
+      height: 45px;
+      padding: 2px 5px;
+      width: 100%;
+      left: 0;
+  }
+
+  /* Header adjustments */
+  header {
+      left: 0 !important;
+      width: 100%;
+  }
+
+  /* Main content full screen when sidebar is hidden */
+  .main-content {
+      width: 100vw;
+      height: calc(100vh - 45px);
+      left: 0;
+  }
+
+  .note-tab {
+    left: 7vh;
+  }
+
+  .main-content.full-width {
+      transform: translateX(0);
+  }
+
+  /* Note list adjustments */
+  .note-list {
+      padding: 0;
+      margin: 0;
+      top: 0;
+      position: relative;
+  }
+
+  .note-item {
+      padding: 12px;
+      border-bottom: 1px solid #e0e0e0;
+  }
+
+  /* .title-spacer {
+    height: 0px !important;
+  } */
+
+  .search {
+    display: -webkit-box;
+  }
+
+  /* Swipe gesture for sidebar */
+  .sidebar-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.5);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease-in-out;
+      z-index: 999;
+  }
+
+  .sidebar-overlay.active {
+      opacity: 1;
+      visibility: visible;
+  }
+
+  /* Editable area adjustments */
+  .editable {
+      padding: 10px;
+      height: calc(100vh - 45px);
+  }
+
+  #inner-note {
+      min-height: calc(100vh - 65px);
+  }
+
+  /* Gesture detection areas */
+  .sidebar-edge-detector {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 20px;
+      height: 100vh;
+      z-index: 1001;
+  }
+
+  /* Responsive image handling */
+  .editable img {
+      max-width: 100%;
+      height: auto;
+  }
+
+  .sidebar .search input[type="search"] {
+    display: flex;
+      margin: 16px 0px 10px 0px;
+      padding: 10px;
+      background-color: #252526;
+      color: #c7c7c7;
+      border: 1px solid #3c3c3c;
+      width: calc(100% - 34vw);
+      flex-grow: 1;
+  }
+}
+
+/* Prevent horizontal scrolling on mobile */
+@media (max-width: 600px) {
+  body, html {
+      overflow-x: hidden;
+      max-width: 100vw;
+  }
+}
+
+/* Smooth touch interactions
+@media (max-width: 600px) {
+  * {
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+  }
+
+  input, textarea, [contenteditable] {
+      -webkit-user-select: text;
+      user-select: text;
+  }
+} */

@@ -26,7 +26,7 @@ header {
 }
 
 .top-bar {
-  backdrop-filter: blur(100px);
+  backdrop-filter: blur(50px);
   height: 45px;
   padding: 0 10px;
   display: flex;
@@ -34,7 +34,6 @@ header {
   align-items: center;
   width: calc(100% - 280px);
   background: linear-gradient(to bottom, rgba(30, 30, 30, 0.2), transparent);
-  
 }
 
 .main-content.opening {
@@ -132,11 +131,14 @@ header.full-width{
 }
 
 .sidebar-header {
-  position: sticky;
+  backdrop-filter: blur(50px);
+  position: fixed;
   top: 0;
   z-index: 3;
   padding: 10px 10px;
   padding-right: 2px;
+  width: 280px;
+  min-width: 280px;
 }
 
 .sidebar.hidden {
@@ -629,7 +631,6 @@ header.full-width{
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    min-width: 200px;
   }
 
 
@@ -1119,7 +1120,10 @@ input[type="range"]:disabled::-moz-range-thumb {
   opacity: 1;
 }
 
-
+.sidebar-spacer {
+  flex-shrink: 0;
+  pointer-events: none;
+}
 
 .sidebar-buttons {
   align-content: center;
@@ -1144,7 +1148,6 @@ input[type="range"]:disabled::-moz-range-thumb {
   align-items: center;
   gap: 8px;
   position: relative;
-  z-index: 10;
 }
 
 #child {
@@ -1264,4 +1267,48 @@ input[type="range"]:disabled::-moz-range-thumb {
   text-wrap: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
+}
+
+/* Logo and header shadow */
+.logo {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+/* Dark mode search input shadow */
+.dark-mode .search input {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode .search input:focus {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* Dark mode note item shadow */
+.dark-mode .note-item {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode .note-item:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* Dark mode folder item shadow */
+.dark-mode .folder-item {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.dark-mode .folder-item:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+
+
+/* Action buttons shadow */
+.dark-mode .new-note-btn {
+  filter: drop-shadow(1px 2px 0px rgb(0, 0, 0));
+  transition: all 0.2s ease;
+}
+
+.dark-mode .new-note-btn:hover {
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
 }

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect, useImperativeHandle } from 'react';
+import { useMobileSidebar } from './useMobileSidebar';
 import { SquarePen, FolderPlus } from 'lucide-react';
 import NoteItem from './NoteItem';
 import InfoMenu from './InfoMenu';
@@ -146,6 +147,20 @@ const Sidebar = React.forwardRef(({
     }
   };
 
+  const { isMobile, handleNoteSelect } = useMobileSidebar({
+    sidebarRef,
+    onToggleSidebar: () => {
+      if (ref.current && ref.current.toggleSidebar) {
+        ref.current.toggleSidebar();
+      }
+    }
+  });
+  
+  const wrappedNoteSelect = useCallback((noteId) => {
+    // First, select the note
+    onNoteSelect(handleNoteSelect(noteId));
+  }, [onNoteSelect, handleNoteSelect]);
+
   useEffect(() => {
     const handleMouseMove = (e) => {
       if (!isResizing) return;
@@ -224,8 +239,35 @@ const Sidebar = React.forwardRef(({
       const mainContent = document.querySelector('.main-content');
       const topBar = document.querySelector('.top-bar');
       const header = document.querySelector('header');
-      
-      if (isCollapsed) {
+
+      if (isMobile) {
+        const sidebar = document.querySelector('.sidebar');
+        const mainContent = document.querySelector('.main-content');
+        const header = document.querySelector('header');
+        const topBar = document.querySelector('.top-bar');
+        
+        if (sidebar && mainContent) {
+          // If sidebar is currently hidden, show it
+          if (sidebar.classList.contains('hidden')) {
+            sidebar.classList.remove('hidden');
+            mainContent.classList.remove('full-width');
+            
+            // Ensure header and top bar are reset
+            if (header) header.style.left = '0px';
+            if (topBar) topBar.style.width = '100%';
+          } 
+          // If sidebar is visible, hide it
+          else {
+            sidebar.classList.add('hidden');
+            mainContent.classList.add('full-width');
+            mainContent.style.width = '100%';
+            // Reset header and top bar to full width
+            if (header) header.style.left = '0px';
+            if (topBar) topBar.style.width = '100%';
+          }
+        }
+      }
+      else if (isCollapsed) {
         setIsCollapsed(false);
         setSidebarWidth(MIN_WIDTH);
         
@@ -400,6 +442,21 @@ const Sidebar = React.forwardRef(({
     setNotes(prevNotes => noteSortingService.sortNotes(notes, value));
   }, [notes]);
 
+  // const wrappedNoteSelect = useCallback((noteId) => {
+  //   onNoteSelect(noteId);
+    
+  //   // If on mobile, close sidebar
+  //   if (isMobile) {
+  //     const sidebar = document.querySelector('.sidebar');
+  //     const mainContent = document.querySelector('.main-content');
+      
+  //     if (sidebar && mainContent) {
+  //       sidebar.classList.add('hidden');
+  //       mainContent.classList.add('full-width');
+  //     }
+  //   }
+  // }, [onNoteSelect, isMobile]);
+
   return (
     <div 
       ref={sidebarRef}
@@ -408,12 +465,16 @@ const Sidebar = React.forwardRef(({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       id="sidebar"
-      style={{ 
+      style={!isMobile ? { 
         width: isCollapsed ? 280 : sidebarWidth,
         minWidth: isCollapsed ? 250 : MIN_WIDTH,
-      }}
+      } : undefined}
     >
-      <div className="sidebar-header">
+      <div className="sidebar-header" 
+        style={!isMobile ? { 
+          width: isCollapsed ? 280-1 : sidebarWidth-1,
+          minWidth: isCollapsed ? 250-1 : MIN_WIDTH-1,
+        } : undefined}>
         <div className="logo">
           <img src={logo2} alt="peridot logo" width="50" height="50" />
           <h1>peridot.</h1>
@@ -431,12 +492,12 @@ const Sidebar = React.forwardRef(({
           />
         </div>
       </div>
-      
       <ul 
         className="note-list"
         onDrop={handleSidebarDrop}
         onDragOver={(e) => e.preventDefault()}
       >
+      <div className="sidebar-spacer" style={{ height: '142px' }} />
       {filteredNotes.map(item => 
         FolderService.isFolder(item) ? (
           <FolderItem
@@ -444,7 +505,7 @@ const Sidebar = React.forwardRef(({
             folder={item}
             isSelected={item.id === selectedId}
             onSelect={handleItemSelect}
-            onNoteSelect={onNoteSelect}
+            onNoteSelect={wrappedNoteSelect}
             onContextMenu={handleContextMenu}
             notes={notes}
             folderNotes={notes.filter(note => note.parentFolderId === item.id)}
@@ -456,7 +517,7 @@ const Sidebar = React.forwardRef(({
             key={item.id}
             note={item}
             isSelected={item.id === selectedId}
-            onNoteSelect={onNoteSelect}
+            onNoteSelect={wrappedNoteSelect}
             onContextMenu={handleContextMenu}
           />
         )
@@ -497,7 +558,7 @@ const Sidebar = React.forwardRef(({
           setPdfExportNote={setPdfExportNote}
           setIsPdfExportModalOpen={setIsPdfExportModalOpen}
           setNotes={setNotes}
-          onNoteSelect={onNoteSelect}
+          onNoteSelect={wrappedNoteSelect}
         />
       )}
     </div>

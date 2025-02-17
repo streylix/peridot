@@ -67,7 +67,7 @@ class StorageService {
               const { encryptNote } = await import('./encryption');
               dataToSave = await encryptNote(noteData, password);
             } catch (error) {
-              console.error('Failed to re-encrypt note:', error);
+                // console.error('Failed to re-encrypt note:', error);
             }
           }
 
