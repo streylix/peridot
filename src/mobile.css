@@ -121,11 +121,10 @@
   /* Editable area adjustments */
   .editable {
       padding: 10px;
-      height: calc(100vh - 45px);
   }
 
   #inner-note {
-      min-height: calc(100vh - 65px);
+      min-height: calc(100vh - 150px);
   }
 
   /* Gesture detection areas */

@@ -116,86 +116,170 @@ class StorageService {
     });
   }
 
-async writeNote(noteId, noteData) {
-  await this.init();
-
-  // Clear any pending save
-  if (this.pendingSaves.has(noteId)) {
-    clearTimeout(this.pendingSaves.get(noteId));
+  
+  extractTitleFromContent(content) {
+    if (!content) return 'Untitled';
+    
+    // For folders, handle the special case
+    if (typeof content === 'string' && content.startsWith('<div>')) {
+      const match = content.match(/<div[^>]*>(.*?)<\/div>/);
+      return match ? match[1] : 'Untitled';
+    }
+  
+    // For regular notes, use noteContentService
+    return this.noteContentService.getFirstLine(content);
   }
-
-  // Create a new debounced save
-  const savePromise = new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(async () => {
-      try {
-        switch (this.storageType) {
-          case 'opfs':
-            const notesDir = await this.root.getDirectoryHandle('notes', { create: true });
-            const fileHandle = await notesDir.getFileHandle(`${noteId}.json`, { create: true });
-            const writable = await fileHandle.createWritable();
-            await writable.write(JSON.stringify(noteData));
-            await writable.close();
-            break;
-
-          case 'indexeddb':
-            const tx = this.db.transaction('notes', 'readwrite');
-            const store = tx.objectStore('notes');
-            
-            // Create a clean copy of the note data that's safe to store
-            const cleanData = {
-              id: noteId,
-              content: noteData.content,
-              dateModified: noteData.dateModified,
-              dateCreated: noteData.dateCreated || noteData.id,
-              pinned: !!noteData.pinned,
-              caretPosition: noteData.caretPosition || 0,
-              parentFolderId: noteData.parentFolderId || null,
-              locked: !!noteData.locked,
-              encrypted: !!noteData.encrypted,
-              visibleTitle: noteData.visibleTitle,
-              type: noteData.type,
-              isOpen: !!noteData.isOpen
-            };
-
-            // Only include encryption-related fields if they exist
-            if (noteData.keyParams) cleanData.keyParams = noteData.keyParams;
-            if (noteData.iv) cleanData.iv = noteData.iv;
-
-            await store.put(cleanData);
-            
-            // Wait for transaction to complete
-            await new Promise((resolve, reject) => {
-              tx.oncomplete = resolve;
-              tx.onerror = () => reject(tx.error);
-            });
-            break;
-
-          case 'localstorage':
-            try {
-              localStorage.setItem(`note_${noteId}`, JSON.stringify(noteData));
-            } catch (e) {
-              if (e.name === 'QuotaExceededError') {
-                throw new Error('Storage is full. Please delete some notes.');
-              }
-              throw e;
-            }
-            break;
-        }
-        
-        this.pendingSaves.delete(noteId);
+  
+  async initIndexedDB() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('notesDB', 1);
+  
+      request.onerror = () => reject(request.error);
+  
+      request.onsuccess = () => {
+        this.db = request.result;
         resolve();
-      } catch (error) {
-        console.error(`Failed to write note ${noteId}:`, error);
-        this.pendingSaves.delete(noteId);
-        reject(error);
+      };
+  
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains('notes')) {
+          db.createObjectStore('notes', { keyPath: 'id' });
+        }
+      };
+    });
+  }
+  
+  async writeNoteToIndexedDB(noteId, noteData) {
+    try {
+      if (!this.db) {
+        throw new Error('IndexedDB not initialized');
       }
-    }, this.DEBOUNCE_MS);
-
-    this.pendingSaves.set(noteId, timeoutId);
-  });
-
-  return savePromise;
-}
+  
+      let dataToSave = { ...noteData };
+  
+      // Handle title extraction and storage
+      if (!dataToSave.locked) {
+        // For unlocked notes, extract title from content
+        dataToSave.visibleTitle = this.extractTitleFromContent(dataToSave.content);
+      } else if (!dataToSave.visibleTitle) {
+        // For locked notes without a visible title, extract it before encryption
+        dataToSave.visibleTitle = this.extractTitleFromContent(dataToSave.content);
+      }
+  
+      return new Promise((resolve, reject) => {
+        const transaction = this.db.transaction(['notes'], 'readwrite');
+        const store = transaction.objectStore('notes');
+  
+        const request = store.put(dataToSave);
+  
+        request.onsuccess = () => resolve(true);
+        request.onerror = () => reject(request.error);
+      });
+    } catch (error) {
+      console.error(`Failed to write note ${noteId} to IndexedDB:`, error);
+      throw error;
+    }
+  }
+  
+  async writeNoteToLocalStorage(noteId, noteData) {
+    try {
+      let dataToSave = { ...noteData };
+  
+      // Handle title extraction and storage
+      if (!dataToSave.locked) {
+        // For unlocked notes, extract title from content
+        dataToSave.visibleTitle = this.extractTitleFromContent(dataToSave.content);
+      } else if (!dataToSave.visibleTitle) {
+        // For locked notes without a visible title, extract it before encryption
+        dataToSave.visibleTitle = this.extractTitleFromContent(dataToSave.content);
+      }
+  
+      // Store the note
+      localStorage.setItem(`note_${noteId}`, JSON.stringify(dataToSave));
+      return true;
+    } catch (error) {
+      console.error(`Failed to write note ${noteId} to localStorage:`, error);
+      throw error;
+    }
+  }
+  
+  extractTitleFromContent(content) {
+    if (!content) return 'Untitled';
+    
+    // For folders, handle the special case
+    if (typeof content === 'string' && content.startsWith('<div>')) {
+      const match = content.match(/<div[^>]*>(.*?)<\/div>/);
+      return match ? match[1] : 'Untitled';
+    }
+  
+    // For regular notes, use noteContentService
+    return this.noteContentService.getFirstLine(content);
+  }
+  
+  async writeNote(noteId, noteData) {
+    await this.init();
+  
+    if (this.pendingSaves.has(noteId)) {
+      clearTimeout(this.pendingSaves.get(noteId));
+    }
+  
+    const savePromise = new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(async () => {
+        try {
+          switch (this.storageType) {
+            case 'opfs': {
+              const notesDir = await this.root.getDirectoryHandle('notes', { create: true });
+              const fileHandle = await notesDir.getFileHandle(`${noteId}.json`, { create: true });
+              
+              // Handle encryption state for OPFS
+              let dataToSave = noteData;
+              if (noteData.locked && !noteData.encrypted) {
+                const passwordsDir = await this.root.getDirectoryHandle('passwords', { create: true });
+                try {
+                  const passFileHandle = await passwordsDir.getFileHandle(`${noteId}.pass`);
+                  const passFile = await passFileHandle.getFile();
+                  const password = await passFile.text();
+                  
+                  const { encryptNote } = await import('./encryption');
+                  dataToSave = await encryptNote(noteData, password);
+                } catch (error) {
+                  console.error('Failed to re-encrypt note:', error);
+                }
+              }
+  
+              const writable = await fileHandle.createWritable();
+              await writable.write(JSON.stringify(dataToSave));
+              await writable.close();
+              break;
+            }
+  
+            case 'localstorage':
+              await this.writeNoteToLocalStorage(noteId, noteData);
+              break;
+  
+            case 'indexeddb':
+              await this.writeNoteToIndexedDB(noteId, noteData);
+              break;
+  
+            default:
+              throw new Error(`Unsupported storage type: ${this.storageType}`);
+          }
+          
+          this.pendingSaves.delete(noteId);
+          resolve();
+        } catch (error) {
+          console.error(`Failed to write note ${noteId}:`, error);
+          this.pendingSaves.delete(noteId);
+          reject(error);
+        }
+      }, this.DEBOUNCE_MS);
+  
+      this.pendingSaves.set(noteId, timeoutId);
+    });
+  
+    return savePromise;
+  }
 
   async readNote(noteId) {
     await this.init();
