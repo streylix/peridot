@@ -113,16 +113,16 @@ const ItemComponents = {
       </label>
     ),
     
-    DROPDOWN: ({ value, options, onChange = () => {} }) => (
-        <select 
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          {options.map(opt => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-      ),
+    DROPDOWN: ({ value = '', options, onChange = () => {} }) => (
+      <select 
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {options.map(opt => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+    ),
     
     TEXT: ({ label, subtext }) => (
       <div className={`item-text`}>

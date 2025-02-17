@@ -9,12 +9,31 @@ import { ZipImportHandler } from '../utils/ZipImportHandler';
 import StorageAnalyzer from './StorageAnalyzer';
 import StorageDiagnostics from './StorageDiagnostics';
 import StorageBar from './StorageBar';
+import ResponsiveModal from './ResponsiveModal';
 
 
 function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
   const fileInputRef = useRef(null);
   const [theme, setTheme] = useState('system');
   const [fileType, setFileType] = useState(() => localStorage.getItem('preferredFileType') || 'json');
+  const [currentStorageType, setCurrentStorageType] = useState(storageService.getCurrentStorageType());
+  const [availableStorageTypes, setAvailableStorageTypes] = useState([]);
+
+  useEffect(() => {
+    setAvailableStorageTypes(storageService.getAvailableStorageTypes());
+  }, []);
+
+  const handleStorageTypeChange = async (type) => {
+    try {
+      await storageService.setPreferredStorage(type);
+      setCurrentStorageType(type);
+      // Reload all notes since storage type changed
+      const savedNotes = await storageService.getAllNotes();
+      setNotes(noteSortingService.sortNotes(savedNotes));
+    } catch (error) {
+      alert(`Failed to change storage type: ${error.message}`);
+    }
+  };
 
   const [prioritizePinned, setPrioritizePinned] = useState(() => 
   localStorage.getItem('prioritizePinned') === 'true'
@@ -326,6 +345,21 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
           </ItemPresets.SUBSECTION>
         },
         {
+          content: <ItemPresets.SUBSECTION title="Storage">
+            <ItemPresets.TEXT_DROPDOWN
+              label="Storage Method"
+              subtext={`Current: ${currentStorageType || 'Automatic'}`}
+              value={currentStorageType}
+              options={availableStorageTypes}
+              onChange={handleStorageTypeChange}
+            />
+            <ItemComponents.TEXT
+              label=""
+              subtext="Changes to storage method will take effect immediately. Your notes will be migrated to the new storage type."
+            />
+          </ItemPresets.SUBSECTION>
+        },
+        {
           content: <ItemPresets.SUBSECTION title="Security">
             <ItemPresets.TEXT_SWITCH
               label="Disable internal password confirmation"
@@ -380,7 +414,7 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
   if (!isOpen) return null;
 
   return (
-    <Modal
+    <ResponsiveModal
       isOpen={isOpen}
       onClose={onClose}
       title="Settings"

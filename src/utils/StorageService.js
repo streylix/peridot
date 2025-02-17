@@ -10,11 +10,62 @@ class StorageService {
     this.storageType = null;
   }
 
+  async ensureNotesDirectory() {
+    try {
+      await this.root.getDirectoryHandle('notes', { create: true });
+    } catch (error) {
+      console.error('Failed to ensure notes directory:', error);
+      throw error;
+    }
+  }
+
+  async ensurePasswordsDirectory() {
+    try {
+      await this.root.getDirectoryHandle('passwords', { create: true });
+    } catch (error) {
+      console.error('Failed to ensure passwords directory:', error);
+      throw error;
+    }
+  }
+
   async init() {
     if (this.initialized) return;
     
     try {
-      // Try OPFS first
+      // Get preferred storage type from localStorage
+      const preferredStorage = localStorage.getItem('preferredStorage');
+      console.log('Preferred storage:', preferredStorage);
+      
+      if (preferredStorage && preferredStorage !== 'auto') {
+        // Check if preferred storage is available
+        if (this.isStorageTypeAvailable(preferredStorage)) {
+          console.log('Using preferred storage:', preferredStorage);
+          switch (preferredStorage) {
+            case 'opfs':
+              this.root = await navigator.storage.getDirectory();
+              await this.ensureNotesDirectory();
+              await this.ensurePasswordsDirectory();
+              this.storageType = 'opfs';
+              break;
+  
+            case 'indexeddb':
+              await this.initIndexedDB();
+              this.storageType = 'indexeddb';
+              break;
+  
+            case 'localstorage':
+              this.storageType = 'localstorage';
+              break;
+          }
+          
+          this.initialized = true;
+          return;
+        } else {
+          console.warn('Preferred storage not available, falling back to automatic');
+        }
+      }
+  
+      // Automatic storage selection if no preference or preferred not available
       if ('storage' in navigator && 'getDirectory' in navigator.storage) {
         this.root = await navigator.storage.getDirectory();
         await this.ensureNotesDirectory();
@@ -22,15 +73,17 @@ class StorageService {
         this.storageType = 'opfs';
         console.log('Using OPFS storage');
       } else {
-        // Try IndexedDB
         try {
           await this.initIndexedDB();
           this.storageType = 'indexeddb';
           console.log('Using IndexedDB storage');
         } catch (error) {
-          // Fallback to localStorage
-          console.log('Using localStorage');
-          this.storageType = 'localstorage';
+          if (this.isLocalStorageAvailable()) {
+            console.log('Using localStorage');
+            this.storageType = 'localstorage';
+          } else {
+            throw new Error('No storage mechanism available');
+          }
         }
       }
       
@@ -63,59 +116,86 @@ class StorageService {
     });
   }
 
-  async writeNote(noteId, noteData) {
-    await this.init();
+async writeNote(noteId, noteData) {
+  await this.init();
 
-    // Clear any pending save
-    if (this.pendingSaves.has(noteId)) {
-      clearTimeout(this.pendingSaves.get(noteId));
-    }
-
-    // Create a new debounced save
-    const savePromise = new Promise((resolve, reject) => {
-      const timeoutId = setTimeout(async () => {
-        try {
-          switch (this.storageType) {
-            case 'opfs':
-              const notesDir = await this.root.getDirectoryHandle('notes', { create: true });
-              const fileHandle = await notesDir.getFileHandle(`${noteId}.json`, { create: true });
-              const writable = await fileHandle.createWritable();
-              await writable.write(JSON.stringify(noteData));
-              await writable.close();
-              break;
-
-            case 'indexeddb':
-              const tx = this.db.transaction('notes', 'readwrite');
-              const store = tx.objectStore('notes');
-              await store.put(noteData);
-              break;
-
-            case 'localstorage':
-              try {
-                localStorage.setItem(`note_${noteId}`, JSON.stringify(noteData));
-              } catch (e) {
-                if (e.name === 'QuotaExceededError') {
-                  throw new Error('Storage is full. Please delete some notes.');
-                }
-                throw e;
-              }
-              break;
-          }
-          
-          this.pendingSaves.delete(noteId);
-          resolve();
-        } catch (error) {
-          console.error(`Failed to write note ${noteId}:`, error);
-          this.pendingSaves.delete(noteId);
-          reject(error);
-        }
-      }, this.DEBOUNCE_MS);
-
-      this.pendingSaves.set(noteId, timeoutId);
-    });
-
-    return savePromise;
+  // Clear any pending save
+  if (this.pendingSaves.has(noteId)) {
+    clearTimeout(this.pendingSaves.get(noteId));
   }
+
+  // Create a new debounced save
+  const savePromise = new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(async () => {
+      try {
+        switch (this.storageType) {
+          case 'opfs':
+            const notesDir = await this.root.getDirectoryHandle('notes', { create: true });
+            const fileHandle = await notesDir.getFileHandle(`${noteId}.json`, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(JSON.stringify(noteData));
+            await writable.close();
+            break;
+
+          case 'indexeddb':
+            const tx = this.db.transaction('notes', 'readwrite');
+            const store = tx.objectStore('notes');
+            
+            // Create a clean copy of the note data that's safe to store
+            const cleanData = {
+              id: noteId,
+              content: noteData.content,
+              dateModified: noteData.dateModified,
+              dateCreated: noteData.dateCreated || noteData.id,
+              pinned: !!noteData.pinned,
+              caretPosition: noteData.caretPosition || 0,
+              parentFolderId: noteData.parentFolderId || null,
+              locked: !!noteData.locked,
+              encrypted: !!noteData.encrypted,
+              visibleTitle: noteData.visibleTitle,
+              type: noteData.type,
+              isOpen: !!noteData.isOpen
+            };
+
+            // Only include encryption-related fields if they exist
+            if (noteData.keyParams) cleanData.keyParams = noteData.keyParams;
+            if (noteData.iv) cleanData.iv = noteData.iv;
+
+            await store.put(cleanData);
+            
+            // Wait for transaction to complete
+            await new Promise((resolve, reject) => {
+              tx.oncomplete = resolve;
+              tx.onerror = () => reject(tx.error);
+            });
+            break;
+
+          case 'localstorage':
+            try {
+              localStorage.setItem(`note_${noteId}`, JSON.stringify(noteData));
+            } catch (e) {
+              if (e.name === 'QuotaExceededError') {
+                throw new Error('Storage is full. Please delete some notes.');
+              }
+              throw e;
+            }
+            break;
+        }
+        
+        this.pendingSaves.delete(noteId);
+        resolve();
+      } catch (error) {
+        console.error(`Failed to write note ${noteId}:`, error);
+        this.pendingSaves.delete(noteId);
+        reject(error);
+      }
+    }, this.DEBOUNCE_MS);
+
+    this.pendingSaves.set(noteId, timeoutId);
+  });
+
+  return savePromise;
+}
 
   async readNote(noteId) {
     await this.init();
@@ -506,6 +586,35 @@ class StorageService {
       throw error;
     }
   }
+
+  isLocalStorageAvailable() {
+    try {
+        // Test localStorage availability and capacity
+        const test = '__storage_test__';
+        localStorage.setItem(test, test);
+        
+        // Try to write a larger test value to check quota
+        const testData = new Array(10000).join('a'); // ~10KB
+        localStorage.setItem('quotaTest', testData);
+        localStorage.removeItem('quotaTest');
+        localStorage.removeItem(test);
+        
+        return true;
+    } catch (e) {
+        // If we get here, localStorage is not available or we're in private mode
+        return (
+            e instanceof DOMException && (
+                // Check for common storage-related error codes
+                e.code === 22 || // Chrome quota exceeded
+                e.code === 1014 || // Firefox quota exceeded
+                // Test the error message for Safari/iOS
+                e.name === 'QuotaExceededError' ||
+                e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+                e.name === 'QUOTA_EXCEEDED_ERR'
+            )
+        );
+    }
+  }
   
   async forceCleanStorage() {
     await this.init();
@@ -541,6 +650,74 @@ class StorageService {
       console.error('Failed to force clean storage:', error);
       throw error;
     }
+  }
+
+  async setPreferredStorage(type) {
+    if (type === 'auto') {
+      localStorage.setItem('preferredStorage', 'auto');
+      // Reset to automatic selection
+      this.initialized = false;
+      this.storageType = null;
+      this.root = null;
+      this.db = null;
+      await this.init();
+      return this.storageType;
+    }
+  
+    // Check if storage type is available
+    if (!this.isStorageTypeAvailable(type)) {
+      throw new Error(`Storage type ${type} is not available on this device`);
+    }
+  
+    // Save preference
+    localStorage.setItem('preferredStorage', type);
+    
+    // Reset storage service
+    this.initialized = false;
+    this.storageType = null;
+    this.root = null;
+    this.db = null;
+    
+    // Reinitialize with new storage type
+    await this.init();
+    
+    return this.storageType;
+  }
+  
+  isStorageTypeAvailable(type) {
+    switch (type) {
+      case 'opfs':
+        return 'storage' in navigator && 'getDirectory' in navigator.storage;
+      case 'indexeddb':
+        return !!window.indexedDB;
+      case 'localstorage':
+        return this.isLocalStorageAvailable();
+      default:
+        return false;
+    }
+  }
+  
+  getAvailableStorageTypes() {
+    const types = [];
+    
+    if ('storage' in navigator && 'getDirectory' in navigator.storage) {
+      types.push({ value: 'opfs', label: 'Origin Private File System (OPFS)' });
+    }
+    
+    if (window.indexedDB) {
+      types.push({ value: 'indexeddb', label: 'IndexedDB (doesn\'t work)'});
+    }
+    
+    if (this.isLocalStorageAvailable()) {
+      types.push({ value: 'localstorage', label: 'LocalStorage' });
+    }
+    
+    return types;
+  }
+  
+  getCurrentStorageType() {
+    const preferredStorage = localStorage.getItem('preferredStorage');
+    return preferredStorage || 'auto';
   }
 }
 
