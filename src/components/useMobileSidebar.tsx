@@ -36,10 +36,15 @@ export const useMobileSidebar = ({ sidebarRef, onToggleSidebar }: UseMobileSideb
     if (!isMobile) return;
     const touchDiff = touchStart - touchEnd;
     const sidebarElement = sidebarRef.current;
-
+    console.log(touchDiff, touchStart, touchEnd);
     // Detect right swipe to open sidebar
     if (touchDiff < -200 && sidebarElement?.classList.contains('hidden')) {
+      onToggleSidebar();
+    }
 
+    // Detect left swipe to close sidebar
+    else if (touchDiff < touchStart && !sidebarElement?.classList.contains('hidden')) {
+      console.log("closing")
       onToggleSidebar();
     }
 
