@@ -1,129 +1,228 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { EditorState } from '@codemirror/state';
+import { EditorView, keymap, ViewPlugin, ViewUpdate, Decoration } from '@codemirror/view';
+import { defaultKeymap, indentWithTab } from '@codemirror/commands';
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { languages } from '@codemirror/language-data';
+import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+import { oneDark } from '@codemirror/theme-one-dark';
 import { debounce } from '../utils/debounce';
-import { noteContentService } from '../utils/NoteContentService';
+import { RangeSetBuilder } from '@codemirror/rangeset';
+import { syntaxTree } from '@codemirror/language';
+
+//
+// NEW: ViewPlugin to reveal formatting tokens under (or very near) the caret
+//
+const showFormattingOnCursorPlugin = ViewPlugin.fromClass(class {
+  constructor(view) {
+    this.decorations = this.buildDecorations(view);
+  }
+  update(update) {
+    if (update.selectionSet || update.docChanged) {
+      this.decorations = this.buildDecorations(update.view);
+    }
+  }
+  buildDecorations(view) {
+    const builder = new RangeSetBuilder();
+    const { from, to } = view.state.selection.main;
+    // We iterate a bit beyond the selection to catch tokens adjacent to the caret.
+    syntaxTree(view.state).iterate({
+      from: Math.max(0, from - 50),
+      to: to + 50,
+      enter: (node) => {
+        // Check if the node represents markdown formatting.
+        // (Adjust the condition to match your language’s token names.)
+        if (node.name.startsWith("Format") || node.name.startsWith("HeaderMark")) {
+          // If the selection overlaps with this node, mark it to show formatting.
+          if ((node.from <= from && node.to >= from) || (node.from <= to && node.to >= to)) {
+            builder.add(node.from, node.to, Decoration.mark({ class: "cm-show-formatting" }));
+          }
+        }
+      }
+    });
+    return builder.finish();
+  }
+}, {
+  decorations: v => v.decorations,
+});
 
 function NoteEditor({ note, onUpdateNote, gifToAdd, onGifAdded }) {
-  const contentRef = useRef(null);
+  const editorRef = useRef();
+  const editorViewRef = useRef(null);
+  const [isDarkMode, setIsDarkMode] = useState(
+    document.body.classList.contains('dark-mode')
+  );
   const previousContentRef = useRef('');
 
   // Debounced update function for content changes
   const debouncedUpdate = useCallback(
-    debounce((content) => {
-      if (content !== previousContentRef.current) {
-        onUpdateNote({ content }, true);
-        previousContentRef.current = content;
+    debounce((newContent) => {
+      if (newContent !== previousContentRef.current) {
+        onUpdateNote({ content: newContent }, true);
+        previousContentRef.current = newContent;
       }
-    }, 10),
+    }, 300),
     [onUpdateNote]
   );
 
+  // Initialize editor when note changes
   useEffect(() => {
-    if (gifToAdd && note && contentRef.current) {
-      const gifEmbed = `<div><img src="${gifToAdd}" alt="GIF" style="max-width: 100%; height: auto;"></div>`;
-      
-      // Update content with GIF
-      const newContent = note.content + gifEmbed;
-      contentRef.current.innerHTML = newContent;
-      
-      // Trigger content update
-      debouncedUpdate(newContent);
-      
-      // Reset gifToAdd
-      onGifAdded(null);
-      
-      // Focus and move cursor to end
-      contentRef.current.focus();
-      const selection = window.getSelection();
-      const range = document.createRange();
-      range.selectNodeContents(contentRef.current);
-      range.collapse(false);
-      selection.removeAllRanges();
-      selection.addRange(range);
+    if (!note) return;
+    
+    // Clean up previous editor instance
+    if (editorViewRef.current) {
+      editorViewRef.current.destroy();
     }
-  }, [gifToAdd, note, onGifAdded, debouncedUpdate]);
 
-  const handleContentInput = useCallback(() => {
-    if (note && contentRef.current) {
-      const newContent = contentRef.current.innerHTML;
-      debouncedUpdate(newContent);
-    }
-  }, [note, debouncedUpdate]);
+    // MODIFIED: Custom styling updated to hide markdown formatting by default
+    // and to show larger headers.
+    const customTheme = EditorView.theme({
+      "&": {
+        height: "100%",
+        fontSize: "16px",
+      },
+      ".cm-content": {
+        fontFamily: "inherit",
+        padding: "10px 0",
+      },
+      "&.cm-focused": {
+        outline: "none",
+      },
+      ".cm-line": {
+        padding: "0 4px",
+      },
+      ".cm-header": { fontWeight: "bold" },
+      // NEW: Increase header sizes
+      ".cm-header-1": { fontSize: "2em" },
+      ".cm-header-2": { fontSize: "1.8em" },
+      ".cm-header-3": { fontSize: "1.6em" },
+      ".cm-header-4, .cm-header-5, .cm-header-6": { fontSize: "1.4em" },
+      ".cm-strong": { fontWeight: "bold" },
+      ".cm-em": { fontStyle: "italic" },
+      ".cm-link": { textDecoration: "underline" },
+      // NEW: Hide formatting syntax by default
+      ".cm-formatting-header, .cm-formatting-strong, .cm-formatting-em, .cm-formatting-link, .cm-formatting-list-ul, .cm-formatting-list-ol, .cm-formatting-code, .cm-formatting-code-block": { 
+        opacity: 0,
+        transition: "opacity 0.2s ease",
+      },
+      // NEW: When our plugin marks a token, make it visible
+      ".cm-show-formatting": {
+        opacity: 1,
+      },
+      // Optional: Retain custom colors for formatting tokens
+      ".cm-formatting-header": { color: isDarkMode ? "#61afef" : "#0366d6" },
+      ".cm-formatting-strong": { color: isDarkMode ? "#e5c07b" : "#e36209" },
+      ".cm-formatting-em": { color: isDarkMode ? "#c678dd" : "#6f42c1" },
+      ".cm-formatting-link": { color: isDarkMode ? "#56b6c2" : "#032f62" },
+      ".cm-formatting-list-ul, .cm-formatting-list-ol": { color: isDarkMode ? "#abb2bf" : "#24292e" },
+      ".cm-formatting-code, .cm-formatting-code-block": { color: isDarkMode ? "#98c379" : "#2a9d8f" },
+      ".cm-url": { color: isDarkMode ? "#56b6c2" : "#032f62" },
+    });
 
-  // Optimized caret position handler with debounce
-  const handleSelect = useCallback(
-    debounce(() => {
-      if (!contentRef.current) return;
-      const sel = window.getSelection();
-      if (sel.rangeCount > 0) {
-        const range = sel.getRangeAt(0);
-        let charCount = 0;
-        const treeWalker = document.createTreeWalker(
-          contentRef.current,
-          NodeFilter.SHOW_TEXT
-        );
-        let node;
-        while ((node = treeWalker.nextNode()) && node !== range.startContainer) {
-          charCount += node.length;
-        }
-        charCount += range.startOffset;
-        onUpdateNote({ caretPosition: charCount }, false);
-      }
-    }, 10),
-    [onUpdateNote]
-  );
-
-  useEffect(() => {
-    if (contentRef.current && note) {
-      // Update content
-      contentRef.current.innerHTML = note.content || '';
-      previousContentRef.current = note.content || '';
-      
-      // Set focus
-      contentRef.current.focus();
-      
-      // Try to restore caret position
-      if (note.caretPosition) {
-        try {
-          const selection = window.getSelection();
-          const range = document.createRange();
-          
-          // Find position in content
-          let currentPos = 0;
-          let targetNode = null;
-          let targetOffset = 0;
-          
-          function findPosition(node) {
-            if (node.nodeType === Node.TEXT_NODE) {
-              if (currentPos + node.length >= note.caretPosition) {
-                targetNode = node;
-                targetOffset = note.caretPosition - currentPos;
-                return true;
-              }
-              currentPos += node.length;
-            } else {
-              for (let i = 0; i < node.childNodes.length; i++) {
-                if (findPosition(node.childNodes[i])) {
-                  return true;
-                }
-              }
+    // List of extensions including our new formatting plugin.
+    const extensions = [
+      EditorView.lineWrapping,
+      customTheme,
+      markdown({
+        base: markdownLanguage,
+        codeLanguages: languages,
+      }),
+      syntaxHighlighting(defaultHighlightStyle),
+      keymap.of([...defaultKeymap, indentWithTab]),
+      // Custom checkbox handling
+      EditorView.domEventHandlers({
+        click: (event, view) => {
+          // Check if the clicked element is inside a markdown checkbox
+          const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+          if (pos) {
+            const line = view.state.doc.lineAt(pos);
+            const checkboxMatch = line.text.match(/^(\s*[-*]\s+\[)([xX ])(])/);
+            if (checkboxMatch) {
+              const start = line.from + checkboxMatch[1].length;
+              const newChar = checkboxMatch[2].toLowerCase() === 'x' ? ' ' : 'x';
+              view.dispatch({
+                changes: { from: start, to: start + 1, insert: newChar }
+              });
+              return true;
             }
-            return false;
           }
-          
-          findPosition(contentRef.current);
-          
-          if (targetNode) {
-            range.setStart(targetNode, targetOffset);
-            range.collapse(true);
-            selection.removeAllRanges();
-            selection.addRange(range);
-          }
-        } catch (e) {
-          console.error('Error restoring caret position:', e);
+          return false;
         }
-      }
+      }),
+      EditorView.updateListener.of(update => {
+        if (update.docChanged) {
+          const newContent = update.state.doc.toString();
+          debouncedUpdate(newContent);
+        }
+      }),
+      // NEW: Add our plugin that reveals formatting tokens near the caret
+      showFormattingOnCursorPlugin,
+    ];
+
+    // Add dark theme if needed
+    if (isDarkMode) {
+      extensions.push(oneDark);
     }
-  }, [note?.id]);
+
+    // Initial editor state
+    const startState = EditorState.create({
+      doc: note.content || '',
+      extensions
+    });
+
+    // Create editor view
+    editorViewRef.current = new EditorView({
+      state: startState,
+      parent: editorRef.current,
+    });
+
+    previousContentRef.current = note.content || '';
+
+    return () => {
+      if (editorViewRef.current) {
+        editorViewRef.current.destroy();
+        editorViewRef.current = null;
+      }
+    };
+  }, [note?.id, isDarkMode, debouncedUpdate]);
+
+  // Listen for system dark mode changes
+  useEffect(() => {
+    const checkDarkMode = () => {
+      setIsDarkMode(document.body.classList.contains('dark-mode'));
+    };
+
+    checkDarkMode();
+    
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'class') {
+          checkDarkMode();
+        }
+      });
+    });
+
+    observer.observe(document.body, { attributes: true });
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Effect for gif insertion
+  useEffect(() => {
+    if (gifToAdd && note && editorViewRef.current) {
+      const gifMarkdown = `\n![GIF](${gifToAdd})\n`;
+      
+      const transaction = editorViewRef.current.state.update({
+        changes: {
+          from: editorViewRef.current.state.doc.length,
+          insert: gifMarkdown
+        }
+      });
+      
+      editorViewRef.current.dispatch(transaction);
+      onGifAdded(null);
+    }
+  }, [gifToAdd, note, onGifAdded]);
 
   if (!note) {
     return (
@@ -133,14 +232,11 @@ function NoteEditor({ note, onUpdateNote, gifToAdd, onGifAdded }) {
 
   return (
     <div className="editable">
-      <div
+      <div 
+        ref={editorRef}
         role='inner-note'
-        ref={contentRef}
         id="inner-note"
-        contentEditable
-        onInput={handleContentInput}
-        onSelect={handleSelect}
-        suppressContentEditableWarning
+        className="w-full h-full"
       />
     </div>
   );
