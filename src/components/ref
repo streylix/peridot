@@ -1,0 +1,303 @@
+import React, { useState, useEffect } from 'react';
+
+const TOKEN_COLORS = [
+  'text-red-500',    // Red
+  'text-orange-500', // Orange 
+  'text-yellow-500', // Yellow
+  'text-green-500',  // Green
+  'text-blue-500',   // Blue
+  'text-purple-500'  // Purple
+];
+
+// Same DebugTokenParser class implementation...
+class DebugTokenParser {
+  constructor(content) {
+    this.content = content;
+    this.tokens = [];
+    this.parseTokens();
+  }
+
+  // ... rest of the implementation stays the same ...
+  parseTokens() {
+    const patterns = [
+      { type: 'bold', regex: /\*\*(.*?)\*\*/g, syntaxLength: 4 },
+      { type: 'italic', regex: /\*((?!\*\*)[^*]+?)\*/g, syntaxLength: 2 },
+      { type: 'code', regex: /`(.*?)`/g, syntaxLength: 2 },
+      { type: 'link', regex: /\[([^\]]+)\]\(([^\)]+)\)/g, getLinkSyntaxLength: (match) => 
+        4 + match[2].length
+      },
+      { type: 'image', regex: /!\[([^\]]+)\]\(([^\)]+)\)/g, getLinkSyntaxLength: (match) => 
+        5 + match[2].length
+      }
+    ];
+
+    let tokenIndex = 0;
+    let lastIndex = 0;
+    const allMatches = [];
+
+    patterns.forEach(({ type, regex }) => {
+      let match;
+      while ((match = regex.exec(this.content)) !== null) {
+        allMatches.push({
+          type,
+          content: match[1],
+          url: match[2],
+          start: match.index,
+          end: match.index + match[0].length,
+          raw: match[0],
+          match: match
+        });
+      }
+    });
+
+    allMatches.sort((a, b) => a.start - b.start);
+
+    allMatches.forEach(match => {
+      if (match.start > lastIndex) {
+        this.tokens.push({
+          type: 'text',
+          content: this.content.slice(lastIndex, match.start),
+          start: lastIndex,
+          end: match.start,
+          raw: this.content.slice(lastIndex, match.start),
+          syntaxLength: 0,
+          colorClass: TOKEN_COLORS[tokenIndex % TOKEN_COLORS.length]
+        });
+        tokenIndex++;
+      }
+
+      const pattern = patterns.find(p => p.type === match.type);
+      const syntaxLength = pattern.getLinkSyntaxLength 
+        ? pattern.getLinkSyntaxLength(match.match)
+        : pattern.syntaxLength;
+
+      this.tokens.push({
+        ...match,
+        syntaxLength,
+        colorClass: TOKEN_COLORS[tokenIndex % TOKEN_COLORS.length]
+      });
+      tokenIndex++;
+
+      lastIndex = match.end;
+    });
+
+    if (lastIndex < this.content.length) {
+      this.tokens.push({
+        type: 'text',
+        content: this.content.slice(lastIndex),
+        start: lastIndex,
+        end: this.content.length,
+        raw: this.content.slice(lastIndex),
+        syntaxLength: 0,
+        colorClass: TOKEN_COLORS[tokenIndex % TOKEN_COLORS.length]
+      });
+    }
+  }
+
+  findTokenAtPosition(position) {
+    const exactToken = this.tokens.find(token => {
+      if (token.type === 'text') return false;
+      return position === token.start || position === token.end;
+    });
+
+    if (exactToken) {
+      return exactToken;
+    }
+
+    return this.tokens.find(token => {
+      return position > token.start && position < token.end;
+    });
+  }
+
+  getVisualPosition(rawPosition, activeToken) {
+    let visualOffset = 0;
+    
+    for (const token of this.tokens) {
+      if (rawPosition <= token.start) {
+        break;
+      }
+
+      if (activeToken && token.start === activeToken.start) {
+        continue;
+      }
+
+      if (rawPosition > token.end) {
+        visualOffset += token.syntaxLength;
+      }
+      else if (rawPosition > token.start) {
+        if (!activeToken || token.start !== activeToken.start) {
+          visualOffset += token.syntaxLength;
+        }
+      }
+    }
+    
+    return rawPosition - visualOffset;
+  }
+}
+
+const Caret = () => (
+  <span className="absolute inline-block w-px h-5 bg-black dark:bg-white" style={{
+    animation: 'blink 1s step-end infinite'
+  }} />
+);
+
+const PreviewEditor = () => {
+  const [content, setContent] = useState('ts *ts* *ts* *ts* ts *ts*');
+  const [tokens, setTokens] = useState([]);
+  const [caretPos, setCaretPos] = useState(0);
+  const [visualCaretPos, setVisualCaretPos] = useState(0);
+  const [activeToken, setActiveToken] = useState(null);
+  const [parser, setParser] = useState(null);
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    const newParser = new DebugTokenParser(content);
+    setTokens(newParser.tokens);
+    setParser(newParser);
+  }, [content]);
+
+  const handleCaretChange = (e) => {
+    const rawPos = e.target.selectionStart;
+    setCaretPos(rawPos);
+    
+    if (parser) {
+      const token = parser.findTokenAtPosition(rawPos);
+      setActiveToken(token);
+      
+      const visualPos = parser.getVisualPosition(rawPos, token);
+      setVisualCaretPos(visualPos);
+    }
+  };
+
+  const renderTokenWithCaret = (token, tokenIndex) => {
+    const isActive = activeToken && token.start === activeToken.start;
+    let content = token.content;
+    let raw = token.raw;
+    
+    const caretShouldBeInToken = 
+      (isActive && caretPos >= token.start && caretPos <= token.end) ||
+      (!isActive && caretPos > token.start && caretPos < token.end);
+
+    if (caretShouldBeInToken) {
+      const relativePos = isActive 
+        ? caretPos - token.start
+        : parser.getVisualPosition(caretPos, activeToken) - parser.getVisualPosition(token.start, activeToken);
+      
+      if (isActive) {
+        const before = raw.slice(0, relativePos);
+        const after = raw.slice(relativePos);
+        return (
+          <span className={token.colorClass}>
+            {before}
+            {focused && <Caret />}
+            {after}
+          </span>
+        );
+      } else {
+        const before = content.slice(0, relativePos);
+        const after = content.slice(relativePos);
+        return renderSplitToken(token, before, after);
+      }
+    }
+
+    if (isActive) {
+      return <span className={token.colorClass}>{raw}</span>;
+    }
+
+    return renderFormattedToken(token);
+  };
+
+  const renderSplitToken = (token, before, after) => {
+    switch (token.type) {
+      case 'bold':
+        return <strong className={`${token.colorClass} relative`}>{before}<span className="relative inline-block w-0">{focused && <Caret />}</span>{after}</strong>;
+      case 'italic':
+        return <em className={`${token.colorClass} relative`}>{before}<span className="relative inline-block w-0">{focused && <Caret />}</span>{after}</em>;
+      case 'code':
+        return <code className={`${token.colorClass} bg-gray-100 px-1 rounded relative`}>{before}<span className="relative inline-block w-0">{focused && <Caret />}</span>{after}</code>;
+      case 'link':
+        return <a href={token.url} className={`${token.colorClass} underline relative`}>{before}<span className="relative inline-block w-0">{focused && <Caret />}</span>{after}</a>;
+      case 'image':
+        return <span className={token.colorClass}>{`![${before}${focused ? '|' : ''}${after}](${token.url})`}</span>;
+      default:
+        return <span className={`${token.colorClass} relative`}>{before}<span className="relative inline-block w-0">{focused && <Caret />}</span>{after}</span>;
+    }
+  };
+
+  const renderFormattedToken = (token) => {
+    switch (token.type) {
+      case 'bold':
+        return <strong className={token.colorClass}>{token.content}</strong>;
+      case 'italic':
+        return <em className={token.colorClass}>{token.content}</em>;
+      case 'code':
+        return <code className={`${token.colorClass} bg-gray-100 px-1 rounded`}>{token.content}</code>;
+      case 'link':
+        return <a href={token.url} className={`${token.colorClass} underline`}>{token.content}</a>;
+      case 'image':
+        return <span className={token.colorClass}>{`![${token.content}](${token.url})`}</span>;
+      default:
+        return <span className={token.colorClass}>{token.content}</span>;
+    }
+  };
+
+  const renderCaretIndicator = () => {
+    return (
+      <div className="font-mono text-gray-500 whitespace-pre">
+        {' '.repeat(visualCaretPos)}^
+      </div>
+    );
+  };
+
+  return (
+    <div className="w-full h-full min-h-screen bg-black dark:bg-gray-900 p-4">
+      <style>{`
+        @keyframes blink {
+          0% { opacity: 1; }
+          50% { opacity: 0; }
+          100% { opacity: 1; }
+        }
+      `}</style>
+      <div className="relative font-mono mb-4">
+        <textarea
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          onSelect={handleCaretChange}
+          onClick={handleCaretChange}
+          onKeyUp={handleCaretChange}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          className="w-full h-32 p-2 border rounded font-mono bg-white dark:bg-gray-800 text-black dark:text-white opacity-10"
+        />
+        <div className="absolute top-0 left-0 right-0 p-2">
+          <div className="whitespace-pre-wrap bg-black text-black dark:text-white relative">
+            {caretPos === 0 && focused && <span className="relative inline-block w-0"><Caret /></span>}
+            {tokens.map((token, index) => (
+              <React.Fragment key={index}>
+                {renderTokenWithCaret(token, index)}
+              </React.Fragment>
+            ))}
+          </div>
+          {renderCaretIndicator()}
+        </div>
+      </div>
+      <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+        <div>Raw caret position: {caretPos}</div>
+        <div>Visual caret position: {visualCaretPos}</div>
+        {activeToken && (
+          <div>
+            Active token: {JSON.stringify({
+              type: activeToken.type,
+              content: activeToken.content,
+              start: activeToken.start,
+              end: activeToken.end,
+              raw: activeToken.raw
+            }, null, 2)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default PreviewEditor;
