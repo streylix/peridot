@@ -26,9 +26,27 @@ const InfoMenu = ({
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
+  const portalContainerRef = useRef(null);
 
   const selectedItem = notes.find(item => item.id === selectedId);
   const isFolder = selectedItem && FolderService.isFolder(selectedItem);
+
+  useEffect(() => {
+    // Create a single portal container for the menu
+    if (!portalContainerRef.current) {
+      portalContainerRef.current = document.createElement('div');
+      portalContainerRef.current.className = 'menu-portal-container';
+      document.body.appendChild(portalContainerRef.current);
+    }
+    
+    return () => {
+      // Clean up on unmount
+      if (portalContainerRef.current) {
+        document.body.removeChild(portalContainerRef.current);
+        portalContainerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -50,12 +68,64 @@ const InfoMenu = ({
   useEffect(() => {
     if (position) {
       setIsOpen(true);
-      if (menuRef.current) {
-        menuRef.current.style.top = `${position.y}px`;
-        menuRef.current.style.left = `${position.x}px`;
-      }
     }
   }, [position]);
+
+  useEffect(() => {
+    if (menuRef.current && (isOpen || position)) {
+      // Wait for menu to render with correct dimensions
+      setTimeout(() => {
+        if (!menuRef.current) return;
+        
+        const menuRect = menuRef.current.getBoundingClientRect();
+        
+        if (position) {
+          // Context menu (right-click) positioning
+          let x = position.x;
+          let y = position.y;
+          
+          // Adjust for right edge
+          if (x + menuRect.width > window.innerWidth) {
+            x = window.innerWidth - menuRect.width - 10;
+          }
+          
+          // Adjust for bottom edge
+          if (y + menuRect.height > window.innerHeight) {
+            y = window.innerHeight - menuRect.height - 10;
+          }
+          
+          // Ensure minimum margins from edges
+          x = Math.max(10, x);
+          y = Math.max(10, y);
+          
+          menuRef.current.style.top = `${y}px`;
+          menuRef.current.style.left = `${x}px`;
+        } else if (buttonRef.current) {
+          // Button-triggered menu positioning
+          const buttonRect = buttonRef.current.getBoundingClientRect();
+          
+          let top = buttonRect.bottom + 5;
+          let left = buttonRect.left - 100 + buttonRect.width / 2;
+          
+          // Adjust for right edge
+          if (left + menuRect.width > window.innerWidth) {
+            left = window.innerWidth - menuRect.width - 10;
+          }
+          
+          // Adjust for bottom edge
+          if (top + menuRect.height > window.innerHeight) {
+            top = buttonRect.top - menuRect.height - 5;
+          }
+          
+          // Ensure minimum margin from left edge
+          left = Math.max(10, left);
+          
+          menuRef.current.style.top = `${top}px`;
+          menuRef.current.style.left = `${left}px`;
+        }
+      }, 10);
+    }
+  }, [isOpen, position]);
 
   const toggleMenu = () => {
     setIsOpen(!isOpen);
@@ -132,7 +202,6 @@ const InfoMenu = ({
     setIsOpen(false);
   };
 
-
   const createNewNoteInFolder = async () => {
     if (!isFolder) return;
   
@@ -156,6 +225,10 @@ const InfoMenu = ({
   
       // Select the new note
       onNoteSelect(newNote.id);
+      
+      // Close the menu
+      setIsOpen(false);
+      if (onClose) onClose();
     } catch (error) {
       console.error('Failed to create note in folder:', error);
     }
@@ -243,48 +316,37 @@ const InfoMenu = ({
     }
   ];
 
-  const Menu = () => {
-    if ((!isOpen && !position) || (!isOpen && position)) return null;
-
-    return createPortal(
-      <div
-        ref={menuRef}
-        className="info-menu"
-        style={{
-          position: 'fixed',
-          top: position ? position.y : 0,
-          left: position ? position.x : 0
-        }}
-      >
-        {menuItems
-          .filter(item => item.show !== false)
-          .map((item, index) => (
-            <button
-              key={index}
-              className={`info-menu-button ${item.disabled ? 'disabled' : ''}`}
-              onClick={item.onClick}
-              disabled={item.disabled}
-            >
-              <item.icon className="info-menu-icon" />
-              {item.label}
-            </button>
-          ))}
-      </div>,
-      document.body
-    );
-  };
-
-  useEffect(() => {
-    if (menuRef.current && !position && buttonRef.current) {
-      const buttonRect = buttonRef.current.getBoundingClientRect();
-      menuRef.current.style.top = `${buttonRect.bottom + 5}px`;
-      menuRef.current.style.left = `${buttonRect.left - 100 + buttonRect.width / 2}px`;
-    }
-  }, [isOpen, position]);
+  // Only render the menu when it should be visible
+  const menuContent = (isOpen || position) ? (
+    <div
+      ref={menuRef}
+      className="info-menu"
+      style={{
+        position: 'fixed',
+        // Initial position that will be updated in useEffect
+        top: position ? position.y : 0,
+        left: position ? position.x : 0
+      }}
+    >
+      {menuItems
+        .filter(item => item.show !== false)
+        .map((item, index) => (
+          <button
+            key={index}
+            className={`info-menu-button ${item.disabled ? 'disabled' : ''}`}
+            onClick={item.onClick}
+            disabled={item.disabled}
+          >
+            <item.icon className="info-menu-icon" />
+            {item.label}
+          </button>
+        ))}
+    </div>
+  ) : null;
 
   return (
     <>
-      {position ? <Menu /> : (
+      {position ? null : (
         <button
           ref={buttonRef}
           type="button"
@@ -296,7 +358,7 @@ const InfoMenu = ({
           <CircleEllipsis />
         </button>
       )}
-      <Menu />
+      {menuContent && createPortal(menuContent, portalContainerRef.current || document.body)}
     </>
   );
 };

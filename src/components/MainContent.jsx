@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import NoteEditor from './NoteEditor';
 import EmptyState from './EmptyState';
 import LockedWindow from './LockedWindow';
@@ -7,9 +7,9 @@ import { passwordStorage } from '../utils/PasswordStorageService';
 import { decryptNote, encryptNote } from '../utils/encryption';
 import { noteUpdateService } from '../utils/NoteUpdateService';
 
-
 function MainContent({ 
   note, 
+  notes, // Make sure this prop is passed from App.jsx
   onUpdateNote, 
   gifToAdd, 
   onGifAdded, 
@@ -20,6 +20,7 @@ function MainContent({
   const [decryptedNote, setDecryptedNote] = useState(null);
   const [currentPassword, setCurrentPassword] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [lockedParentFolder, setLockedParentFolder] = useState(null);
   const editorRef = useRef(null);
 
   const isImageFile = (file) => {
@@ -29,6 +30,68 @@ function MainContent({
   const isValidImportFile = (file) => {
     const ext = file.name.split('.').pop().toLowerCase();
     return ['json', 'md', 'txt'].includes(ext);
+  };
+
+  // Add function to check for locked parent folders
+  const findLockedParentFolder = useCallback((noteId) => {
+    if (!notes || !noteId) return null;
+    
+    const currentNote = notes.find(n => n.id === noteId);
+    if (!currentNote || !currentNote.parentFolderId) return null;
+    
+    const checkFolder = (folderId) => {
+      const folder = notes.find(n => n.id === folderId);
+      if (!folder) return null;
+      
+      // Only block access if the folder is locked AND not opened
+      if (folder.locked && !folder.isOpen) return folder;
+      
+      // Check parent folders recursively
+      if (folder.parentFolderId) {
+        return checkFolder(folder.parentFolderId);
+      }
+      
+      return null;
+    };
+    
+    return checkFolder(currentNote.parentFolderId);
+  }, [notes]);
+
+  // Check for locked parent folders when note changes
+  useEffect(() => {
+    if (note) {
+      const lockedFolder = findLockedParentFolder(note.id);
+      setLockedParentFolder(lockedFolder);
+    } else {
+      setLockedParentFolder(null);
+    }
+  }, [note, findLockedParentFolder]);
+
+  // Handler for unlocking parent folders
+  const handleFolderUnlock = async (password) => {
+    if (!lockedParentFolder) return false;
+    
+    try {
+      const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true';
+      
+      if (!verifyBypass) {
+        const storedPassword = await passwordStorage.getPassword(lockedParentFolder.id);
+        if (!storedPassword || password !== storedPassword) {
+          return false;
+        }
+      }
+      
+      // Dispatch event to update the folder's state in the UI
+      window.dispatchEvent(new CustomEvent('folderUnlocked', {
+        detail: { folderId: lockedParentFolder.id }
+      }));
+      
+      setLockedParentFolder(null);
+      return true;
+    } catch (err) {
+      console.error('Error unlocking folder:', err);
+      return false;
+    }
   };
 
   const handleDragOver = (e) => {
@@ -210,7 +273,12 @@ function MainContent({
       ref={editorRef}
     >
       <div className="title-spacer" style={{ height: '40px' }} />
-      {note?.locked && !isUnlocked ? (
+      {lockedParentFolder ? (
+        <LockedWindow
+          onUnlock={handleFolderUnlock}
+          note={lockedParentFolder}
+        />
+      ) : note?.locked && !isUnlocked ? (
         <LockedWindow
           onUnlock={handleUnlock}
           note={note}
