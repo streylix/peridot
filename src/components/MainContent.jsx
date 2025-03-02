@@ -72,21 +72,33 @@ function MainContent({
     if (!lockedParentFolder) return false;
     
     try {
-      const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true';
+      // Import FolderService
+      const { FolderService } = await import('../utils/folderUtils');
       
-      if (!verifyBypass) {
-        const storedPassword = await passwordStorage.getPassword(lockedParentFolder.id);
-        if (!storedPassword || password !== storedPassword) {
-          return false;
-        }
+      // Use the proper unlock folder method
+      const result = await FolderService.unlockFolder(lockedParentFolder, password);
+      
+      if (!result.success) {
+        return false;
       }
       
-      // Dispatch event to update the folder's state in the UI
+      // Update the folder in state
+      setNotes(prevNotes => 
+        prevNotes.map(note => 
+          note.id === lockedParentFolder.id 
+            ? { ...note, isOpen: true } 
+            : note
+        )
+      );
+      
+      // Allow access to the note
+      setLockedParentFolder(null);
+      
+      // Dispatch event so sidebar can update too
       window.dispatchEvent(new CustomEvent('folderUnlocked', {
         detail: { folderId: lockedParentFolder.id }
       }));
       
-      setLockedParentFolder(null);
       return true;
     } catch (err) {
       console.error('Error unlocking folder:', err);

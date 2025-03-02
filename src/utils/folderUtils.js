@@ -3,6 +3,10 @@ import { noteContentService } from './NoteContentService';
 import { noteImportExportService } from './NoteImportExportService';
 import { passwordStorage } from './PasswordStorageService';
 import JSZip from 'jszip';
+import { encryptNote } from './encryption'; // Add encryption import
+
+// Standard verification string used for password verification
+const VERIFICATION_STRING = "VALID_PASSWORD_VERIFICATION";
 
 export class FolderService {
   static createFolder(name = 'Untitled Folder') {
@@ -29,12 +33,29 @@ export class FolderService {
       throw new Error('Invalid folder');
     }
 
+    // Store the password
     await passwordStorage.storePassword(folder.id, password);
-
+    
+    // Create a verification token using encryption
+    const verificationData = {
+      content: VERIFICATION_STRING,
+      id: folder.id
+    };
+    
+    // Encrypt the verification token
+    const encryptedVerification = await encryptNote(verificationData, password);
+    
+    // Return updated folder with encrypted verification
     return {
       ...folder,
       locked: true,
-      isOpen: false
+      isOpen: false,
+      verificationData: {
+        encrypted: true,
+        content: encryptedVerification.content,
+        iv: encryptedVerification.iv,
+        keyParams: encryptedVerification.keyParams
+      }
     };
   }
 
@@ -43,21 +64,62 @@ export class FolderService {
       throw new Error('Invalid folder');
     }
 
-    const storedPassword = await passwordStorage.getPassword(folder.id);
-    const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true';
-
-    if (!verifyBypass && (!storedPassword || password !== storedPassword)) {
-      return { success: false, error: 'Invalid password' };
-    }
-
-    return {
-      success: true,
-      folder: {
-        ...folder,
-        locked: false,
-        isOpen: true
+    try {
+      // If we have verification data, use it first
+      if (folder.verificationData) {
+        try {
+          // Import decryption function
+          const { decryptNote } = await import('./encryption');
+          
+          // Attempt to decrypt the verification data
+          const verificationResult = await decryptNote({
+            id: folder.id,
+            content: folder.verificationData.content,
+            iv: folder.verificationData.iv,
+            keyParams: folder.verificationData.keyParams,
+            locked: true,
+            encrypted: true
+          }, password, false);
+          
+          if (!verificationResult.success || verificationResult.note.content !== VERIFICATION_STRING) {
+            return { success: false, error: 'Invalid password' };
+          }
+          
+          // Verification passed, return success
+          return {
+            success: true,
+            folder: {
+              ...folder,
+              locked: true, // Stay locked but allow access
+              isOpen: true  // Set as open
+            }
+          };
+        } catch (error) {
+          console.error('Verification data decryption failed:', error);
+          // Fall back to password storage verification
+        }
       }
-    };
+      
+      // If no verification data or verification failed, use passwordStorage
+      const storedPassword = await passwordStorage.getPassword(folder.id);
+      const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true';
+      
+      if (!verifyBypass && (!storedPassword || password !== storedPassword)) {
+        return { success: false, error: 'Invalid password' };
+      }
+      
+      return {
+        success: true,
+        folder: {
+          ...folder,
+          locked: true, // Stay locked but allow access
+          isOpen: true  // Set as open
+        }
+      };
+    } catch (error) {
+      console.error('Error unlocking folder:', error);
+      return { success: false, error: error.message };
+    }
   }
 
   static async downloadFolder(folder, notes, fileType = 'json') {

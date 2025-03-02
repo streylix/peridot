@@ -165,6 +165,7 @@ class PasswordModalUtils {
 
         case 'lockFolder': {
           const lockedFolder = await FolderService.lockFolder(this.noteData, password);
+          await storageService.writeNote(this.noteData.id, lockedFolder);
           window.dispatchEvent(new CustomEvent('noteUpdate', { 
             detail: { note: lockedFolder }
           }));
@@ -176,7 +177,11 @@ class PasswordModalUtils {
           if (!result.success) {
             return { success: false, error: result.error };
           }
+          
+          // Update the folder in storage
+          await storageService.writeNote(this.noteData.id, result.folder);
   
+          // Notify the UI that the folder has been unlocked
           window.dispatchEvent(new CustomEvent('folderUnlocked', { 
             detail: { folderId: this.noteData.id }
           }));
@@ -193,7 +198,9 @@ class PasswordModalUtils {
           const unlockedFolder = {
             ...this.noteData,
             locked: false,
-            isOpen: true
+            isOpen: true,
+            // Remove verification data
+            verificationData: undefined
           };
     
           await storageService.writeNote(this.noteData.id, unlockedFolder);
@@ -206,13 +213,10 @@ class PasswordModalUtils {
         }
 
         case 'download-folder': {
-          // Verify the password
-          const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true';
-          if (!verifyBypass) {
-            const storedPassword = await passwordStorage.getPassword(this.noteId);
-            if (!storedPassword || password !== storedPassword) {
-              return { success: false, error: 'Invalid password' };
-            }
+          // Use the folder service to verify the password
+          const result = await FolderService.unlockFolder(this.noteData, password);
+          if (!result.success) {
+            return { success: false, error: result.error || 'Invalid password' };
           }
   
           // Get all notes for the folder download
@@ -221,9 +225,8 @@ class PasswordModalUtils {
           // Get preferred file type
           const fileType = localStorage.getItem('preferredFileType') || 'json';
           
-          // Import and use FolderService
-          const { FolderService } = await import('./folderUtils');
-          await FolderService.downloadFolder(this.noteData, notes, fileType);
+          // Use FolderService to download
+          await FolderService.processDownload(this.noteData, notes, fileType);
           break;
         }
       }
