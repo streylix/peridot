@@ -27,14 +27,19 @@ function PasswordModal() {
     setError('');
   };
 
-  const handleSubmit = () => {
-    const result = passwordModalUtils.handlePasswordSubmit(
+  const handleSubmit = async () => {
+    const result = await passwordModalUtils.handlePasswordSubmit(
       password,
       modalState.modalType === 'lock' ? confirmPassword : null
     );
 
     if (!result.success) {
       setError(result.error);
+      
+      // Clear password fields on failed attempt
+      setPassword('');
+      setConfirmPassword('');
+      
       return;
     }
     
