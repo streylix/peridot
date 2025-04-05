@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { CircleEllipsis, Lock, Pin, Gift, Trash2, Download, Edit2, FileText } from 'lucide-react';
+import { CircleEllipsis, Lock, Pin, Gift, Trash2, Download, Edit2, FileText, RefreshCw } from 'lucide-react';
 import { passwordModalUtils } from '../utils/PasswordModalUtils';
 import { noteImportExportService } from '../utils/NoteImportExportService';
 import { FolderService } from '../utils/folderUtils';
 import { storageService } from '../utils/StorageService';
+import { syncService } from '../utils/SyncService';
 
 const InfoMenu = ({ 
   selectedId,
@@ -234,6 +235,23 @@ const InfoMenu = ({
     }
   };
 
+  const handleSync = async () => {
+    if (!selectedItem) return;
+    
+    // Don't sync folders
+    if (isFolder) return;
+    
+    try {
+      // Start the sync process
+      await syncService.syncNote(selectedItem.id);
+    } catch (error) {
+      console.error('Failed to sync note:', error);
+    }
+    
+    setIsOpen(false);
+    if (onClose) onClose();
+  };
+
   const menuItems = [
     {
       icon: FileText,
@@ -313,6 +331,13 @@ const InfoMenu = ({
       },
       disabled: !selectedItem,
       show: true
+    },
+    {
+      icon: RefreshCw,
+      label: 'Sync',
+      onClick: handleSync,
+      disabled: !selectedItem,
+      show: !isFolder
     }
   ];
 

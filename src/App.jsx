@@ -18,6 +18,7 @@ import { passwordModalUtils } from './utils/PasswordModalUtils.js';
 import { noteImportExportService } from './utils/NoteImportExportService.js';
 import { noteSortingService } from './utils/NoteSortingService.js';
 import { FolderService } from './utils/folderUtils.js';
+import { syncService } from './utils/SyncService.js';
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -218,6 +219,164 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    // Update URL when selected note changes
+    if (selectedId) {
+      const note = notes.find(note => note.id === selectedId);
+      if (note) {
+        // Create URL-friendly slug from note title
+        const title = note.visibleTitle || noteContentService.getFirstLine(note.content) || 'untitled';
+        const slug = title.toLowerCase()
+          .replace(/[^\w\s-]/g, '') // Remove special characters
+          .replace(/\s+/g, '-') // Replace spaces with hyphens
+          .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
+          .slice(0, 100); // Limit length
+        
+        // Get folder path if note is in a folder
+        let folderPath = '';
+        let currentFolderId = note.parentFolderId;
+        
+        if (currentFolderId) {
+          const folderPathSegments = [];
+          while (currentFolderId) {
+            const folder = notes.find(n => n.id === currentFolderId);
+            if (!folder) break;
+            
+            // Create folder slug
+            const folderName = folder.visibleTitle || 
+              noteContentService.getFirstLine(folder.content) || 
+              'folder';
+            const folderSlug = folderName.toLowerCase()
+              .replace(/[^\w\s-]/g, '')
+              .replace(/\s+/g, '-')
+              .replace(/-+/g, '-');
+            
+            folderPathSegments.unshift(folderSlug);
+            currentFolderId = folder.parentFolderId;
+          }
+          folderPath = folderPathSegments.join('/');
+          if (folderPath) {
+            folderPath += '/';
+          }
+        }
+        
+        // Update URL without reloading the page
+        if (slug && slug !== 'untitled') {
+          window.history.pushState(
+            { noteId: selectedId }, 
+            '', 
+            `/${folderPath}${slug}#${selectedId}`
+          );
+        }
+      }
+    } else {
+      // Reset URL to home when no note is selected
+      window.history.pushState({}, '', '/');
+    }
+  }, [selectedId, notes]);
+
+  useEffect(() => {
+    // Handle browser navigation (back/forward)
+    const handlePopState = (event) => {
+      if (event.state && event.state.noteId) {
+        setSelectedId(event.state.noteId);
+        noteNavigation.push(event.state.noteId);
+      } else {
+        // Try to extract note ID from URL hash
+        const hash = window.location.hash;
+        if (hash && hash.startsWith('#')) {
+          const noteId = parseInt(hash.substring(1));
+          if (!isNaN(noteId) && notes.some(note => note.id === noteId)) {
+            setSelectedId(noteId);
+            noteNavigation.push(noteId);
+            return;
+          }
+        }
+        
+        // Try to match by pathname
+        const pathname = window.location.pathname;
+        if (pathname && pathname !== '/') {
+          // Remove leading and trailing slashes
+          const path = pathname.replace(/^\/|\/$/g, '');
+          
+          // Split path by segments
+          const segments = path.split('/');
+          const lastSegment = segments[segments.length - 1];
+          
+          // Try to find a matching note
+          let matchedNote = null;
+          
+          for (const note of notes) {
+            const title = note.visibleTitle || noteContentService.getFirstLine(note.content) || '';
+            const noteSlug = title.toLowerCase()
+              .replace(/[^\w\s-]/g, '')
+              .replace(/\s+/g, '-')
+              .replace(/-+/g, '-');
+            
+            if (noteSlug === lastSegment) {
+              matchedNote = note;
+              
+              // If there are multiple path segments, ensure folder structure matches
+              if (segments.length > 1 && note.parentFolderId) {
+                let currentFolderId = note.parentFolderId;
+                let matchesPath = true;
+                
+                // Traverse up the folder hierarchy
+                for (let i = segments.length - 2; i >= 0; i--) {
+                  const folder = notes.find(n => n.id === currentFolderId);
+                  if (!folder) {
+                    matchesPath = false;
+                    break;
+                  }
+                  
+                  const folderName = folder.visibleTitle || 
+                    noteContentService.getFirstLine(folder.content) || 
+                    'folder';
+                  const folderSlug = folderName.toLowerCase()
+                    .replace(/[^\w\s-]/g, '')
+                    .replace(/\s+/g, '-')
+                    .replace(/-+/g, '-');
+                  
+                  if (folderSlug !== segments[i]) {
+                    matchesPath = false;
+                    break;
+                  }
+                  
+                  currentFolderId = folder.parentFolderId;
+                }
+                
+                if (!matchesPath) {
+                  matchedNote = null;
+                  continue;
+                }
+              }
+              
+              break;
+            }
+          }
+          
+          if (matchedNote) {
+            setSelectedId(matchedNote.id);
+            noteNavigation.push(matchedNote.id);
+            return;
+          }
+        }
+        
+        setSelectedId(null);
+        noteNavigation.push(null);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    
+    // Check initial URL
+    handlePopState({ state: history.state });
+    
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [notes]);
+
   return (
     <div className="app">
       <Header
@@ -265,7 +424,7 @@ function App() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         setNotes={setNotes}
-        onNoteSelect={setSelectedId}
+        onNoteSelect={handleNoteSelect}
       />
       <PasswordModal />
       <GifModal

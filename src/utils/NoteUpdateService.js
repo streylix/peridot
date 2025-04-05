@@ -3,27 +3,73 @@ import { encryptNote } from './encryption';
 
 class NoteUpdateService {
   constructor() {
-    this.updateTimers = new Map();
-    this.pendingUpdates = new Map();
     this.subscribers = new Set();
+    this.pendingUpdates = new Map();
+    this.updateTimers = new Map();
     this.isProcessingUnload = false;
-
-    // Bind the unload handler to ensure correct context
-    this.handleBeforeUnload = this.handleBeforeUnload.bind(this);
-    window.addEventListener('beforeunload', this.handleBeforeUnload);
-  }
-
-  subscribe(callback) {
-    this.subscribers.add(callback);
-    return () => this.subscribers.delete(callback);
-  }
-
-  notifySubscribers(updatedNote) {
-    this.subscribers.forEach(callback => callback(updatedNote));
     
-    window.dispatchEvent(new CustomEvent('noteUpdate', {
-      detail: { note: updatedNote }
-    }));
+    window.addEventListener('beforeunload', this.handleBeforeUnload.bind(this));
+    
+    // Set up BroadcastChannel for real-time cross-tab communication
+    this.setupBroadcastChannel();
+  }
+  
+  // Set up cross-tab communication
+  setupBroadcastChannel() {
+    try {
+      this.broadcastChannel = new BroadcastChannel('peridot-note-updates');
+      
+      this.broadcastChannel.onmessage = (event) => {
+        const { type, data } = event.data;
+        
+        if (type === 'NOTE_UPDATED' && data.note) {
+          // Notify subscribers about the update from another tab
+          this.notifySubscribers(data.note);
+        }
+      };
+    } catch (error) {
+      console.error('BroadcastChannel not supported or failed to initialize:', error);
+      // Fall back to localStorage events for cross-tab communication
+      this.setupLocalStorageListener();
+    }
+  }
+  
+  // Set up localStorage listener for cross-tab communication
+  setupLocalStorageListener() {
+    window.addEventListener('storage', (event) => {
+      if (event.key === 'note_cross_update') {
+        try {
+          const data = JSON.parse(event.newValue);
+          if (data && data.note) {
+            this.notifySubscribers(data.note);
+          }
+        } catch (error) {
+          console.error('Failed to parse cross-tab note update:', error);
+        }
+      }
+    });
+  }
+  
+  // Broadcast note update to other tabs
+  broadcastUpdate(note) {
+    try {
+      if (this.broadcastChannel) {
+        this.broadcastChannel.postMessage({
+          type: 'NOTE_UPDATED',
+          data: { note }
+        });
+      } else {
+        // Fallback to localStorage
+        localStorage.setItem('note_cross_update', JSON.stringify({ 
+          note,
+          timestamp: Date.now()
+        }));
+        // Clear it immediately to allow future updates to trigger events
+        setTimeout(() => localStorage.removeItem('note_cross_update'), 100);
+      }
+    } catch (error) {
+      console.error('Failed to broadcast note update:', error);
+    }
   }
 
   async handleBeforeUnload(event) {
@@ -77,6 +123,9 @@ class NoteUpdateService {
 
       // Notify subscribers
       this.notifySubscribers(updatedNote);
+      
+      // Broadcast the update to other tabs
+      this.broadcastUpdate(updatedNote);
 
     } catch (error) {
       console.error('Failed to process immediate note update:', error);
@@ -136,32 +185,51 @@ class NoteUpdateService {
 
         // Notify subscribers
         this.notifySubscribers(updatedNote);
+        
+        // Broadcast the update to other tabs
+        this.broadcastUpdate(updatedNote);
 
         // Remove the timer
         this.updateTimers.delete(noteId);
 
       } catch (error) {
-        console.error('Failed to process note update:', error);
+        console.error('Failed to process queued note update:', error);
         this.updateTimers.delete(noteId);
-        this.pendingUpdates.delete(noteId);
       }
-    }, 200);
+    }, 500);
 
-    // Store the timer
     this.updateTimers.set(noteId, timer);
   }
 
-  clearUpdatesForNote(noteId) {
-    if (this.updateTimers.has(noteId)) {
-      clearTimeout(this.updateTimers.get(noteId));
-      this.updateTimers.delete(noteId);
-    }
-    this.pendingUpdates.delete(noteId);
+  notifySubscribers(note) {
+    this.subscribers.forEach(callback => callback(note));
+
+    // Also fire a DOM event for components that listen to it
+    const event = new CustomEvent('noteUpdate', {
+      detail: { note }
+    });
+    window.dispatchEvent(event);
   }
 
-  // Cleanup method to remove event listener when service is no longer needed
+  subscribe(callback) {
+    this.subscribers.add(callback);
+    return () => {
+      this.subscribers.delete(callback);
+    };
+  }
+  
+  // Clean up resources when the service is no longer needed
   cleanup() {
+    if (this.broadcastChannel) {
+      this.broadcastChannel.close();
+    }
+    
     window.removeEventListener('beforeunload', this.handleBeforeUnload);
+    
+    // Clear any pending timers
+    this.updateTimers.forEach(timer => clearTimeout(timer));
+    this.updateTimers.clear();
+    this.pendingUpdates.clear();
   }
 }
 

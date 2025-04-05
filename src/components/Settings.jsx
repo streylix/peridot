@@ -10,6 +10,8 @@ import StorageAnalyzer from './StorageAnalyzer';
 import StorageDiagnostics from './StorageDiagnostics';
 import StorageBar from './StorageBar';
 import ResponsiveModal from './ResponsiveModal';
+import SyncSection from './SyncSection';
+import { syncService } from '../utils/SyncService';
 
 
 function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
@@ -309,6 +311,46 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
           </ItemPresets.SUBSECTION>
         }
       ]
+    },
+    {
+      label: 'Sync',
+      items: [
+        {
+          content: <SyncSection onNoteSelect={onNoteSelect} onClose={onClose} />
+        }
+      ],
+      icon: () => {
+        const stats = syncService.getBackendStorageStats();
+        const percentUsed = Math.min(stats.percentUsed, 100);
+        const barColor = percentUsed > 90 ? '#ff4d4f' : '#0aa34f';
+        
+        return (
+          <div className="sync-icon-container" style={{ width: '100%', height: '24px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1 }}></div>
+            <div 
+              className="sync-mini-bar" 
+              style={{ 
+                width: '100%', 
+                backgroundColor: '#444444', 
+                height: '3px', 
+                borderRadius: '2px',
+                marginTop: '2px',
+                overflow: 'hidden'
+              }}
+            >
+              <div 
+                style={{ 
+                  width: `${percentUsed}%`, 
+                  backgroundColor: barColor, 
+                  height: '100%', 
+                  borderRadius: '2px',
+                  transition: 'width 0.3s ease'
+                }} 
+              />
+            </div>
+          </div>
+        );
+      }
     },
     {
       label: 'Developer',
