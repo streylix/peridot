@@ -1,5 +1,10 @@
 // StorageService.js
 
+// API base URL for server endpoints
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://notes.peridot.software/v1' 
+  : 'http://localhost:8000/api';
+
 class StorageService {
   constructor() {
     this.root = null;
@@ -8,6 +13,23 @@ class StorageService {
     this.DEBOUNCE_MS = 1;
     this.db = null;
     this.storageType = null;
+    this.authToken = localStorage.getItem('authToken');
+    this.noteContentService = {
+      getFirstLine: (content) => {
+        // Return 'Untitled' for any empty, null, or undefined content
+        if (!content) return 'Untitled';
+        
+        // For HTML content with div tags
+        if (typeof content === 'string' && content.startsWith('<div>')) {
+          const match = content.match(/<div[^>]*>(.*?)<\/div>/);
+          // Ensure we return 'Untitled' for empty divs, not an empty string
+          return (match && match[1] && match[1].trim()) ? match[1].trim() : 'Untitled';
+        }
+        
+        // For any other type of content
+        return 'Untitled';
+      }
+    };
   }
 
   async ensureNotesDirectory() {
@@ -55,6 +77,26 @@ class StorageService {
   
             case 'localstorage':
               this.storageType = 'localstorage';
+              break;
+              
+            case 'server':
+              // Initialize server-backed storage
+              if (this.authToken) {
+                this.storageType = 'server';
+                // Fetch initial data from server
+                try {
+                  await this.syncNotesFromServer();
+                } catch (error) {
+                  console.error('Failed to sync notes from server:', error);
+                  // Fall back to local storage
+                  await this.initIndexedDB();
+                  this.storageType = 'opfs';
+                }
+              } else {
+                console.warn('Server storage selected but no auth token available');
+                await this.initIndexedDB();
+                this.storageType = 'opfs';
+              }
               break;
           }
           
@@ -123,31 +165,12 @@ class StorageService {
     // For folders, handle the special case
     if (typeof content === 'string' && content.startsWith('<div>')) {
       const match = content.match(/<div[^>]*>(.*?)<\/div>/);
-      return match ? match[1] : 'Untitled';
+      // Ensure we return 'Untitled' for empty divs, not an empty string
+      return (match && match[1] && match[1].trim()) ? match[1].trim() : 'Untitled';
     }
   
     // For regular notes, use noteContentService
     return this.noteContentService.getFirstLine(content);
-  }
-  
-  async initIndexedDB() {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open('notesDB', 1);
-  
-      request.onerror = () => reject(request.error);
-  
-      request.onsuccess = () => {
-        this.db = request.result;
-        resolve();
-      };
-  
-      request.onupgradeneeded = (event) => {
-        const db = event.target.result;
-        if (!db.objectStoreNames.contains('notes')) {
-          db.createObjectStore('notes', { keyPath: 'id' });
-        }
-      };
-    });
   }
   
   async writeNoteToIndexedDB(noteId, noteData) {
@@ -204,21 +227,50 @@ class StorageService {
     }
   }
   
-  extractTitleFromContent(content) {
-    if (!content) return 'Untitled';
+  async writeNoteToServer(noteId, noteData) {
+    if (!this.authToken) return false;
     
-    // For folders, handle the special case
-    if (typeof content === 'string' && content.startsWith('<div>')) {
-      const match = content.match(/<div[^>]*>(.*?)<\/div>/);
-      return match ? match[1] : 'Untitled';
+    try {
+      // Convert note to Django format if needed
+      const djangoNote = this.convertToDjangoFormat(noteData);
+      
+      // Try to update first
+      let response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.authToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(djangoNote)
+      });
+      
+      // If note doesn't exist, create it
+      if (response.status === 404) {
+        response = await fetch(`${API_BASE_URL}/notes/`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.authToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(djangoNote)
+        });
+      }
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error(`Failed to write note ${noteId} to server:`, error);
+      throw error;
     }
-  
-    // For regular notes, use noteContentService
-    return this.noteContentService.getFirstLine(content);
   }
   
   async writeNote(noteId, noteData) {
-    await this.init();
+    if (!this.initialized) {
+      await this.init();
+    }
   
     if (this.pendingSaves.has(noteId)) {
       clearTimeout(this.pendingSaves.get(noteId));
@@ -262,6 +314,10 @@ class StorageService {
               await this.writeNoteToIndexedDB(noteId, noteData);
               break;
   
+            case 'server':
+              await this.writeNoteToServer(noteId, noteData);
+              break;
+  
             default:
               throw new Error(`Unsupported storage type: ${this.storageType}`);
           }
@@ -278,11 +334,39 @@ class StorageService {
       this.pendingSaves.set(noteId, timeoutId);
     });
   
+    // If using server storage and authenticated, also update server
+    if (this.storageType === 'server' && this.authToken) {
+      this.writeNoteToServer(noteId, noteData).catch(error => {
+        console.error('Failed to write note to server:', error);
+      });
+    }
+  
     return savePromise;
   }
 
   async readNote(noteId) {
-    await this.init();
+    if (!this.initialized) {
+      await this.init();
+    }
+    
+    // If using server storage and authenticated, try to fetch from server first
+    if (this.storageType === 'server' && this.authToken) {
+      try {
+        const serverNote = await this.readNoteFromServer(noteId);
+        if (serverNote) {
+          // Cache the note in local storage
+          if (this.db) {
+            this.writeNoteToIndexedDB(noteId, serverNote).catch(console.error);
+          } else {
+            this.writeNoteToLocalStorage(noteId, serverNote);
+          }
+          return serverNote;
+        }
+      } catch (error) {
+        console.error(`Failed to read note ${noteId} from server:`, error);
+        // Continue to try local storage
+      }
+    }
 
     try {
       if (this.pendingSaves.has(noteId)) {
@@ -316,8 +400,47 @@ class StorageService {
     }
   }
 
+  async readNoteFromServer(noteId) {
+    if (!this.authToken) return null;
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          return null; // Note not found on server
+        }
+        throw new Error(`HTTP error ${response.status}`);
+      }
+      
+      const note = await response.json();
+      return this.convertFromDjangoFormat(note);
+    } catch (error) {
+      console.error(`Failed to read note ${noteId} from server:`, error);
+      throw error;
+    }
+  }
+
   async getAllNotes() {
-    await this.init();
+    if (!this.initialized) {
+      await this.init();
+    }
+    
+    // If using server storage and authenticated, try to fetch all notes from server
+    if (this.storageType === 'server' && this.authToken) {
+      try {
+        return await this.getAllNotesFromServer();
+      } catch (error) {
+        console.error('Failed to get all notes from server:', error);
+        // Fall back to local storage
+      }
+    }
 
     try {
       if (this.pendingSaves.size > 0) {
@@ -366,8 +489,44 @@ class StorageService {
     }
   }
 
+  async getAllNotesFromServer() {
+    if (!this.authToken) return [];
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/notes/`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+      
+      const notes = await response.json();
+      return notes.map(note => this.convertFromDjangoFormat(note));
+    } catch (error) {
+      console.error('Failed to get all notes from server:', error);
+      throw error;
+    }
+  }
+
   async deleteNote(noteId) {
-    await this.init();
+    if (!this.initialized) {
+      await this.init();
+    }
+    
+    // If using server storage and authenticated, also delete from server
+    if (this.storageType === 'server' && this.authToken) {
+      try {
+        await this.deleteNoteFromServer(noteId);
+      } catch (error) {
+        console.error(`Failed to delete note ${noteId} from server:`, error);
+        // Continue with local deletion even if server deletion fails
+      }
+    }
 
     try {
       if (this.pendingSaves.has(noteId)) {
@@ -393,6 +552,29 @@ class StorageService {
       }
     } catch (error) {
       console.error(`Failed to delete note ${noteId}:`, error);
+      throw error;
+    }
+  }
+
+  async deleteNoteFromServer(noteId) {
+    if (!this.authToken) return false;
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${this.authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok && response.status !== 404) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error(`Failed to delete note ${noteId} from server:`, error);
       throw error;
     }
   }
@@ -802,6 +984,204 @@ class StorageService {
   getCurrentStorageType() {
     const preferredStorage = localStorage.getItem('preferredStorage');
     return preferredStorage || 'auto';
+  }
+
+  // Sync all notes from server to local storage
+  async syncNotesFromServer() {
+    if (!this.authToken) return;
+    
+    try {
+      const notes = await this.getAllNotesFromServer();
+      
+      // Initialize local storage if needed
+      if (!this.db) {
+        await this.initOPFS();
+      }
+      
+      // Save all notes to local storage
+      for (const note of notes) {
+        if (this.db) {
+          await this.writeNoteToIndexedDB(note.id, note);
+        } else {
+          this.writeNoteToLocalStorage(note.id, note);
+        }
+      }
+      
+      return notes;
+    } catch (error) {
+      console.error('Failed to sync notes from server:', error);
+      throw error;
+    }
+  }
+
+  // Set authentication token
+  setAuthToken(token) {
+    this.authToken = token;
+    localStorage.setItem('authToken', token);
+    
+    // If server storage type is preferred, initialize it
+    const preferredStorage = localStorage.getItem('preferredStorage');
+    if (preferredStorage === 'server') {
+      this.storageType = 'server';
+      this.syncNotesFromServer().catch(error => {
+        console.error('Failed to sync notes after setting auth token:', error);
+      });
+    }
+  }
+  
+  // Clear authentication token
+  clearAuthToken() {
+    this.authToken = null;
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('refreshToken');
+    
+    // If using server storage, switch to indexedDB
+    if (this.storageType === 'server') {
+      this.initIndexedDB().then(() => {
+        this.storageType = 'indexeddb';
+      }).catch(error => {
+        console.error('Failed to initialize IndexedDB after clearing auth token:', error);
+      });
+    }
+  }
+
+  // Convert note from Django format to frontend format
+  convertFromDjangoFormat(note) {
+    // Django serializer already converts most fields to camelCase
+    return {
+      ...note,
+      // Add any specific field conversions needed here
+    };
+  }
+  
+  // Convert note to Django format for sending to backend
+  convertToDjangoFormat(note) {
+    // Create a copy to avoid modifying the original
+    const djangoNote = { ...note };
+    
+    // Handle caretPosition which isn't in the Django model
+    if (djangoNote.caretPosition !== undefined) {
+      // Keep it for frontend but it will be ignored by Django
+    }
+    
+    // Handle dateCreated which might be renamed in Django
+    if (djangoNote.dateCreated !== undefined) {
+      // Keep it for frontend but it will be handled by Django's created_at
+    }
+    
+    // Ensure type is set for folders
+    if (!djangoNote.type && djangoNote.content && 
+        typeof djangoNote.content === 'string' && 
+        djangoNote.content.startsWith('<div>')) {
+      // This might be a folder, check if it has isOpen property
+      if (djangoNote.isOpen !== undefined) {
+        djangoNote.type = 'folder';
+      } else {
+        djangoNote.type = 'note';
+      }
+    }
+    
+    return djangoNote;
+  }
+
+  // Handle authentication with the Django backend
+  async authenticate(username, password) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/token/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ username, password })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Authentication failed: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Store tokens
+      this.authToken = data.access;
+      localStorage.setItem('authToken', data.access);
+      
+      if (data.refresh) {
+        localStorage.setItem('refreshToken', data.refresh);
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Authentication failed:', error);
+      return { 
+        success: false, 
+        error: error.message || 'Authentication failed'
+      };
+    }
+  }
+  
+  // Refresh the JWT token
+  async refreshToken() {
+    const refreshToken = localStorage.getItem('refreshToken');
+    
+    if (!refreshToken) {
+      return { success: false, error: 'No refresh token available' };
+    }
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/token/refresh/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ refresh: refreshToken })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Token refresh failed: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Update access token
+      this.authToken = data.access;
+      localStorage.setItem('authToken', data.access);
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      return { 
+        success: false, 
+        error: error.message || 'Token refresh failed'
+      };
+    }
+  }
+  
+  // Logout and clear tokens
+  async logout() {
+    const refreshToken = localStorage.getItem('refreshToken');
+    
+    if (refreshToken) {
+      try {
+        await fetch(`${API_BASE_URL}/logout/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.authToken}`
+          },
+          body: JSON.stringify({ refresh: refreshToken })
+        });
+      } catch (error) {
+        console.error('Logout API call failed:', error);
+        // Continue with local logout even if API call fails
+      }
+    }
+    
+    // Clear tokens
+    this.authToken = null;
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('refreshToken');
+    
+    return { success: true };
   }
 }
 

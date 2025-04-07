@@ -1,6 +1,11 @@
 import { storageService } from './StorageService';
 import { noteUpdateService } from './NoteUpdateService';
 
+// API base URL for server endpoints
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://notes.peridot.software/v1' 
+  : 'http://localhost:8000/api';
+
 class SyncService {
   constructor() {
     this.syncStatus = new Map(); // Maps noteId -> { status, lastSynced, size }
@@ -10,6 +15,7 @@ class SyncService {
       used: 0
     };
     this.autoSyncEnabled = localStorage.getItem('autoSyncEnabled') === 'true';
+    this.authToken = localStorage.getItem('authToken');
     
     // Status values: 'syncing', 'synced', 'failed', 'not-synced'
     
@@ -18,6 +24,11 @@ class SyncService {
     this.initializeFromLocalStorage();
     this.initializeWebsocket();
     this.setupAutoSync();
+    
+    // Fetch backend storage info if authenticated
+    if (this.authToken) {
+      this.fetchBackendStorageInfo();
+    }
   }
   
   // Set up BroadcastChannel for real-time cross-tab communication
@@ -227,30 +238,65 @@ class SyncService {
   
   // Set up websocket connection for real-time updates
   initializeWebsocket() {
-    // In a real implementation, this would connect to a WebSocket server
-    // For now, we'll simulate cross-tab communication using localStorage events
-    window.addEventListener('storage', (event) => {
-      if (event.key === 'sync_update') {
+    // Only attempt to connect if we have authentication
+    if (!this.authToken) return;
+
+    try {
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = process.env.NODE_ENV === 'production'
+        ? `${wsProtocol}//notes.peridot.software/ws/sync`
+        : `${wsProtocol}//localhost:8000/ws/sync`;
+      
+      this.socket = new WebSocket(`${wsUrl}?token=${this.authToken}`);
+      
+      this.socket.onopen = () => {
+        console.log('WebSocket connection established');
+      };
+      
+      this.socket.onmessage = (event) => {
         try {
-          const updateData = JSON.parse(event.newValue);
-          if (updateData && updateData.noteId) {
-            this.syncStatus.set(updateData.noteId, updateData.status);
-            this.notifySubscribers(updateData.noteId);
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'NOTE_UPDATED' && data.noteId) {
+            // Remote note was updated, update local status
+            this.syncStatus.set(data.noteId, {
+              status: 'synced',
+              lastSynced: new Date().toISOString(),
+              size: data.size || 0
+            });
+            
+            this.notifySubscribers(data.noteId);
+            
+            // If we have the note open, fetch the latest version
+            storageService.readNote(data.noteId).then(note => {
+              if (note) {
+                this.fetchNoteFromBackend(data.noteId);
+              }
+            });
+          } else if (data.type === 'STORAGE_UPDATED') {
+            // Update storage limits
+            this.backendStorage = {
+              total: data.total || this.backendStorage.total,
+              used: data.used || this.backendStorage.used
+            };
           }
         } catch (error) {
-          console.error('Failed to process sync update:', error);
+          console.error('Failed to process WebSocket message:', error);
         }
-      } else if (event.key === 'note_update') {
-        try {
-          const updateData = JSON.parse(event.newValue);
-          if (updateData && updateData.noteId && updateData.note) {
-            this.handleCrossBrowserNoteUpdate(updateData.noteId, updateData.note);
-          }
-        } catch (error) {
-          console.error('Failed to process note update from localStorage:', error);
-        }
-      }
-    });
+      };
+      
+      this.socket.onclose = () => {
+        console.log('WebSocket connection closed');
+        // Attempt to reconnect after a delay
+        setTimeout(() => this.initializeWebsocket(), 5000);
+      };
+      
+      this.socket.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+    } catch (error) {
+      console.error('Failed to initialize WebSocket:', error);
+    }
   }
   
   // Subscribe to sync status changes
@@ -321,9 +367,114 @@ class SyncService {
     return syncedNotes;
   }
   
+  // Fetch backend storage information
+  async fetchBackendStorageInfo() {
+    if (!this.authToken) return;
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/storage/`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      this.backendStorage = {
+        total: data.total || this.backendStorage.total,
+        used: data.used || this.backendStorage.used
+      };
+      
+      return this.backendStorage;
+    } catch (error) {
+      console.error('Failed to fetch backend storage info:', error);
+      return this.backendStorage;
+    }
+  }
+  
+  // Fetch a note from the backend
+  async fetchNoteFromBackend(noteId) {
+    if (!this.authToken) return null;
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+      
+      const noteData = await response.json();
+      
+      // Convert Django response format to frontend format if needed
+      const processedNote = this.convertFromDjangoFormat(noteData);
+      
+      // Update local storage
+      await storageService.writeNote(noteId, processedNote);
+      
+      // Update sync status
+      this.syncStatus.set(noteId, {
+        status: 'synced',
+        lastSynced: new Date().toISOString(),
+        size: new Blob([JSON.stringify(processedNote)]).size
+      });
+      
+      this.notifySubscribers(noteId);
+      this.broadcastSyncUpdate(noteId, this.syncStatus.get(noteId));
+      
+      return processedNote;
+    } catch (error) {
+      console.error(`Failed to fetch note ${noteId} from backend:`, error);
+      return null;
+    }
+  }
+  
+  // Convert note from Django format to frontend format
+  convertFromDjangoFormat(djangoNote) {
+    // Django serializer already converts to camelCase, but some fields may need adjustment
+    return {
+      ...djangoNote,
+      // If there are any specific field conversions needed, add them here
+    };
+  }
+  
+  // Convert note to Django format for sending to backend
+  convertToDjangoFormat(note) {
+    // Create a copy to avoid modifying the original
+    const djangoNote = { ...note };
+    
+    // Handle caretPosition which isn't in the Django model
+    if (djangoNote.caretPosition !== undefined) {
+      // Keep it for frontend but it will be ignored by Django
+    }
+    
+    // Handle dateCreated which isn't used in PUT/POST requests
+    if (djangoNote.dateCreated !== undefined) {
+      // Keep it for frontend but it will be ignored by Django
+    }
+    
+    return djangoNote;
+  }
+  
   // Start syncing a note
   async syncNote(noteId) {
     try {
+      // Check if we're authenticated
+      if (!this.authToken) {
+        throw new Error('Not authenticated');
+      }
+      
       // Update status to syncing
       this.syncStatus.set(noteId, {
         status: 'syncing',
@@ -339,7 +490,7 @@ class SyncService {
         throw new Error('Note not found');
       }
       
-      // Calculate size in bytes (approximation for demo)
+      // Calculate size in bytes
       const size = new Blob([JSON.stringify(note)]).size;
       
       // Check if we have enough space in backend
@@ -347,8 +498,36 @@ class SyncService {
         throw new Error('Not enough storage space in backend');
       }
       
-      // Simulate API call with timeout
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Convert note to Django format
+      const djangoNote = this.convertToDjangoFormat(note);
+      
+      // Send note to backend
+      const response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.authToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(djangoNote)
+      });
+      
+      // If note doesn't exist yet, create it
+      if (response.status === 404) {
+        const createResponse = await fetch(`${API_BASE_URL}/notes/`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.authToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(djangoNote)
+        });
+        
+        if (!createResponse.ok) {
+          throw new Error(`HTTP error ${createResponse.status}`);
+        }
+      } else if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
       
       // Update status to synced
       this.syncStatus.set(noteId, {
@@ -386,9 +565,27 @@ class SyncService {
   // Remove a note from backend sync
   async removeFromSync(noteId) {
     try {
+      // Check if we're authenticated
+      if (!this.authToken) {
+        throw new Error('Not authenticated');
+      }
+      
       const currentStatus = this.syncStatus.get(noteId);
       
       if (currentStatus && currentStatus.status === 'synced') {
+        // Request deletion from backend
+        const response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${this.authToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok && response.status !== 404) {
+          throw new Error(`HTTP error ${response.status}`);
+        }
+        
         // Reduce backend usage
         this.backendStorage.used -= currentStatus.size || 0;
         
@@ -411,6 +608,33 @@ class SyncService {
     }
   }
   
+  // Set authentication token
+  setAuthToken(token) {
+    this.authToken = token;
+    localStorage.setItem('authToken', token);
+    
+    // Reinitialize websocket with new token
+    if (this.socket) {
+      this.socket.close();
+    }
+    this.initializeWebsocket();
+    
+    // Fetch backend storage info with new token
+    this.fetchBackendStorageInfo();
+  }
+  
+  // Clear authentication token
+  clearAuthToken() {
+    this.authToken = null;
+    localStorage.removeItem('authToken');
+    
+    // Close websocket
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
+    }
+  }
+  
   // Get backend storage stats
   getBackendStorageStats() {
     return {
@@ -425,6 +649,55 @@ class SyncService {
   cleanup() {
     if (this.broadcastChannel) {
       this.broadcastChannel.close();
+    }
+    
+    if (this.socket) {
+      this.socket.close();
+    }
+  }
+  
+  // Sync all notes to the backend
+  async syncAllNotes() {
+    if (!this.authToken) {
+      return { success: false, error: 'Not authenticated' };
+    }
+    
+    try {
+      const notes = await storageService.getAllNotes();
+      const results = {
+        total: notes.length,
+        succeeded: 0,
+        failed: 0,
+        skipped: 0,
+        errors: []
+      };
+      
+      for (const note of notes) {
+        // Skip notes that are already synced
+        const status = this.getSyncStatus(note.id);
+        if (status.status === 'synced') {
+          results.skipped++;
+          continue;
+        }
+        
+        try {
+          const success = await this.syncNote(note.id);
+          if (success) {
+            results.succeeded++;
+          } else {
+            results.failed++;
+            results.errors.push({ id: note.id, error: 'Sync failed' });
+          }
+        } catch (error) {
+          results.failed++;
+          results.errors.push({ id: note.id, error: error.message });
+        }
+      }
+      
+      return { success: true, results };
+    } catch (error) {
+      console.error('Failed to sync all notes:', error);
+      return { success: false, error: error.message };
     }
   }
 }

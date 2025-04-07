@@ -1,12 +1,18 @@
 import { storageService } from './StorageService';
 import { encryptNote } from './encryption';
 
+// API base URL for server endpoints
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://notes.peridot.software/v1' 
+  : 'http://localhost:8000/api';
+
 class NoteUpdateService {
   constructor() {
     this.subscribers = new Set();
     this.pendingUpdates = new Map();
     this.updateTimers = new Map();
     this.isProcessingUnload = false;
+    this.authToken = localStorage.getItem('authToken');
     
     window.addEventListener('beforeunload', this.handleBeforeUnload.bind(this));
     
@@ -118,8 +124,14 @@ class NoteUpdateService {
         delete updatedNote.visibleTitle;
       }
 
-      // Save to storage
+      // Save to local storage
       await storageService.writeNote(noteId, updatedNote);
+
+      // Push update to server if authenticated
+      if (this.authToken) {
+        this.pushNoteToServer(noteId, updatedNote)
+          .catch(error => console.error('Failed to push note update to server:', error));
+      }
 
       // Notify subscribers
       this.notifySubscribers(updatedNote);
@@ -180,8 +192,14 @@ class NoteUpdateService {
           delete updatedNote.visibleTitle;
         }
 
-        // Save to storage
+        // Save to local storage
         await storageService.writeNote(noteId, updatedNote);
+
+        // Push update to server if authenticated
+        if (this.authToken) {
+          this.pushNoteToServer(noteId, updatedNote)
+            .catch(error => console.error('Failed to push note update to server:', error));
+        }
 
         // Notify subscribers
         this.notifySubscribers(updatedNote);
@@ -201,6 +219,104 @@ class NoteUpdateService {
     this.updateTimers.set(noteId, timer);
   }
 
+  // Push note update to server
+  async pushNoteToServer(noteId, noteData) {
+    if (!this.authToken) return;
+    
+    try {
+      // Convert to Django format (handle any necessary field conversions)
+      const djangoNote = this.convertToDjangoFormat(noteData);
+      
+      // Try to update the note first
+      let response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.authToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(djangoNote)
+      });
+      
+      // If note doesn't exist yet, create it
+      if (response.status === 404) {
+        response = await fetch(`${API_BASE_URL}/notes/`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.authToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(djangoNote)
+        });
+      }
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+      
+      // Update sync status event
+      window.dispatchEvent(new CustomEvent('noteSyncUpdate', {
+        detail: { 
+          noteId,
+          status: {
+            status: 'synced',
+            lastSynced: new Date().toISOString(),
+            size: new Blob([JSON.stringify(noteData)]).size
+          }
+        }
+      }));
+      
+      return true;
+    } catch (error) {
+      console.error(`Failed to push note ${noteId} to server:`, error);
+      
+      // Update sync status event with failure
+      window.dispatchEvent(new CustomEvent('noteSyncUpdate', {
+        detail: { 
+          noteId,
+          status: {
+            status: 'failed',
+            lastSynced: null,
+            error: error.message
+          }
+        }
+      }));
+      
+      return false;
+    }
+  }
+  
+  // Convert note to Django format for sending to backend
+  convertToDjangoFormat(note) {
+    // Create a copy to avoid modifying the original
+    const djangoNote = { ...note };
+    
+    // Handle specific field conversions if needed
+    
+    // Handle caretPosition which isn't in the Django model
+    if (djangoNote.caretPosition !== undefined) {
+      // Keep it for frontend, Django will ignore it
+    }
+    
+    // Handle dateCreated which isn't used in PUT/POST requests
+    if (djangoNote.dateCreated !== undefined) {
+      // Keep it for frontend, Django will ignore it
+    }
+    
+    // Ensure type is set for folders
+    if (!djangoNote.type && djangoNote.content && 
+        typeof djangoNote.content === 'string' && 
+        djangoNote.content.startsWith('<div>')) {
+      // This might be a folder, check if it has isOpen property
+      if (djangoNote.isOpen !== undefined) {
+        djangoNote.type = 'folder';
+      } else {
+        djangoNote.type = 'note';
+      }
+    }
+    
+    return djangoNote;
+  }
+
   notifySubscribers(note) {
     this.subscribers.forEach(callback => callback(note));
 
@@ -216,6 +332,18 @@ class NoteUpdateService {
     return () => {
       this.subscribers.delete(callback);
     };
+  }
+  
+  // Set authentication token
+  setAuthToken(token) {
+    this.authToken = token;
+    localStorage.setItem('authToken', token);
+  }
+  
+  // Clear authentication token
+  clearAuthToken() {
+    this.authToken = null;
+    localStorage.removeItem('authToken');
   }
   
   // Clean up resources when the service is no longer needed

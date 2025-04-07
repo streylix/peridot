@@ -261,13 +261,13 @@ function App() {
         }
         
         // Update URL without reloading the page
-        if (slug && slug !== 'untitled') {
-          window.history.pushState(
-            { noteId: selectedId }, 
-            '', 
-            `/${folderPath}${slug}#${selectedId}`
-          );
-        }
+        // Always include the noteId in the URL, even for untitled notes
+        const urlSlug = (slug && slug !== 'untitled') ? `${slug}` : 'untitled';
+        window.history.pushState(
+          { noteId: selectedId }, 
+          '', 
+          `/${folderPath}${urlSlug}#${selectedId}`
+        );
       }
     } else {
       // Reset URL to home when no note is selected
@@ -305,6 +305,19 @@ function App() {
           
           // Try to find a matching note
           let matchedNote = null;
+          
+          // Special case for untitled notes
+          if (lastSegment === 'untitled' && hash && hash.startsWith('#')) {
+            const noteId = parseInt(hash.substring(1));
+            if (!isNaN(noteId)) {
+              const untitledNote = notes.find(note => note.id === noteId);
+              if (untitledNote) {
+                setSelectedId(noteId);
+                noteNavigation.push(noteId);
+                return;
+              }
+            }
+          }
           
           for (const note of notes) {
             const title = note.visibleTitle || noteContentService.getFirstLine(note.content) || '';
