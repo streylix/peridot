@@ -1,5 +1,5 @@
 #!/bin/bash
-# Setup script for Peridot backend
+# This script sets up the Django backend for the Peridot application
 
 echo "Setting up Peridot backend..."
 
@@ -25,6 +25,10 @@ source venv/bin/activate
 echo "Installing requirements..."
 pip install -r requirements.txt
 
+# Install WebSocket support packages
+echo "Installing WebSocket support..."
+pip install channels daphne
+
 # Make migrations
 echo "Making migrations..."
 python manage.py makemigrations
@@ -41,12 +45,13 @@ if [ "$create_user" = "y" ]; then
 fi
 
 # Run the development server
-echo "Setup complete! Run the server using:"
-echo "cd peridot_backend && source venv/bin/activate && python manage.py runserver"
+echo "Setup complete! You can run the server with WebSocket support using:"
+echo "cd peridot_backend && source venv/bin/activate && daphne -p 8000 peridot_backend.asgi:application"
 
 # Offer to run the server
 echo "Would you like to run the server now? (y/n)"
 read -r run_server
 if [ "$run_server" = "y" ]; then
-    python manage.py runserver
+    # Use Daphne for WebSocket support instead of the default Django server
+    daphne -p 8000 peridot_backend.asgi:application
 fi 

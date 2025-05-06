@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Peridot WebSocket Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    #log {
+      height: 300px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-bottom: 20px;
+      background-color: #f9f9f9;
+    }
+    
+    .msg {
+      margin-bottom: 5px;
+    }
+    
+    .sent {
+      color: blue;
+    }
+    
+    .received {
+      color: green;
+    }
+    
+    .error {
+      color: red;
+    }
+    
+    .info {
+      color: gray;
+    }
+    
+    button {
+      margin-right: 10px;
+      padding: 8px 12px;
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      cursor: pointer;
+    }
+    
+    button:hover {
+      background-color: #45a049;
+    }
+    
+    input[type="text"] {
+      padding: 8px;
+      width: 100px;
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Peridot WebSocket Test Client</h1>
+  
+  <div id="connection-status">Status: Disconnected</div>
+  
+  <div>
+    <button id="connect-btn">Connect</button>
+    <button id="disconnect-btn" disabled>Disconnect</button>
+  </div>
+  
+  <h3>Authentication</h3>
+  <div>
+    <input type="text" id="user-id" placeholder="User ID" />
+    <button id="auth-btn" disabled>Authenticate</button>
+  </div>
+  
+  <h3>Send Test Note Update</h3>
+  <div>
+    <input type="text" id="note-id" placeholder="Note ID" />
+    <button id="send-note-update-btn" disabled>Send Note Update</button>
+  </div>
+  
+  <h3>Message Log</h3>
+  <div id="log"></div>
+  
+  <script>
+    // DOM elements
+    const connectBtn = document.getElementById('connect-btn');
+    const disconnectBtn = document.getElementById('disconnect-btn');
+    const authBtn = document.getElementById('auth-btn');
+    const sendNoteUpdateBtn = document.getElementById('send-note-update-btn');
+    const userIdInput = document.getElementById('user-id');
+    const noteIdInput = document.getElementById('note-id');
+    const logDiv = document.getElementById('log');
+    const statusDiv = document.getElementById('connection-status');
+    
+    // WebSocket connection
+    let socket = null;
+    
+    // Log a message to the log div
+    function logMessage(message, type) {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `msg ${type}`;
+      msgDiv.textContent = message;
+      logDiv.appendChild(msgDiv);
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+    
+    // Update connection status
+    function updateStatus(status) {
+      statusDiv.textContent = `Status: ${status}`;
+    }
+    
+    // Connect to WebSocket
+    connectBtn.addEventListener('click', () => {
+      try {
+        // Close existing connection if there is one
+        if (socket && socket.readyState !== WebSocket.CLOSED) {
+          socket.close();
+        }
+        
+        // Connect to WebSocket server
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host || 'localhost:8000';
+        const wsUrl = `${protocol}//${host}/ws/sync/`;
+        
+        logMessage(`Connecting to: ${wsUrl}`, 'info');
+        socket = new WebSocket(wsUrl);
+        
+        // Add event listeners
+        socket.onopen = (event) => {
+          logMessage('Connection established', 'info');
+          updateStatus('Connected');
+          
+          // Update button states
+          connectBtn.disabled = true;
+          disconnectBtn.disabled = false;
+          authBtn.disabled = false;
+        };
+        
+        socket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            logMessage(`Received: ${JSON.stringify(data, null, 2)}`, 'received');
+            
+            // If authenticated successfully, enable sending note updates
+            if (data.type === 'authenticated') {
+              sendNoteUpdateBtn.disabled = false;
+            }
+          } catch (error) {
+            logMessage(`Error parsing message: ${error.message}`, 'error');
+          }
+        };
+        
+        socket.onclose = (event) => {
+          logMessage(`Connection closed. Code: ${event.code}, Reason: ${event.reason}`, 'info');
+          updateStatus('Disconnected');
+          
+          // Update button states
+          connectBtn.disabled = false;
+          disconnectBtn.disabled = true;
+          authBtn.disabled = true;
+          sendNoteUpdateBtn.disabled = true;
+        };
+        
+        socket.onerror = (error) => {
+          logMessage(`WebSocket error: ${error}`, 'error');
+          updateStatus('Error');
+        };
+      } catch (error) {
+        logMessage(`Failed to connect: ${error.message}`, 'error');
+      }
+    });
+    
+    // Disconnect from WebSocket
+    disconnectBtn.addEventListener('click', () => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
+    });
+    
+    // Authenticate with WebSocket
+    authBtn.addEventListener('click', () => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        const userId = userIdInput.value.trim();
+        
+        if (!userId) {
+          logMessage('Please enter a User ID', 'error');
+          return;
+        }
+        
+        const authMessage = {
+          type: 'authenticate',
+          userId: userId
+        };
+        
+        logMessage(`Sending authentication: ${JSON.stringify(authMessage)}`, 'sent');
+        socket.send(JSON.stringify(authMessage));
+      } else {
+        logMessage('WebSocket is not connected', 'error');
+      }
+    });
+    
+    // Send test note update
+    sendNoteUpdateBtn.addEventListener('click', () => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        const noteId = noteIdInput.value.trim();
+        
+        if (!noteId) {
+          logMessage('Please enter a Note ID', 'error');
+          return;
+        }
+        
+        const noteUpdateMessage = {
+          type: 'note_update',
+          note_id: noteId,
+          status: {
+            status: 'synced',
+            lastSynced: new Date().toISOString(),
+            size: 1024
+          }
+        };
+        
+        logMessage(`Sending note update: ${JSON.stringify(noteUpdateMessage)}`, 'sent');
+        socket.send(JSON.stringify(noteUpdateMessage));
+      } else {
+        logMessage('WebSocket is not connected', 'error');
+      }
+    });
+  </script>
+</body>
+</html> 

@@ -7,6 +7,44 @@ import json
 from .models import Note, UserStorage
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+
+# Helper function to notify WebSocket clients about note updates
+def notify_note_update(user_id, note_id, status, note_content=None):
+    try:
+        channel_layer = get_channel_layer()
+        message = {
+            "type": "broadcast_note_update",
+            "note_id": note_id,
+            "status": status
+        }
+        
+        # Include note content in the WebSocket message if provided
+        # This allows other clients to update their local copies without making a separate request
+        if note_content:
+            message["note_content"] = note_content
+            
+        async_to_sync(channel_layer.group_send)(
+            f"user_{user_id}",
+            message
+        )
+    except Exception as e:
+        print(f"WebSocket notification error: {e}")
+
+# Helper function to notify WebSocket clients about storage updates
+def notify_storage_update(user_id, storage_data):
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"user_{user_id}",
+            {
+                "type": "broadcast_storage_update",
+                "storage": storage_data
+            }
+        )
+    except Exception as e:
+        print(f"WebSocket notification error: {e}")
 
 @csrf_exempt # For simplicity in this example, disable CSRF. In production, use proper CSRF handling.
 def register_user(request):
@@ -45,6 +83,8 @@ def login_user(request):
             # Allow login with either username or email
             identifier = data.get('email') # Assuming 'email' field from frontend can be username or email
             password = data.get('password')
+            
+            print(f"Login attempt with identifier: {identifier}")
 
             if not all([identifier, password]):
                 return JsonResponse({'error': 'Missing fields'}, status=400)
@@ -59,12 +99,19 @@ def login_user(request):
                     user = authenticate(request, username=user_by_email.username, password=password)
                 except User.DoesNotExist:
                     user = None # Keep user as None if email not found
+                    print(f"No user found with email: {identifier}")
+                    
+            print(f"Authentication result: {'Success' if user else 'Failed'}")
 
             if user is not None:
                 login(request, user)
                 # Create storage for user if it doesn't exist
                 UserStorage.objects.get_or_create(user=user)
-                return JsonResponse({
+                
+                # Set session cookie path to root for better sharing between API and frontend
+                request.session.cookie_name = 'peridot_sessionid'
+                
+                response = JsonResponse({
                     'message': 'Login successful', 
                     'user': {
                         'id': user.id,
@@ -72,11 +119,15 @@ def login_user(request):
                         'email': user.email
                     }
                 }, status=200)
+                
+                return response
             else:
                 return JsonResponse({'error': 'Invalid credentials'}, status=400)
         except json.JSONDecodeError:
+            print("JSON decode error in login request")
             return JsonResponse({'error': 'Invalid JSON'}, status=400)
         except Exception as e:
+            print(f"Login error: {str(e)}")
             return JsonResponse({'error': str(e)}, status=500)
     return JsonResponse({'error': 'Only POST method allowed'}, status=405)
 
@@ -126,7 +177,9 @@ def notes_list(request):
                 'pinned': note.pinned,
                 'visible_title': note.visible_title,
                 'tags': note.tags,
-                'user': user.id
+                'user': user.id,
+                'key_params': note.key_params,
+                'iv': note.iv
             })
         
         return JsonResponse(notes_data, safe=False)
@@ -147,7 +200,12 @@ def notes_list(request):
             
             with transaction.atomic():
                 # Calculate content size
-                content_size = len(data.get('content', '').encode('utf-8'))
+                content = data.get('content', '')
+                # Handle content that might be a list (for encrypted notes)
+                if isinstance(content, list):
+                    content_size = len(json.dumps(content).encode('utf-8'))
+                else:
+                    content_size = len(str(content).encode('utf-8'))
                 
                 # Get or create user storage
                 storage, created = UserStorage.objects.get_or_create(user=user)
@@ -156,40 +214,91 @@ def notes_list(request):
                 if storage.used_bytes + content_size > storage.total_bytes:
                     return JsonResponse({'error': 'Storage quota exceeded'}, status=400)
                 
-                # Create the note
-                note = Note.objects.create(
-                    id=note_id,
-                    user=user,
-                    content=data.get('content'),
-                    locked=data.get('locked', False),
-                    encrypted=data.get('encrypted', False),
-                    folder_path=data.get('folder_path', ''),
-                    pinned=data.get('pinned', False),
-                    visible_title=data.get('visible_title', ''),
-                    tags=data.get('tags', [])
-                )
+                # Clean up data before creating note
+                note_data = {
+                    'id': note_id,
+                    'user': user,
+                    'content': content,
+                    'locked': data.get('locked', False),
+                    'encrypted': data.get('encrypted', False),
+                    'folder_path': data.get('folder_path', ''),
+                    'pinned': data.get('pinned', False),
+                    'visible_title': data.get('visible_title', ''),
+                    'tags': data.get('tags', [])
+                }
                 
-                # Update storage usage
-                storage.used_bytes += content_size
-                storage.save()
+                # Handle encryption fields
+                if data.get('encrypted') and data.get('locked'):
+                    note_data['key_params'] = data.get('key_params')
+                    note_data['iv'] = data.get('iv')
                 
-                return JsonResponse({
-                    'id': note.id,
-                    'content': note.content,
-                    'date_created': note.date_created,
-                    'date_modified': note.date_modified,
-                    'locked': note.locked,
-                    'encrypted': note.encrypted,
-                    'folder_path': note.folder_path,
-                    'pinned': note.pinned,
-                    'visible_title': note.visible_title,
-                    'tags': note.tags,
-                    'user': user.id
-                }, status=201)
+                try:
+                    # Create the note
+                    note = Note.objects.create(**note_data)
+                    
+                    # Update storage usage
+                    storage.used_bytes += content_size
+                    storage.save()
+                    
+                    # Notify WebSocket clients
+                    note_status = {
+                        'status': 'synced',
+                        'lastSynced': note.date_modified.isoformat(),
+                        'size': content_size
+                    }
+                    
+                    # Include note content in the notification for real-time sync
+                    note_content = {
+                        'id': note.id,
+                        'content': note.content,
+                        'dateCreated': note.date_created.isoformat(),
+                        'dateModified': note.date_modified.isoformat(),
+                        'locked': note.locked,
+                        'encrypted': note.encrypted,
+                        'folderPath': note.folder_path,
+                        'pinned': note.pinned,
+                        'visibleTitle': note.visible_title,
+                        'tags': note.tags,
+                        'keyParams': note.key_params,
+                        'iv': note.iv
+                    }
+                    
+                    notify_note_update(user.id, note_id, note_status, note_content)
+                    
+                    # Also notify about storage update
+                    storage_data = {
+                        'total_bytes': storage.total_bytes,
+                        'used_bytes': storage.used_bytes,
+                        'available_bytes': storage.total_bytes - storage.used_bytes,
+                        'percent_used': (storage.used_bytes / storage.total_bytes) * 100 if storage.total_bytes > 0 else 0
+                    }
+                    notify_storage_update(user.id, storage_data)
+                    
+                    return JsonResponse({
+                        'id': note.id,
+                        'content': note.content,
+                        'date_created': note.date_created,
+                        'date_modified': note.date_modified,
+                        'locked': note.locked,
+                        'encrypted': note.encrypted,
+                        'folder_path': note.folder_path,
+                        'pinned': note.pinned,
+                        'visible_title': note.visible_title,
+                        'tags': note.tags,
+                        'user': user.id,
+                        'key_params': note.key_params,
+                        'iv': note.iv
+                    }, status=201)
+                except Exception as create_error:
+                    # Log detailed error information for debugging
+                    print(f"Error creating note: {create_error}")
+                    print(f"Note data: {note_data}")
+                    return JsonResponse({'error': f'Failed to create note: {str(create_error)}'}, status=500)
             
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON'}, status=400)
         except Exception as e:
+            print(f"Unexpected error in note creation: {e}")
             return JsonResponse({'error': str(e)}, status=500)
     
     return JsonResponse({'error': 'Method not allowed'}, status=405)
@@ -219,7 +328,9 @@ def note_detail(request, note_id):
             'pinned': note.pinned,
             'visible_title': note.visible_title,
             'tags': note.tags,
-            'user': user.id
+            'user': user.id,
+            'key_params': note.key_params,
+            'iv': note.iv
         })
     
     elif request.method == 'PUT':
@@ -249,11 +360,47 @@ def note_detail(request, note_id):
                 note.pinned = data.get('pinned', note.pinned)
                 note.visible_title = data.get('visible_title', note.visible_title)
                 note.tags = data.get('tags', note.tags)
+                note.key_params = data.get('keyParams', note.key_params)
+                note.iv = data.get('iv', note.iv)
                 note.save()
                 
                 # Update storage usage
                 storage.used_bytes += size_difference
                 storage.save()
+                
+                # Notify WebSocket clients
+                note_status = {
+                    'status': 'synced',
+                    'lastSynced': note.date_modified.isoformat(),
+                    'size': new_content_size
+                }
+                
+                # Include note content in the notification for real-time sync
+                note_content = {
+                    'id': note.id,
+                    'content': note.content,
+                    'dateCreated': note.date_created.isoformat(),
+                    'dateModified': note.date_modified.isoformat(),
+                    'locked': note.locked,
+                    'encrypted': note.encrypted,
+                    'folderPath': note.folder_path,
+                    'pinned': note.pinned,
+                    'visibleTitle': note.visible_title,
+                    'tags': note.tags,
+                    'keyParams': note.key_params,
+                    'iv': note.iv
+                }
+                
+                notify_note_update(user.id, note_id, note_status, note_content)
+                
+                # Also notify about storage update
+                storage_data = {
+                    'total_bytes': storage.total_bytes,
+                    'used_bytes': storage.used_bytes,
+                    'available_bytes': storage.total_bytes - storage.used_bytes,
+                    'percent_used': (storage.used_bytes / storage.total_bytes) * 100 if storage.total_bytes > 0 else 0
+                }
+                notify_storage_update(user.id, storage_data)
                 
                 return JsonResponse({
                     'id': note.id,
@@ -266,7 +413,9 @@ def note_detail(request, note_id):
                     'pinned': note.pinned,
                     'visible_title': note.visible_title,
                     'tags': note.tags,
-                    'user': user.id
+                    'user': user.id,
+                    'key_params': note.key_params,
+                    'iv': note.iv
                 })
             
         except json.JSONDecodeError:
@@ -289,6 +438,23 @@ def note_detail(request, note_id):
                 storage.used_bytes = max(0, storage.used_bytes - content_size)
                 storage.save()
                 
+                # Notify WebSocket clients
+                note_status = {
+                    'status': 'not-synced',
+                    'lastSynced': None,
+                    'size': 0
+                }
+                notify_note_update(user.id, note_id, note_status)
+                
+                # Also notify about storage update
+                storage_data = {
+                    'total_bytes': storage.total_bytes,
+                    'used_bytes': storage.used_bytes,
+                    'available_bytes': storage.total_bytes - storage.used_bytes,
+                    'percent_used': (storage.used_bytes / storage.total_bytes) * 100 if storage.total_bytes > 0 else 0
+                }
+                notify_storage_update(user.id, storage_data)
+                
                 return JsonResponse({'message': 'Note deleted successfully'})
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
@@ -304,11 +470,13 @@ def storage_info(request):
         # Get or create storage for the user
         storage, created = UserStorage.objects.get_or_create(user=user)
         
-        return JsonResponse({
+        storage_data = {
             'total_bytes': storage.total_bytes,
             'used_bytes': storage.used_bytes,
             'available_bytes': storage.total_bytes - storage.used_bytes,
             'percent_used': (storage.used_bytes / storage.total_bytes) * 100 if storage.total_bytes > 0 else 0
-        })
+        }
+        
+        return JsonResponse(storage_data)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500) 

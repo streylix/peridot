@@ -6,10 +6,10 @@ import { storageService } from '../utils/StorageService';
 import SyncBar from './SyncBar';
 import { ItemPresets, ItemComponents } from './Modal';
 
-// Cache for backend notes to prevent excessive API calls
+// Cache for backend notes to prevent excessive API calls, but with shorter lifetime with webhooks
 let notesCache = null;
 let lastNotesFetchTime = 0;
-const NOTES_CACHE_DURATION = 60000; // 1 minute cache
+const NOTES_CACHE_DURATION = 30000; // 30 seconds cache for better responsiveness
 
 const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
   const [syncedNotes, setSyncedNotes] = useState([]);
@@ -18,16 +18,13 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
   // Keep only the sync all loading state
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [autoSync, setAutoSync] = useState(() => 
-    localStorage.getItem('autoSyncEnabled') === 'true'
-  );
   const [sortConfig, setSortConfig] = useState({
     key: 'lastSynced',
     direction: 'desc'
   });
   // Status message state
   const [statusMessage, setStatusMessage] = useState(null);
-  
+
   // Refs for cleanup and debouncing
   const isComponentMounted = useRef(true);
   const updateTimeoutRef = useRef(null);
@@ -37,6 +34,18 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
     if (currentUser && currentUser.id) {
       console.log("SyncSection: Setting user ID in sync service:", currentUser.id);
       syncService.setAuthToken(currentUser.id.toString());
+      
+      // Clear notes cache when user changes to force a fresh load
+      notesCache = null;
+      lastNotesFetchTime = 0;
+      
+      // Reset state
+      setSyncedNotes([]);
+      setFilteredNotes([]);
+      setIsLoading(true);
+      
+      // Load notes for the new user
+      loadNotesFromBackend(true, true);
     }
   }, [currentUser]);
 
@@ -61,7 +70,8 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
     }
     
     try {
-      // Check if we have recently cached notes
+      // Cache is useful even with WebSockets to prevent too many refreshes on rapid changes
+      // But with shorter duration than before
       const now = Date.now();
       if (!bypassCache && notesCache && now - lastNotesFetchTime < NOTES_CACHE_DURATION) {
         // Use cached notes
@@ -84,11 +94,11 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
       
       // Get notes directly from backend
       const backendNotes = await syncService.getNotesFromBackend();
-      
-      // Fetch actual note data for each synced note
-      const notesWithData = await Promise.all(
+        
+        // Fetch actual note data for each synced note
+        const notesWithData = await Promise.all(
         backendNotes.map(async (note) => {
-          try {
+            try {
             // Check if note exists locally
             const noteData = await storageService.readNote(note.id);
             
@@ -120,11 +130,11 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
               status: 'synced',
               lastSynced: syncService.getSyncStatus(note.id).lastSynced || new Date().toISOString(),
               size: syncService.getSyncStatus(note.id).size || 0
-            };
-          }
-        })
-      );
-      
+              };
+            }
+          })
+        );
+        
       // Update cache
       notesCache = notesWithData;
       lastNotesFetchTime = now;
@@ -134,7 +144,7 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
         
         // Apply current search filter
         if (!searchTerm.trim()) {
-          setFilteredNotes(notesWithData);
+        setFilteredNotes(notesWithData);
         } else {
           const term = searchTerm.toLowerCase();
           const filtered = notesWithData.filter(note => 
@@ -145,11 +155,11 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
       }
       
       return notesWithData;
-    } catch (error) {
+      } catch (error) {
       console.error('Failed to load notes from backend:', error);
       showStatusMessage('Failed to load notes: ' + error.message, 'error');
       return [];
-    } finally {
+      } finally {
       if (showLoader && isComponentMounted.current) {
         setIsLoading(false);
       }
@@ -172,27 +182,28 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
     };
   }, [currentUser, loadNotesFromBackend]);
 
-  // Subscribe to sync status changes to update note list
+  // Subscribe to sync status changes to update note list - debounce less aggressively
+  // since WebSockets will already reduce the number of updates
   useEffect(() => {
-    // Debounced handler for sync updates
+    // Debounced handler for sync updates with shorter delay
     const handleSyncUpdates = () => {
       // Clear any existing timeout to prevent race conditions
       if (updateTimeoutRef.current) {
         clearTimeout(updateTimeoutRef.current);
       }
       
-      // Set a small delay to debounce multiple rapid changes
+      // Set a small delay to debounce multiple rapid changes - shorter for WebSockets
       updateTimeoutRef.current = setTimeout(() => {
         if (isComponentMounted.current) {
           // Refresh notes list without showing loading indicator
           loadNotesFromBackend(false);
         }
-      }, 300);
+      }, 100); // Reduced from 300ms to 100ms for better responsiveness
     };
-    
+
     // Subscribe to sync status changes
     const unsubscribe = syncService.subscribe(handleSyncUpdates);
-    
+
     // Cleanup function
     return () => {
       unsubscribe();
@@ -247,14 +258,6 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
     
     setFilteredNotes(sortedNotes);
   }, [sortConfig]);
-
-  const handleAutoSyncChange = (e) => {
-    const newValue = e.target.checked;
-    setAutoSync(newValue);
-    localStorage.setItem('autoSyncEnabled', newValue);
-    syncService.setAutoSync(newValue);
-    showStatusMessage(`Auto-sync ${newValue ? 'enabled' : 'disabled'}`, 'info');
-  };
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Never';
@@ -383,7 +386,7 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
   return (
     <div className="sync-section">
       <h2>Cloud Sync</h2>
-      <p>Sync your notes to the cloud for access across devices</p>
+        <p>Sync your notes to the cloud for access across devices</p>
       
       {/* Status message area */}
       {statusMessage && (
@@ -396,21 +399,12 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
       <div className="sync-storage-info">
         <SyncBar />
       </div>
-      
-      <div className="sync-options">
-        <div className="auto-sync-option">
-          <ItemPresets.TEXT_SWITCH
-            label="Auto sync notes when changed"
-            subtext="Automatically sync notes whenever they're modified"
-            value={autoSync}
-            onChange={handleAutoSyncChange}
-          />
-        </div>
 
+      <div className="sync-options">
         <div className="sync-button-container">
           <ItemPresets.TEXT_BUTTON
             label="Sync All Notes"
-            subtext="Sync all local notes to the server"
+            subtext="Sync all local notes to the server for real-time updates across devices"
             buttonText={isSyncingAll ? "Syncing..." : "Sync All Notes"}
             onClick={handleSyncAllNotes}
             primary="true"
@@ -421,27 +415,27 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
       <div className="synced-notes-container">
         <h3>Synced Notes</h3>
         
-        <div className="search-container">
-          <div className="search-input-wrapper">
+          <div className="search-container">
+            <div className="search-input-wrapper">
             <Search size={16} className="search-icon" />
-            <input 
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search notes..."
-              className="search-input"
-            />
-            {searchTerm && (
+                className="search-input"
+              />
+              {searchTerm && (
               <button className="clear-search-button" onClick={handleClearSearch}>
                 <XCircle size={16} />
-              </button>
-            )}
+                </button>
+              )}
           </div>
         </div>
 
         {filteredNotes.length === 0 ? (
           <div className="no-synced-notes">
-            {isLoading ? (
+        {isLoading ? (
               <div className="loading-indicator">Loading...</div>
             ) : (
               <>
@@ -452,33 +446,33 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
         ) : (
           <div className="synced-notes-table">
             <table>
-              <thead>
-                <tr>
+            <thead>
+              <tr>
                   <th onClick={() => handleSort('title')}>
                     Note {renderSortIcon('title')}
-                  </th>
+                </th>
                   <th onClick={() => handleSort('lastSynced')}>
                     Last Synced {renderSortIcon('lastSynced')}
-                  </th>
+                </th>
                   <th onClick={() => handleSort('size')}>
                     Size {renderSortIcon('size')}
-                  </th>
+                </th>
                   <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
                 {filteredNotes.map((note) => (
-                  <tr key={note.id}>
+                <tr key={note.id}>
                     <td 
                       className="note-title" 
                       onClick={() => handleOpenNote(note.id)}
                     >
-                      {note.title || 'Untitled'}
-                    </td>
-                    <td>{formatDate(note.lastSynced)}</td>
-                    <td>{formatSize(note.size)}</td>
-                    <td>
+                        {note.title || 'Untitled'}
+                  </td>
+                  <td>{formatDate(note.lastSynced)}</td>
+                  <td>{formatSize(note.size)}</td>
+                  <td>
                       <div className={`sync-status ${note.status}`}>
                         {note.status === 'synced' ? 'Synced' : 
                          note.status === 'syncing' ? 'Syncing...' : 
@@ -487,28 +481,28 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
                     </td>
                     <td>
                       <div className="note-actions">
-                        <button 
+                    <button
                           className="action-button refresh-icon"
                           onClick={() => handleSyncSingleNote(note.id)}
                           title="Sync this note"
                           disabled={note.status === 'syncing'}
-                        >
+                    >
                           <RefreshCw size={16} className={note.status === 'syncing' ? 'rotating' : ''} />
-                        </button>
-                        <button 
+                    </button>
+                    <button
                           className="action-button delete-icon"
-                          onClick={() => handleRemoveFromSync(note.id)}
-                          title="Remove from sync"
+                      onClick={() => handleRemoveFromSync(note.id)}
+                      title="Remove from sync"
                           disabled={note.status === 'syncing'}
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                    >
+                      <Trash2 size={16} />
+                    </button>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
           </div>
         )}
       </div>
@@ -531,7 +525,7 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
           color: #999;
           font-size: 14px;
         }
-
+        
         .sync-storage-info {
           margin: 10px 0;
         }
@@ -575,18 +569,14 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
         .status-icon.info {
           color: #3b82f6;
         }
-        
-        .auto-sync-option {
-          margin-bottom: 16px;
-        }
-        
+
         .sync-button-container {
           display: flex;
           gap: 10px;
           margin-top: 20px;
           margin-bottom: 10px;
         }
-
+        
         .synced-notes-container {
           margin-top: 10px;
         }
@@ -595,23 +585,23 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
           font-size: 16px;
           margin-bottom: 12px;
         }
-        
+
         .search-container {
           margin-bottom: 12px;
         }
-        
+
         .search-input-wrapper {
           position: relative;
           display: flex;
           align-items: center;
         }
-        
+
         .search-icon {
           position: absolute;
           left: 8px;
           color: #999;
         }
-        
+
         .search-input {
           width: 100%;
           padding: 8px 30px 8px 30px;
@@ -624,7 +614,7 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
           outline: none;
           border-color: #0aa34f;
         }
-        
+
         .clear-search-button {
           position: absolute;
           right: 8px;
@@ -634,7 +624,7 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
           cursor: pointer;
           color: #999;
         }
-        
+
         .clear-search-button:hover {
           color: #666;
         }
@@ -677,11 +667,11 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
           user-select: none;
           color: #666;
         }
-        
+
         th:hover {
           background-color: #f5f5f5;
         }
-        
+
         .note-title {
           cursor: pointer;
           color: #0aa34f;
@@ -725,7 +715,7 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
         .delete-icon {
           color: #ef4444;
         }
-        
+
         .delete-icon:hover:not(:disabled) {
           background-color: rgba(239, 68, 68, 0.1);
         }
@@ -739,7 +729,7 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
         .rotating {
           animation: rotate 1.5s linear infinite;
         }
-        
+
         .sync-status {
           font-size: 12px;
           padding: 2px 6px;
@@ -780,7 +770,7 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
         .dark-mode .status-message.info {
           background-color: rgba(59, 130, 246, 0.2);
         }
-        
+
         .dark-mode .search-input {
           background-color: #2a2a2a;
           border-color: #404040;
@@ -790,7 +780,7 @@ const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
         .dark-mode th:hover {
           background-color: #2a2a2a;
         }
-        
+
         .dark-mode th, 
         .dark-mode td {
           border-bottom-color: #404040;

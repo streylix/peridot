@@ -1,11 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { syncService } from '../utils/SyncService';
 
-// Create a shared cache outside component to avoid multiple fetches
-let lastFetchTime = 0;
-let cachedStats = null;
-const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes cache
-
+// We no longer need the shared cache since WebSockets provide real-time updates
 const SyncBar = ({ used = 0, total = 100 * 1024 * 1024 }) => {
   const [stats, setStats] = useState({
     used: used,
@@ -14,7 +10,6 @@ const SyncBar = ({ used = 0, total = 100 * 1024 * 1024 }) => {
     percentUsed: total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0
   });
   const isComponentMounted = useRef(true);
-  const updateTimeoutRef = useRef(null);
   
   // Function to safely update stats only if component is mounted
   const safeSetStats = (newStats) => {
@@ -23,65 +18,27 @@ const SyncBar = ({ used = 0, total = 100 * 1024 * 1024 }) => {
     }
   };
 
-  // Debounced function to avoid multiple backend calls
-  const fetchStorageInfo = async () => {
-    // Check if we have a recent cached value
-    const now = Date.now();
-    if (cachedStats && now - lastFetchTime < CACHE_DURATION) {
-      safeSetStats(cachedStats);
-      return;
-    }
-    
-    try {
-      // Fetch latest stats from backend
-      await syncService.fetchBackendStorageInfo();
-      const currentStats = syncService.getBackendStorageStats();
-      
-      // Update cache
-      cachedStats = currentStats;
-      lastFetchTime = now;
-      
-      // Update component state
-      safeSetStats(currentStats);
-    } catch (error) {
-      console.error('Failed to update storage stats:', error);
-    }
-  };
-
   useEffect(() => {
     // Set mounted flag
     isComponentMounted.current = true;
     
-    // Function to update stats with debouncing
-    const updateStats = () => {
-      // Clear any existing timeout to prevent multiple calls
-      if (updateTimeoutRef.current) {
-        clearTimeout(updateTimeoutRef.current);
-      }
-      
-      // Set a small timeout to debounce rapid calls
-      updateTimeoutRef.current = setTimeout(fetchStorageInfo, 100);
-    };
-
-    // Subscribe to sync status changes - these should be infrequent
+    // Subscribe to sync status changes from WebSocket
     const unsubscribe = syncService.subscribe(() => {
-      updateStats();
+      // Get latest stats (which are updated by WebSocket)
+      const currentStats = syncService.getBackendStorageStats();
+      safeSetStats(currentStats);
     });
 
-    // Update on initial load
-    updateStats();
+    // Initial stats load
+    const currentStats = syncService.getBackendStorageStats();
+    safeSetStats(currentStats);
 
-    // Set up periodic refresh (every 2 minutes)
-    const refreshInterval = setInterval(updateStats, 2 * 60 * 1000);
+    // No need for polling - WebSocket will provide updates
 
     // Cleanup function
     return () => {
       isComponentMounted.current = false;
       unsubscribe();
-      clearInterval(refreshInterval);
-      if (updateTimeoutRef.current) {
-        clearTimeout(updateTimeoutRef.current);
-      }
     };
   }, []);
 

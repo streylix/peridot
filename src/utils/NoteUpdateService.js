@@ -1,5 +1,6 @@
 import { storageService } from './StorageService';
 import { encryptNote } from './encryption';
+import { syncService } from './SyncService';
 
 // API base URL for server endpoints
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
@@ -13,6 +14,8 @@ class NoteUpdateService {
     this.updateTimers = new Map();
     this.isProcessingUnload = false;
     this.authToken = localStorage.getItem('authToken');
+    this.lastUpdateTime = new Map();
+    this.UPDATE_RATE_LIMIT = 2000; // 2 seconds rate limit
     
     window.addEventListener('beforeunload', this.handleBeforeUnload.bind(this));
     
@@ -109,19 +112,20 @@ class NoteUpdateService {
         dateModified: updateModified ? new Date().toISOString() : currentNote.dateModified
       };
 
-      // Handle encryption if needed
-      if (encryptionContext?.shouldEncrypt) {
+      // Handle encryption if needed - ONLY if the note is already locked or we're locking it now
+      if (encryptionContext?.shouldEncrypt && 
+          (currentNote.locked || updates.locked === true)) {
         if (typeof updatedNote.content === 'string') {
           updatedNote = await encryptNote(updatedNote, encryptionContext.password);
         }
       }
 
-      // Clean up encryption fields if needed
-      if (!updatedNote.locked && !updates.locked) {
-        delete updatedNote.encrypted;
-        delete updatedNote.keyParams;
-        delete updatedNote.iv;
-        delete updatedNote.visibleTitle;
+      // Clean up encryption fields if explicitly unlocked or not locked
+      if (updates.locked === false || (!updatedNote.locked && !currentNote.locked)) {
+        updatedNote.encrypted = false;
+        updatedNote.keyParams = undefined;
+        updatedNote.iv = undefined;
+        updatedNote.visibleTitle = undefined;
       }
 
       // Save to local storage
@@ -129,7 +133,7 @@ class NoteUpdateService {
 
       // Push update to server if authenticated
       if (this.authToken) {
-        this.pushNoteToServer(noteId, updatedNote)
+        this.pushNoteToServer(updatedNote)
           .catch(error => console.error('Failed to push note update to server:', error));
       }
 
@@ -177,19 +181,20 @@ class NoteUpdateService {
           dateModified: updateModified ? new Date().toISOString() : currentNote.dateModified
         };
 
-        // Handle encryption if needed
-        if (encryptionContext?.shouldEncrypt) {
+        // Handle encryption if needed - ONLY if the note is already locked or we're locking it now
+        if (encryptionContext?.shouldEncrypt && 
+            (currentNote.locked || finalUpdates.locked === true)) {
           if (typeof updatedNote.content === 'string') {
             updatedNote = await encryptNote(updatedNote, encryptionContext.password);
           }
         }
 
-        // Clean up encryption fields if needed
-        if (!updatedNote.locked && !finalUpdates.locked) {
-          delete updatedNote.encrypted;
-          delete updatedNote.keyParams;
-          delete updatedNote.iv;
-          delete updatedNote.visibleTitle;
+        // Clean up encryption fields if explicitly unlocked or not locked
+        if (finalUpdates.locked === false || (!updatedNote.locked && !currentNote.locked)) {
+          updatedNote.encrypted = false;
+          updatedNote.keyParams = undefined;
+          updatedNote.iv = undefined;
+          updatedNote.visibleTitle = undefined;
         }
 
         // Save to local storage
@@ -197,7 +202,7 @@ class NoteUpdateService {
 
         // Push update to server if authenticated
         if (this.authToken) {
-          this.pushNoteToServer(noteId, updatedNote)
+          this.pushNoteToServer(updatedNote)
             .catch(error => console.error('Failed to push note update to server:', error));
         }
 
@@ -219,69 +224,56 @@ class NoteUpdateService {
     this.updateTimers.set(noteId, timer);
   }
 
-  // Push note update to server
-  async pushNoteToServer(noteId, noteData) {
-    if (!this.authToken) return;
-    
+  // Push a note update to the server if authenticated
+  async pushNoteToServer(note) {
     try {
-      // Convert to Django format (handle any necessary field conversions)
-      const djangoNote = this.convertToDjangoFormat(noteData);
-      
-      // Try to update the note first
-      let response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${this.authToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(djangoNote)
-      });
-      
-      // If note doesn't exist yet, create it
-      if (response.status === 404) {
-        response = await fetch(`${API_BASE_URL}/notes/`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.authToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(djangoNote)
-        });
+      // Skip sync for temporary notes
+      if (note.temporary) {
+        // console.log('Skipping server update for temporary note');
+        return;
       }
       
-      if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}`);
+      // Skip if not authenticated
+      if (!this.authToken) {
+        // console.log('Not authenticated, skipping server update');
+        return;
       }
       
-      // Update sync status event
-      window.dispatchEvent(new CustomEvent('noteSyncUpdate', {
-        detail: { 
-          noteId,
-          status: {
-            status: 'synced',
-            lastSynced: new Date().toISOString(),
-            size: new Blob([JSON.stringify(noteData)]).size
-          }
+      // Skip if rate limiting is in effect
+      if (this.isRateLimited(note.id)) {
+        // console.log('Rate limited, skipping server update for now');
+        return;
+      }
+      
+      // Update rate limiting timestamp
+      this.lastUpdateTime.set(note.id, Date.now());
+      
+      console.log(`Pushing note ${note.id} to server...`);
+      
+      try {
+        // Use SyncService to handle the actual syncing
+        const success = await syncService.syncNote(note.id);
+        if (success) {
+          console.log(`Successfully synced note ${note.id} to server`);
+        } else {
+          console.error(`Failed to sync note ${note.id} to server`);
         }
-      }));
-      
-      return true;
+      } catch (error) {
+        console.error(`Failed to push note ${note.id} to server:`, error);
+        // Trigger a retry after the rate limit period if this was a network error
+        if (error.message && error.message.includes('NetworkError')) {
+          setTimeout(() => {
+            if (this.authToken) { // Only retry if still authenticated
+              console.log(`Retrying sync for note ${note.id} after network error`);
+              syncService.syncNote(note.id).catch(retryError => {
+                console.error(`Retry failed for note ${note.id}:`, retryError);
+              });
+            }
+          }, this.UPDATE_RATE_LIMIT);
+        }
+      }
     } catch (error) {
-      console.error(`Failed to push note ${noteId} to server:`, error);
-      
-      // Update sync status event with failure
-      window.dispatchEvent(new CustomEvent('noteSyncUpdate', {
-        detail: { 
-          noteId,
-          status: {
-            status: 'failed',
-            lastSynced: null,
-            error: error.message
-          }
-        }
-      }));
-      
-      return false;
+      console.error(`Unexpected error in pushNoteToServer for note ${note?.id}:`, error);
     }
   }
   
@@ -358,6 +350,18 @@ class NoteUpdateService {
     this.updateTimers.forEach(timer => clearTimeout(timer));
     this.updateTimers.clear();
     this.pendingUpdates.clear();
+  }
+
+  // Check if rate limiting is in effect for a note
+  isRateLimited(noteId) {
+    const lastTime = this.lastUpdateTime.get(noteId);
+    if (!lastTime) return false;
+    
+    const now = Date.now();
+    const elapsed = now - lastTime;
+    
+    // Rate limit updates to prevent excessive server calls
+    return elapsed < this.UPDATE_RATE_LIMIT;
   }
 }
 

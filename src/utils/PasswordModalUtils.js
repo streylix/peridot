@@ -126,22 +126,22 @@ class PasswordModalUtils {
             return { success: false, error: 'Invalid password' };
           }
   
-          // Remove stored password only after successful decryption
-          try {
-            await passwordStorage.removePassword(this.noteData.id);
-          } catch (e) {
-            console.warn('Password removal failed, proceeding with unlock:', e);
-          }
-          
+          // For permanent unlock, remove the encryption parameters
           const unlockedNote = {
             ...decryptResult.note,
             id: this.noteData.id,
             locked: false,
             encrypted: false,
+            iv: undefined,
+            keyParams: undefined,
             visibleTitle: undefined
           };
           
           await storageService.writeNote(this.noteData.id, unlockedNote);
+          
+          // Remove the stored password since we've fully decrypted the note
+          await passwordStorage.removePassword(this.noteData.id);
+          
           window.dispatchEvent(new CustomEvent('noteUpdate', { detail: { note: unlockedNote }}));
           break;
         }

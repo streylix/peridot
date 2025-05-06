@@ -15,6 +15,8 @@ class Note(models.Model):
     pinned = models.BooleanField(default=False)
     visible_title = models.CharField(max_length=255, blank=True, default='')
     tags = models.JSONField(default=list, blank=True)
+    key_params = models.JSONField(null=True, blank=True)
+    iv = models.JSONField(null=True, blank=True)
     
     class Meta:
         unique_together = ['id', 'user']

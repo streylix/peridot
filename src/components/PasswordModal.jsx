@@ -190,7 +190,19 @@ function PasswordModal() {
       title={modalProps.title}
       sections={sections}
       size="small"
-    />
+    >
+      <style jsx>{`
+        .synced-note-info {
+          margin-bottom: 15px;
+        }
+        
+        .hint-text {
+          font-size: 0.9em;
+          color: #888;
+          margin: 5px 0;
+        }
+      `}</style>
+    </Modal>
   );
 }
 

@@ -87,12 +87,19 @@ class AuthService {
         body: JSON.stringify({ email: username, password: password })
       });
       
+      // Debug response
+      console.log("Login response status:", response.status);
+      const responseText = await response.text();
+      console.log("Raw response text:", responseText);
+      
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        // Try to parse JSON but handle empty responses
+        const errorData = responseText ? JSON.parse(responseText) : {};
         throw new Error(errorData.error || `Authentication failed: ${response.status}`);
       }
       
-      const data = await response.json();
+      // Parse the response as JSON (only if it's not empty)
+      const data = responseText ? JSON.parse(responseText) : {};
       this.serverAvailable = true;
       
       console.log("Login successful, user:", data.user);

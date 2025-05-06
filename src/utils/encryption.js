@@ -72,15 +72,21 @@ export async function encryptNote(note, password) {
 }
 
 export async function decryptNote(note, password, permanent = false) {
-
   try {
     // Verify the password
-    const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true'
+    const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true';
+    let isNewDevice = false;
 
-    if (!verifyBypass){
+    if (!verifyBypass) {
       const storedPassword = await passwordStorage.getPassword(note.id);
-
-      if (!storedPassword || password !== storedPassword) {
+      
+      if (!storedPassword) {
+        // This might be a synced note from another device - we can try to decrypt
+        // with the provided password directly
+        console.log(`No stored password for note ${note.id}, might be synced from another device`);
+        isNewDevice = true;
+        // Continue with decryption attempt using the provided password
+      } else if (password !== storedPassword) {
         return {
           success: false,
           error: "Incorrect password"
@@ -110,43 +116,58 @@ export async function decryptNote(note, password, permanent = false) {
     // Generate the key
     const key = await generateKey(password, salt, iterations);
     
-    // Decrypt the content
-    const decryptedBuffer = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv },
-      key,
-      encryptedContent
-    );
-    
-    // Convert the decrypted buffer to text
-    const decoder = new TextDecoder();
-    const decryptedContent = decoder.decode(decryptedBuffer);
+    try {
+      // Decrypt the content
+      const decryptedBuffer = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv },
+        key,
+        encryptedContent
+      );
+      
+      // Decryption successful - If this is a synced note from another device,
+      // store the password for future use
+      if (isNewDevice) {
+        console.log(`Storing password for synced note ${note.id}`);
+        await passwordStorage.storePassword(note.id, password);
+      }
+      
+      // Convert the decrypted buffer to text
+      const decoder = new TextDecoder();
+      const decryptedContent = decoder.decode(decryptedBuffer);
 
-    // If permanent unlock is requested, remove the stored password
-    if (permanent) {
-      await passwordStorage.removePassword(note.id);
+      // If permanent unlock is requested, remove the stored password
+      if (permanent) {
+        await passwordStorage.removePassword(note.id);
+      }
+      
+      // Create decrypted note object
+      const decryptedNote = {
+        ...note,
+        visibleTitle: undefined,
+        content: decryptedContent,
+        locked: !permanent,
+        encrypted: false,
+        // Remove encryption-specific fields
+        iv: undefined,
+        keyParams: undefined
+      };
+      
+      return {
+        success: true,
+        note: decryptedNote
+      };
+    } catch (decryptError) {
+      console.error('Decryption failed:', decryptError);
+      return {
+        success: false,
+        error: "Incorrect password or corrupted data"
+      };
     }
-    
-    // Create decrypted note object
-    const decryptedNote = {
-      ...note,
-      visibleTitle: undefined,
-      content: decryptedContent,
-      locked: !permanent,
-      encrypted: false,
-      // Remove encryption-specific fields
-      iv: undefined,
-      keyParams: undefined,
-    };
-
-    return {
-      success: true,
-      note: decryptedNote
-    };
-  } catch (e) {
-    console.error("Decryption failed:", e);
+  } catch (error) {
+    console.error('Error in decryptNote:', error);
     return {
       success: false,
-      error: "Decryption failed: " + e.message
+      error: error.message
     };
   }
 }

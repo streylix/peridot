@@ -102,24 +102,23 @@ function LockedWindow({ onUnlock, note }) {
   
     const handleSubmit = async (e) => {
       e.preventDefault();
-      
-      if (!password.trim()) {
+      if (!password) {
         setError('Please enter a password');
         return;
       }
   
       try {
-        const result = await onUnlock(password);
+        // Call onUnlock and pass the password
+        const success = await onUnlock(password);
         
-        if (!result) {
+        if (!success) {
           setError('Invalid password');
-          setPassword(''); // Clear password on error
-          return;
+          setPassword('');
         }
+        // Don't reset form on success - component will unmount
       } catch (err) {
-        console.error('Error unlocking note:', err);
-        setError('Failed to unlock note');
-        setPassword(''); // Clear password on error
+        console.error('Unlock error:', err);
+        setError('Failed to unlock. Try again.');
       }
     };
 

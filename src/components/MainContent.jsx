@@ -6,6 +6,7 @@ import { noteImportExportService } from '../utils/NoteImportExportService';
 import { passwordStorage } from '../utils/PasswordStorageService';
 import { decryptNote, encryptNote } from '../utils/encryption';
 import { noteUpdateService } from '../utils/NoteUpdateService';
+import { storageService } from '../utils/StorageService';
 
 function MainContent({ 
   note, 
@@ -216,44 +217,114 @@ function MainContent({
     }
   };
 
+  // Handle automatic unlocking of persistentDecrypted notes
   useEffect(() => {
-    setIsUnlocked(false);
-    setDecryptedNote(null);
-    setCurrentPassword(null);
+    if (note) {
+      // Always reset password state when switching notes
+      setCurrentPassword(null);
+      
+      // Reset state for locked notes when navigating between notes
+      if (note.locked && !note.persistentDecrypted) {
+        // For locked notes without persistentDecrypted, reset state
+        setIsUnlocked(false);
+        setDecryptedNote(null);
+      } else if (!note.locked) {
+        // For non-locked notes, just set them as unlocked
+        setIsUnlocked(true);
+        setDecryptedNote(note);
+      } else if (note.persistentDecrypted) {
+        // Only automatically unlock if it has persistentDecrypted flag
+        console.log(`Note ${note.id} has persistentDecrypted flag, auto-unlocking`);
+        setIsUnlocked(true);
+        setDecryptedNote(note);
+      }
+    } else {
+      // Reset state when no note is selected
+      setIsUnlocked(false);
+      setDecryptedNote(null);
+      setCurrentPassword(null);
+    }
   }, [note?.id]);
 
   const handleUnlock = async (password) => {
     if (!note) return false;
 
+    console.log('MainContent.handleUnlock - Starting unlock attempt:', {
+      noteId: note.id,
+      isLocked: note.locked,
+      isEncrypted: note.encrypted,
+      hasKeyParams: !!note.keyParams,
+      hasIv: !!note.iv,
+      contentType: note.content ? (Array.isArray(note.content) ? 'array' : typeof note.content) : 'unknown'
+    });
+
     try {
-      const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true'
+      const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true';
+      console.log('Password verification bypass:', verifyBypass);
       
-      if (!verifyBypass){
+      if (!verifyBypass) {
         const storedPassword = await passwordStorage.getPassword(note.id);
+        console.log('Password verification:', {
+          hasStoredPassword: !!storedPassword,
+          passwordMatch: storedPassword ? (password === storedPassword) : 'N/A'
+        });
+        
         if ((!storedPassword || password !== storedPassword)) {
+          console.warn('Password verification failed - either no stored password or mismatch');
           return false;
         }
       }
 
+      console.log('Calling decryptNote function with password:', password ? '[REDACTED]' : 'none');
       const decryptResult = await decryptNote(note, password, false);
       
+      console.log('Decrypt result from MainContent:', {
+        success: decryptResult.success,
+        error: decryptResult.error || 'none'
+      });
+      
       if (!decryptResult.success) {
-        console.error('Decryption failed:', decryptResult.error);
+        console.error('Decryption failed in MainContent:', decryptResult.error);
         return false;
       }
 
-      setDecryptedNote(decryptResult.note);
+      console.log('Decryption successful, setting unlocked state');
+      const decryptedNote = decryptResult.note;
+      
+      // Save the decrypted note to storage so it persists when reopening
+      try {
+        // For session-only decryption - don't add persistentDecrypted flag
+        const tempDecryptedNote = {
+          ...decryptedNote,
+          // Store wasDecrypted flag but not persistentDecrypted
+          wasDecrypted: true
+        };
+        
+        // Save the decrypted note to current session only
+        await storageService.writeNote(note.id, tempDecryptedNote);
+        console.log(`Saved temporary decrypted state for note ${note.id}`);
+        
+        // Update local state
+        setDecryptedNote(tempDecryptedNote);
+      } catch (storageError) {
+        console.error('Failed to save decrypted note to storage:', storageError);
+        // Still update local state even if storage fails
+        setDecryptedNote(decryptedNote);
+      }
+      
       setCurrentPassword(password);
       setIsUnlocked(true);
       return true;
     } catch (err) {
-      console.error('Error unlocking note:', err);
+      console.error('Error unlocking note in MainContent:', err);
       return false;
     }
   };
 
   const handleUpdateNote = async (updates, updateModified = true) => {
-    const encryptionContext = isUnlocked && currentPassword ? {
+    // Only provide encryption context if we're working with a currently unlocked note
+    // that has a password and is the same note that was originally unlocked
+    const encryptionContext = isUnlocked && currentPassword && note.locked ? {
       shouldEncrypt: true,
       password: currentPassword
     } : null;
