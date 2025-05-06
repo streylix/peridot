@@ -16,6 +16,11 @@ class SyncService {
     };
     this.currentUserId = localStorage.getItem('currentUserId');
     
+    // Set up reconnection logic
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 10; // Increased from 5 to 10
+    this.reconnectDelay = 3000; // Decreased initial delay for faster recovery
+    
     // Status values: 'syncing', 'synced', 'failed', 'not-synced'
     
     // Set up broadcast channel for cross-tab communication
@@ -28,35 +33,98 @@ class SyncService {
     if (this.currentUserId) {
       this.fetchBackendStorageInfo();
     }
+    
+    // Handle page visibility changes to manage connection state
+    document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
+    
+    // Handle window focus/blur to optimize connections
+    window.addEventListener('focus', this.handleWindowFocus.bind(this));
+    window.addEventListener('blur', this.handleWindowBlur.bind(this));
   }
   
   // Set up broadcast channel for cross-tab sync
   setupBroadcastChannel() {
     try {
       if ('BroadcastChannel' in window) {
-        this.broadcastChannel = new BroadcastChannel('sync_channel');
+        // Close any existing channel
+        if (this.broadcastChannel) {
+          this.broadcastChannel.close();
+        }
+        
+        // Create a new channel
+        this.broadcastChannel = new BroadcastChannel('peridot_sync_channel');
+        
+        // Setup message handler
         this.broadcastChannel.onmessage = (event) => {
-          if (event.data.type === 'SYNC_STATUS_CHANGED') {
-            const { noteId, status } = event.data.data;
+          const { type, data } = event.data;
+          
+          switch (type) {
+            case 'SYNC_STATUS_CHANGED':
+              const { noteId, status } = data;
+              // Update local sync status
             this.syncStatus.set(noteId, status);
-            this.notifySubscribers(noteId);
+              // Notify subscribers but don't rebroadcast
+              this.notifySubscribers(noteId, false);
+              break;
+              
+            case 'SYNC_REQUEST':
+              // One tab is requesting sync - check if we have WebSocket connection
+              if (this.isWebSocketConnected && this.currentUserId && data.noteId) {
+                // We have connection, offer to sync
+                this.syncNote(data.noteId)
+                  .then(success => {
+                    if (success) {
+                      // Broadcast that we've synced it
+                      this.broadcastSyncUpdate(data.noteId, this.getSyncStatus(data.noteId), true);
+                    }
+                  })
+                  .catch(error => console.error(`Error syncing note in response to request: ${data.noteId}`, error));
+              }
+              break;
+              
+            case 'CONNECTION_STATUS':
+              // Track which tabs have active connections for coordinated reconnection
+              if (data.tabId && data.connected) {
+                // Another tab is connected, we can potentially back off our reconnect attempts
+                if (!this.isWebSocketConnected && data.connected) {
+                  console.log('Another tab has WebSocket connection, backing off reconnect attempts');
+                  // Increase our delay
+                  this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000);
+                }
+              }
+              break;
           }
         };
+        
+        // Also broadcast our connection status to other tabs
+        if (this.isWebSocketConnected) {
+          this.broadcastConnectionStatus();
+        }
       } else {
         // Fallback for browsers that don't support BroadcastChannel
         console.log('BroadcastChannel not supported in this browser, using localStorage fallback');
         
         // Check for localStorage events for sync updates
         window.addEventListener('storage', (event) => {
-          if (event.key === 'sync_update') {
+          if (event.key === 'peridot_sync_update') {
             try {
               const data = JSON.parse(event.newValue);
               if (data && data.noteId && data.status) {
                 this.syncStatus.set(data.noteId, data.status);
-                this.notifySubscribers(data.noteId);
+                this.notifySubscribers(data.noteId, false);
               }
             } catch (error) {
               console.error('Failed to process sync update:', error);
+            }
+          } else if (event.key === 'peridot_sync_request') {
+            try {
+              const data = JSON.parse(event.newValue);
+              if (this.isWebSocketConnected && this.currentUserId && data.noteId) {
+                this.syncNote(data.noteId)
+                  .catch(error => console.error(`Error syncing note from localStorage request: ${data.noteId}`, error));
+              }
+            } catch (error) {
+              console.error('Failed to process sync request:', error);
             }
           }
         });
@@ -82,41 +150,238 @@ class SyncService {
       
       console.log(`Connecting to WebSocket at ${wsUrl}`);
       
-      // Close any existing connection
-      if (this.syncSocket && this.syncSocket.readyState !== WebSocket.CLOSED) {
+      // If we have an existing connection that's not CLOSED, close it properly first
+      if (this.syncSocket) {
+        if (this.syncSocket.readyState !== WebSocket.CLOSED) {
+          // Remove existing handlers to prevent them from triggering
+          this.syncSocket.onclose = null;
+          this.syncSocket.onerror = null;
+          this.syncSocket.onmessage = null;
+          this.syncSocket.onopen = null;
+          
+          try {
         this.syncSocket.close();
+          } catch (e) {
+            console.warn('Error closing existing socket:', e);
+          }
+        }
+        
+        // Give a small delay before creating a new connection
+        setTimeout(() => {
+          this._createNewWebSocket(wsUrl);
+        }, 500);
+      } else {
+        this._createNewWebSocket(wsUrl);
       }
-      
-      this.syncSocket = new WebSocket(wsUrl);
-      
-      // Set up connection handlers
-      this.syncSocket.onopen = this.handleSocketOpen.bind(this);
-      this.syncSocket.onmessage = this.handleSocketMessage.bind(this);
-      this.syncSocket.onclose = this.handleSocketClose.bind(this);
-      this.syncSocket.onerror = this.handleSocketError.bind(this);
-      
-      // Track connection state
-      this.isWebSocketConnected = false;
-      
-      // Set up reconnection logic
-      this.reconnectAttempts = 0;
-      this.maxReconnectAttempts = 5;
-      this.reconnectDelay = 5000; // Start with 5 seconds
     } catch (error) {
       console.error('Failed to initialize sync websocket:', error);
     }
+  }
+  
+  // Setup heartbeat to ensure connection is alive
+  setupHeartbeat() {
+    // Clear any existing heartbeat
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+    }
+    
+    // Check connection every 30 seconds
+    this.heartbeatInterval = setInterval(() => {
+      if (this.syncSocket && this.isWebSocketConnected) {
+        // Send ping if connection is open
+        if (this.syncSocket.readyState === WebSocket.OPEN) {
+          try {
+            this.syncSocket.send(JSON.stringify({ 
+              type: 'ping',
+              timestamp: Date.now()
+            }));
+            
+            // Set a timeout to detect missing pong response
+            if (this.pongTimeoutId) {
+              clearTimeout(this.pongTimeoutId);
+            }
+            
+            this.pongTimeoutId = setTimeout(() => {
+              console.warn('No ping response received, reconnecting WebSocket...');
+              this.reconnectWebsocket();
+            }, 10000); // Wait 10 seconds for a response
+            
+          } catch (e) {
+            console.warn('Failed to send heartbeat, reconnecting...', e);
+            this.reconnectWebsocket();
+          }
+        } else if (this.syncSocket.readyState !== WebSocket.CONNECTING) {
+          // If not connecting but also not open, reconnect
+          console.warn('WebSocket not in OPEN state, reconnecting...');
+          this.reconnectWebsocket();
+        }
+      }
+    }, 30000);
+  }
+  
+  // Record this tab's connection in localStorage
+  recordActiveConnection() {
+    const tabId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
+    this.tabId = tabId;
+    
+    try {
+      // Get existing connections
+      const connectionsString = localStorage.getItem('peridot_ws_connections') || '{}';
+      const connections = JSON.parse(connectionsString);
+      
+      // Add/update this connection
+      connections[tabId] = {
+        timestamp: Date.now(),
+        userId: this.currentUserId
+      };
+      
+      // Clean up old connections (older than 1 minute)
+      const now = Date.now();
+      Object.keys(connections).forEach(id => {
+        if (now - connections[id].timestamp > 60000) {
+          delete connections[id];
+        }
+      });
+      
+      // Save back to localStorage
+      localStorage.setItem('peridot_ws_connections', JSON.stringify(connections));
+      
+      // Set up interval to keep updating our timestamp
+      if (this.connectionKeepAliveInterval) {
+        clearInterval(this.connectionKeepAliveInterval);
+      }
+      
+      this.connectionKeepAliveInterval = setInterval(() => {
+        try {
+          const currentConnectionsString = localStorage.getItem('peridot_ws_connections') || '{}';
+          const currentConnections = JSON.parse(currentConnectionsString);
+          
+          // Update our timestamp
+          currentConnections[tabId] = {
+            timestamp: Date.now(),
+            userId: this.currentUserId
+          };
+          
+          localStorage.setItem('peridot_ws_connections', JSON.stringify(currentConnections));
+        } catch (e) {
+          console.error('Error updating connection keepalive:', e);
+        }
+      }, 20000);
+    } catch (e) {
+      console.error('Error recording active connection:', e);
+    }
+  }
+  
+  // Remove this tab's connection from localStorage
+  removeActiveConnection() {
+    if (!this.tabId) return;
+    
+    try {
+      const connectionsString = localStorage.getItem('peridot_ws_connections') || '{}';
+      const connections = JSON.parse(connectionsString);
+      
+      // Remove this connection
+      delete connections[this.tabId];
+      
+      // Save back to localStorage
+      localStorage.setItem('peridot_ws_connections', JSON.stringify(connections));
+      
+      // Clear the keepalive interval
+      if (this.connectionKeepAliveInterval) {
+        clearInterval(this.connectionKeepAliveInterval);
+        this.connectionKeepAliveInterval = null;
+      }
+    } catch (e) {
+      console.error('Error removing active connection:', e);
+    }
+  }
+  
+  // Handle visibility change events
+  handleVisibilityChange() {
+    if (document.visibilityState === 'visible') {
+      // Document became visible - ensure connection is active
+      if (!this.isWebSocketConnected) {
+        console.log('Page became visible, ensuring WebSocket connection...');
+        // Add a small delay before reconnecting to avoid rapid cycles
+        if (!this._reconnectingAfterVisibilityChange) {
+          this._reconnectingAfterVisibilityChange = true;
+          setTimeout(() => {
+            this.reconnectWebsocket();
+            this._reconnectingAfterVisibilityChange = false;
+          }, 1000);
+        }
+      }
+      
+      // Refresh notes from server when coming back to the app
+      this.fetchNotesFromBackend().catch(e => 
+        console.error('Failed to fetch notes after visibility change:', e));
+    }
+  }
+  
+  // Handle window focus
+  handleWindowFocus() {
+    console.log('Window gained focus, checking WebSocket connection...');
+    if (!this.isWebSocketConnected) {
+      this.reconnectWebsocket();
+    }
+  }
+  
+  // Handle window blur - no need to disconnect, just log the event
+  handleWindowBlur() {
+    console.log('Window lost focus, connection will persist');
+  }
+  
+  // Reconnect WebSocket with exponential backoff
+  reconnectWebsocket() {
+    if (this.reconnecting) return;
+    this.reconnecting = true;
+    
+    // If we've already tried several times, use longer delays
+    const delay = Math.min(
+      this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts),
+      60000 // Cap at 60 seconds max
+    );
+    
+    console.log(`Reconnecting WebSocket in ${delay}ms (attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
+    
+    // Clear any existing connection before creating a new one
+    if (this.syncSocket && this.syncSocket.readyState !== WebSocket.CLOSED) {
+      try {
+        this.syncSocket.onclose = null; // Prevent the onclose handler from triggering another reconnect
+        this.syncSocket.close();
+      } catch (e) {
+        console.warn('Error closing existing socket:', e);
+      }
+    }
+    
+    setTimeout(() => {
+      this.reconnecting = false;
+      this.initializeWebsocket();
+      this.reconnectAttempts++;
+    }, delay);
   }
   
   // WebSocket event handlers
   handleSocketOpen() {
     console.log('WebSocket connection established');
     this.isWebSocketConnected = true;
-    this.reconnectAttempts = 0;
+    this.reconnectAttempts = 0; // Reset attempt counter on successful connection
     
     // Authenticate the WebSocket connection if we have a user ID
     if (this.currentUserId) {
       this.authenticateSocket();
     }
+    
+    // Trigger a sync after reconnecting
+    if (this.reconnectAttempts > 0) {
+      setTimeout(() => {
+        this.syncAllDirtyNotes()
+          .catch(e => console.error('Failed to sync after reconnect:', e));
+      }, 1000);
+    }
+    
+    // Reset message throttling when connecting
+    this.resetMessageThrottling();
   }
   
   authenticateSocket() {
@@ -135,6 +400,13 @@ class SyncService {
       const data = JSON.parse(event.data);
       console.log('WebSocket message received:', data);
       
+      // Clear pong timeout on any message
+      if (this.pongTimeoutId) {
+        clearTimeout(this.pongTimeoutId);
+        this.pongTimeoutId = null;
+      }
+      
+      // Simple approach: just handle specific message types without complex throttling
       switch (data.type) {
         case 'connection_established':
           console.log('WebSocket server connection confirmed');
@@ -145,77 +417,28 @@ class SyncService {
           break;
           
         case 'sync_update':
-          // Update sync status for a specific note
+          // Simple approach: when we get a sync_update message, just fetch that note from the server
           if (data.noteId) {
             console.log(`Received sync update for note ${data.noteId} from WebSocket`);
             
-            // Update the sync status
-            this.syncStatus.set(data.noteId, data.status);
-            this.persistSyncData();
-            
-            // Check if we need to update the local note
-            const updateLocalNote = async () => {
-              try {
-                // First check if we have a local copy that's decrypted
-                const localNote = await storageService.readNote(data.noteId);
-                
-                // If we have a local decrypted note, and the incoming note is encrypted,
-                // don't overwrite our decrypted state
-                if (
-                  localNote && 
-                  // Check for any of our decryption flags
-                  ((localNote.persistentDecrypted || !localNote.encrypted || !localNote.locked) &&
-                  (localNote.wasDecrypted || localNote.persistentDecrypted)) &&
-                  // And confirm the server version is encrypted
-                  data.noteContent && data.noteContent.encrypted && data.noteContent.locked
-                ) {
-                  console.log(`WebSocket: Preserving local decrypted state for note ${data.noteId}`);
-                  
-                  // Just update metadata, not the content or encryption state
-                  const preservedNote = {
-                    ...localNote,
-                    // Take some fields from server version
-                    dateModified: data.noteContent.dateModified || localNote.dateModified,
-                    folderPath: data.noteContent.folderPath || localNote.folderPath,
-                    pinned: data.noteContent.pinned !== undefined ? data.noteContent.pinned : localNote.pinned,
-                    tags: data.noteContent.tags || localNote.tags
-                  };
-                  
-                  await storageService.writeNote(data.noteId, preservedNote);
-                  console.log(`WebSocket: Updated metadata for note ${data.noteId} while preserving decrypted state`);
-                  return;
-                }
-                
-                // Otherwise proceed with normal update
-                if (data.noteContent) {
-                  console.log(`Updating local note ${data.noteId} from WebSocket with content`);
-                  this.updateLocalNoteFromServer(data.noteId, data.noteContent)
-                    .then(() => console.log(`Local note ${data.noteId} updated from WebSocket`))
-                    .catch(error => console.error(`Failed to update local note ${data.noteId}:`, error));
-                } else {
-                  // If no content, just refresh from server
+            // Check if this is a note we're currently editing to avoid conflicts
                   this.fetchNoteFromServer(data.noteId)
                     .then(success => {
                       if (success) {
-                        console.log(`Fetched note ${data.noteId} from server after WebSocket update`);
-                      }
-                    })
-                    .catch(error => console.error(`Failed to fetch note ${data.noteId} from server:`, error));
+                  console.log(`Successfully refreshed note ${data.noteId} from server`);
+                } else {
+                  console.warn(`Failed to refresh note ${data.noteId} from server`);
                 }
-              } catch (error) {
-                console.error(`Error handling WebSocket update for note ${data.noteId}:`, error);
-              }
-            };
-            
-            updateLocalNote();
-            
-            // Notify subscribers about the sync status change
-            this.notifySubscribers(data.noteId);
+              })
+              .catch(error => {
+                console.error(`Error fetching note ${data.noteId} from server:`, error);
+              });
           }
           break;
           
         case 'storage_update':
-          // Update storage information
+          // Only update storage info occasionally to avoid constant updates
+          if (!this._lastStorageUpdate || Date.now() - this._lastStorageUpdate > 60000) {
           if (data.storage) {
             this.backendStorage = {
               total: data.storage.total_bytes,
@@ -223,11 +446,18 @@ class SyncService {
             };
             this.persistSyncData();
             this.notifySubscribers(null); // Notify all subscribers
+              this._lastStorageUpdate = Date.now();
+            }
           }
           break;
           
         case 'error':
           console.error('WebSocket error:', data.message);
+          break;
+          
+        case 'ping_response':
+          // Handle heartbeat responses
+          console.log('Received ping response from server');
           break;
           
         default:
@@ -242,19 +472,30 @@ class SyncService {
     console.log(`WebSocket connection closed: ${event.code} ${event.reason}`);
     this.isWebSocketConnected = false;
     
-    // Attempt to reconnect if appropriate
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      const delay = this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts);
-      console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
-      
+    // Don't reconnect if this was a normal closure
+    if (event.code === 1000) {
+      console.log('Normal WebSocket closure, not reconnecting');
+      return;
+    }
+    
+    // Don't reconnect immediately if not in active tab
+    if (document.visibilityState !== 'visible') {
+      console.log('Page is not visible, delaying reconnect until focus');
+      return;
+    }
+    
+    // Attempt to reconnect if we haven't hit the limit
+    if (this.reconnectAttempts < this.maxReconnectAttempts && !this.reconnecting) {
+      // Add a small delay before reconnecting to avoid rapid cycles
       setTimeout(() => {
-        if (this.currentUserId) { // Only reconnect if we still have a user
-          this.reconnectAttempts++;
-          this.initializeWebsocket();
-        }
-      }, delay);
-    } else {
-      console.error('Maximum WebSocket reconnection attempts reached');
+        this.reconnectWebsocket();
+      }, 1000);
+    } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.warn('Max reconnection attempts reached, giving up');
+      // Reset attempts so we can try again if the user interacts with the page
+      setTimeout(() => {
+        this.reconnectAttempts = 0;
+      }, 60000); // Wait a minute before allowing reconnects again
     }
   }
   
@@ -286,32 +527,385 @@ class SyncService {
     }
   }
   
-  // Setup note update listener (replacing the old autoSync setup)
+  // Set up a listener for note updates to trigger sync
   setupNoteUpdateListener() {
-    // Clear any existing subscription
-    if (this.noteUpdateSubscription) {
-      this.noteUpdateSubscription();
-      this.noteUpdateSubscription = null;
-    }
-    
     console.log('Setting up note update listener for automatic syncing');
     
-    // Subscribe to note updates to automatically sync any synced notes
-    this.noteUpdateSubscription = noteUpdateService.subscribe((note) => {
-      if (!this.currentUserId || !note || !note.id) return;
-      
-      const noteId = note.id;
-      const currentStatus = this.getSyncStatus(noteId);
-      
-      // Always sync if the note is already in 'synced' status
-      // This makes syncing automatic for any note that's already been synced
-      if (currentStatus.status === 'synced' && !note.temporary) {
-        console.log(`Auto-syncing note ${noteId} because it's already synced`);
-        this.syncNote(noteId).catch(error => {
-          console.error(`Auto-sync failed for note ${noteId}:`, error);
-        });
+    // Listen for DOM events from components
+    window.addEventListener('noteUpdate', this.handleNoteUpdate.bind(this));
+    
+    // Listen for broadcast channel events from other tabs
+    window.addEventListener('storage', event => {
+      if (event.key === 'note_cross_update') {
+        try {
+          const data = JSON.parse(event.newValue);
+          if (data && data.note && data.timestamp) {
+            this.handleNoteUpdate({ detail: { note: data.note }});
+          }
+        } catch (error) {
+          console.error('Failed to parse cross-tab note update:', error);
+        }
       }
     });
+    
+    // Subscribe to noteUpdateService for more reliable event capture
+    noteUpdateService.subscribe(note => {
+      if (!note) return;
+      this.handleNoteUpdate({ detail: { note }});
+    });
+  }
+  
+  // Handler for note update events
+  handleNoteUpdate(event) {
+    const note = event.detail?.note;
+    if (!note || !note.id) return;
+    
+    // Skip temp notes and notes that shouldn't be synced
+    if (note.temporary || note.skipSync) return;
+    
+    // Don't try to sync if we don't have a user ID
+    if (!this.currentUserId) return;
+    
+    // Simple debounce to prevent rapid-fire syncs of the same note
+    if (this.noteSyncTimers && this.noteSyncTimers[note.id]) {
+      clearTimeout(this.noteSyncTimers[note.id]);
+    }
+    
+    if (!this.noteSyncTimers) {
+      this.noteSyncTimers = {};
+    }
+    
+    // Queue up the sync with a short delay
+    this.noteSyncTimers[note.id] = setTimeout(() => {
+      // Mark as syncing (for UI feedback)
+      this.syncStatus.set(note.id, {
+        status: 'syncing',
+        lastSynced: null
+      });
+      
+      // Notify subscribers about the status change
+      this.notifySubscribers(note.id);
+      
+      // Send the note to the server
+      this.syncNote(note.id)
+        .catch(error => console.error(`Failed to sync note ${note.id}:`, error))
+        .finally(() => {
+          delete this.noteSyncTimers[note.id];
+        });
+    }, 1000); // 1 second debounce
+  }
+  
+  // Simply fetch a note from the server
+  async fetchNoteFromServer(noteId) {
+    if (!this.currentUserId || !noteId) return false;
+    
+    try {
+      // Get current note to check for local changes
+      const localNote = await storageService.readNote(noteId);
+      
+      // Skip if we're currently editing this note
+      if (localNote && localNote.isCurrentlyEditing) {
+        console.log(`Note ${noteId} is currently being edited, skipping server fetch`);
+        return true;
+      }
+      
+      // Fetch from server
+      const response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
+        method: 'GET',
+        credentials: 'include', // Include cookies for session auth
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+      
+      const backendNote = await response.json();
+      
+      // Convert to local format
+      const serverNote = this.convertFromDjangoFormat(backendNote);
+      
+      // Special handling for encrypted notes
+      if (localNote && localNote.wasDecrypted && serverNote.encrypted && serverNote.locked) {
+        console.log(`Preserving local decrypted state for note ${noteId}`);
+        
+        // Create a merged note that keeps local content but updates metadata
+        const mergedNote = {
+          ...localNote,
+          dateModified: serverNote.dateModified || localNote.dateModified,
+          folderPath: serverNote.folderPath || localNote.folderPath,
+          pinned: serverNote.pinned !== undefined ? serverNote.pinned : localNote.pinned,
+          tags: serverNote.tags || localNote.tags
+        };
+        
+        // Update local storage with preserved note
+        await storageService.writeNote(noteId, mergedNote);
+        
+        // Dispatch an update event with skipSync flag to prevent loops
+        const eventNote = {...mergedNote, skipSync: true};
+        window.dispatchEvent(new CustomEvent('noteUpdate', { detail: { note: eventNote }}));
+      } else {
+        // Regular update with server content
+        await storageService.writeNote(noteId, serverNote);
+        
+        // Dispatch an update event with skipSync flag to prevent loops
+        const eventNote = {...serverNote, skipSync: true};
+        window.dispatchEvent(new CustomEvent('noteUpdate', { detail: { note: eventNote }}));
+      }
+      
+      // Update sync status
+      this.syncStatus.set(noteId, {
+        status: 'synced',
+        lastSynced: new Date().toISOString()
+      });
+      
+      this.notifySubscribers(noteId);
+      this.persistSyncData();
+      
+      return true;
+    } catch (error) {
+      console.error(`Failed to fetch note ${noteId} from server:`, error);
+      
+      // Update sync status to reflect failure
+      this.syncStatus.set(noteId, {
+        status: 'failed',
+        lastSynced: null,
+        error: error.message
+      });
+      
+      this.notifySubscribers(noteId);
+      this.persistSyncData();
+      
+      return false;
+    }
+  }
+  
+  // Start syncing a note
+  async syncNote(noteId) {
+    try {
+      // Check if we're authenticated
+      if (!this.currentUserId) {
+        throw new Error('Not authenticated');
+      }
+      
+      // Update status to syncing
+      const syncingStatus = {
+        status: 'syncing',
+        lastSynced: null
+      };
+      this.syncStatus.set(noteId, syncingStatus);
+      
+      // Notify subscribers immediately about the syncing state
+      this.notifySubscribers(noteId);
+      
+      // Get the note
+      const note = await storageService.readNote(noteId);
+      if (!note) {
+        throw new Error('Note not found');
+      }
+      
+      // Mark this note as being edited locally to prevent conflicts
+      note.isCurrentlyEditing = true;
+      await storageService.writeNote(noteId, note);
+      
+      // Special handling for encrypted notes
+      let noteToSync = note;
+      if (note.wasDecrypted && !note.encrypted && !note.locked) {
+        console.log(`Note ${noteId} was previously decrypted - re-encrypting for sync`);
+        
+        try {
+          // Import reEncryptNote function
+          const { reEncryptNote } = await import('./encryption');
+          
+          // Re-encrypt the note
+          const reEncrypted = await reEncryptNote(note);
+          
+          // If re-encryption succeeded, use that for syncing
+          if (reEncrypted.encrypted && reEncrypted.locked) {
+            console.log(`Re-encryption successful for note ${noteId}`);
+            noteToSync = reEncrypted;
+          } else {
+            console.warn(`Re-encryption failed for note ${noteId} - will sync decrypted version`);
+          }
+        } catch (error) {
+          console.error(`Error re-encrypting note ${noteId}:`, error);
+          // Continue with the original note
+        }
+      }
+      
+      // Convert note to Django format
+      const djangoNote = this.convertToDjangoFormat(noteToSync);
+      
+      // Send note to backend
+      const response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
+        method: 'PUT',
+        credentials: 'include', // Include cookies for session auth
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(djangoNote)
+      });
+      
+      // If note doesn't exist yet, create it
+      if (response.status === 404) {
+        const createResponse = await fetch(`${API_BASE_URL}/notes/`, {
+          method: 'POST',
+          credentials: 'include', // Include cookies for session auth
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(djangoNote)
+        });
+        
+        if (!createResponse.ok) {
+          throw new Error(`HTTP error ${createResponse.status}`);
+        }
+      } else if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+      
+      // Update status to synced
+      const syncedStatus = {
+        status: 'synced',
+        lastSynced: new Date().toISOString()
+      };
+      this.syncStatus.set(noteId, syncedStatus);
+      
+      // Notify subscribers
+      this.notifySubscribers(noteId);
+      
+      // Persist sync data
+      this.persistSyncData();
+      
+      // After successful sync, update the note with sync timestamp and remove editing flag
+      try {
+        const updatedNote = await storageService.readNote(noteId);
+        if (updatedNote) {
+          // Add server timestamp and remove editing flag
+          updatedNote.serverModifiedAt = new Date().toISOString();
+          updatedNote.lastSyncedModified = updatedNote.dateModified;
+          updatedNote.isCurrentlyEditing = false;
+          await storageService.writeNote(noteId, updatedNote);
+        }
+      } catch (e) {
+        console.warn(`Failed to update note with server timestamp: ${e.message}`);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error(`Failed to sync note ${noteId}:`, error);
+      
+      // Update status to failed
+      const failedStatus = {
+        status: 'failed',
+        lastSynced: null,
+        error: error.message
+      };
+      this.syncStatus.set(noteId, failedStatus);
+      
+      // Clear the editing flag even if sync failed
+      try {
+        const note = await storageService.readNote(noteId);
+        if (note) {
+          note.isCurrentlyEditing = false;
+          await storageService.writeNote(noteId, note);
+        }
+      } catch (e) {
+        console.warn(`Failed to clear editing flag: ${e.message}`);
+      }
+      
+      // Notify subscribers
+      this.notifySubscribers(noteId);
+      
+      // Persist sync data
+      this.persistSyncData();
+      
+      return false;
+    }
+  }
+  
+  // Track sync attempt counts to prevent excessive parallel syncs
+  trackSyncAttempt(noteId) {
+    if (!this._activeSyncAttempts) {
+      this._activeSyncAttempts = {};
+      this._recentSyncs = {};
+    }
+    
+    this._activeSyncAttempts[noteId] = (this._activeSyncAttempts[noteId] || 0) + 1;
+    
+    // Also mark when sync was last attempted for this note
+    this._recentSyncs[noteId] = Date.now();
+    
+    console.log(`Active sync attempts for ${noteId}: ${this._activeSyncAttempts[noteId]}`);
+  }
+  
+  // Release sync attempt counter when sync completes
+  releaseSyncAttempt(noteId) {
+    if (!this._activeSyncAttempts) {
+      this._activeSyncAttempts = {};
+      return;
+    }
+    
+    if (this._activeSyncAttempts[noteId]) {
+      this._activeSyncAttempts[noteId]--;
+      console.log(`Released sync attempt for ${noteId}, remaining: ${this._activeSyncAttempts[noteId]}`);
+    }
+  }
+  
+  // Check if a note was recently synced or has too many active syncs
+  isRecentlySynced(noteId) {
+    if (!this._recentSyncs || !this._activeSyncAttempts) {
+      this._recentSyncs = {};
+      this._activeSyncAttempts = {};
+      return false;
+    }
+    
+    const lastSync = this._recentSyncs[noteId] || 0;
+    const activeAttempts = this._activeSyncAttempts[noteId] || 0;
+    const now = Date.now();
+    
+    // Consider a note "recently synced" if:
+    // 1. It was synced within the last 10 seconds, OR
+    // 2. It has more than 2 concurrent sync attempts in progress
+    return (now - lastSync < 10000) || (activeAttempts > 2);
+  }
+  
+  // Helper method to determine if an update is "minor" and should be skipped
+  isMinorUpdate(note) {
+    // If the note has just been created, don't consider it minor
+    if (note.dateCreated && new Date(note.dateCreated).getTime() > Date.now() - 30000) {
+      return false;
+    }
+    
+    // Check if the update is only for cursor position or other non-content fields
+    const significantFields = [
+      'content', 'locked', 'encrypted', 'pinned', 'tags', 
+      'parentFolderId', 'folderPath'
+    ];
+    
+    // Last modified should have changed for any significant update
+    const hasModifiedChanged = note.dateModified && 
+      (!note.lastSyncedModified || note.dateModified !== note.lastSyncedModified);
+    
+    if (hasModifiedChanged) {
+      // If we know when this was last modified, compare with last sync time
+      if (note.lastSyncedModified) {
+        // Check if it's a very recent change (within 2 seconds)
+        const modifiedTime = new Date(note.dateModified).getTime();
+        const lastSyncedTime = new Date(note.lastSyncedModified).getTime();
+        
+        if (modifiedTime - lastSyncedTime < 2000) {
+          // Very recent change might be from our own sync, skip it
+          return true;
+        }
+      }
+      
+      return false;
+    }
+    
+    return true;
   }
   
   // Save sync data to localStorage
@@ -341,8 +935,16 @@ class SyncService {
   }
   
   // Notify subscribers of sync status changes
-  notifySubscribers(noteId) {
-    this.subscribers.forEach(callback => callback(noteId));
+  notifySubscribers(noteId, isResponse = true) {
+    this.subscribers.forEach(callback => callback(noteId, this.getSyncStatus(noteId)));
+    
+    // Also emit a DOM event for direct UI updates
+    if (noteId) {
+      const status = this.getSyncStatus(noteId);
+      window.dispatchEvent(new CustomEvent('syncStatusUpdate', {
+        detail: { noteId, status }
+      }));
+    }
   }
   
   // Fetch backend storage info
@@ -458,15 +1060,55 @@ class SyncService {
     }
   }
   
-  // Sync a modified note if dirty flag is set
+  // Trigger sync if note is dirty, with cross-tab coordination
   async syncIfDirty(noteId) {
-    const status = this.syncStatus.get(noteId);
-    
-    if (status && status.dirty) {
+    try {
+      // Check if this note is dirty
+      const status = this.getSyncStatus(noteId);
+      if (status.status !== 'not-synced') {
+        return true; // Already synced or in progress
+      }
+      
+      // If we have a connection, sync directly
+      if (this.isWebSocketConnected && this.currentUserId) {
       return await this.syncNote(noteId);
     }
     
-    return true;
+      // Otherwise, request sync from any connected tab
+      this.requestSync(noteId);
+      
+      // Mark as syncing temporarily
+      this.syncStatus.set(noteId, { 
+        status: 'syncing',
+        lastSynced: Date.now()
+      });
+      this.notifySubscribers(noteId);
+      
+      // After a timeout, check if it got synced
+      return new Promise(resolve => {
+        setTimeout(async () => {
+          const currentStatus = this.getSyncStatus(noteId);
+          if (currentStatus.status === 'synced') {
+            resolve(true);
+          } else if (this.isWebSocketConnected) {
+            // We got a connection, try again
+            const result = await this.syncNote(noteId);
+            resolve(result);
+          } else {
+            // Reset status to not-synced for future attempts
+            this.syncStatus.set(noteId, {
+              status: 'not-synced',
+              lastSynced: null
+            });
+            this.notifySubscribers(noteId);
+            resolve(false);
+          }
+        }, 5000); // Wait 5 seconds for another tab to sync
+      });
+    } catch (error) {
+      console.error(`Failed to sync dirty note ${noteId}:`, error);
+      return false;
+    }
   }
   
   // Mark a note as dirty (needs sync)
@@ -576,29 +1218,89 @@ class SyncService {
     return localNote;
   }
   
+  // Broadcast connection status to other tabs
+  broadcastConnectionStatus() {
+    if (this.broadcastChannel) {
+      try {
+        this.broadcastChannel.postMessage({
+          type: 'CONNECTION_STATUS',
+          data: {
+            tabId: this.tabId,
+            connected: this.isWebSocketConnected
+          }
+        });
+      } catch (e) {
+        console.error('Failed to broadcast connection status:', e);
+      }
+    } else {
+      // Fallback to localStorage
+      try {
+        localStorage.setItem('peridot_connection_status', JSON.stringify({
+          tabId: this.tabId,
+          connected: this.isWebSocketConnected,
+          timestamp: Date.now()
+        }));
+        setTimeout(() => localStorage.removeItem('peridot_connection_status'), 100);
+      } catch (e) {
+        console.error('Failed to use localStorage for connection status:', e);
+      }
+    }
+  }
+  
   // Broadcast sync update to other tabs
-  broadcastSyncUpdate(noteId, status) {
+  broadcastSyncUpdate(noteId, status, isResponse = false) {
     try {
+      if (!noteId) return;
+      
+      // Skip broadcast for responses to sync requests to avoid loops
+      if (isResponse && !this.broadcastChannel) return;
+      
       if (this.broadcastChannel) {
         this.broadcastChannel.postMessage({
           type: 'SYNC_STATUS_CHANGED',
-          data: {
-            noteId,
-            status
-          }
+          data: { noteId, status, isResponse }
         });
       } else {
         // Fallback to localStorage
-        localStorage.setItem('sync_update', JSON.stringify({ 
-          noteId, 
+        localStorage.setItem('peridot_sync_update', JSON.stringify({
+            noteId,
           status,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          isResponse
         }));
-        // Clear it immediately to allow future updates to trigger events
-        setTimeout(() => localStorage.removeItem('sync_update'), 100);
+        setTimeout(() => localStorage.removeItem('peridot_sync_update'), 100);
       }
+      
+      // Also fire a DOM event for components that are listening
+      const event = new CustomEvent('syncStatusUpdate', {
+        detail: { noteId, status }
+      });
+      window.dispatchEvent(event);
     } catch (error) {
       console.error('Failed to broadcast sync update:', error);
+    }
+  }
+  
+  // Request sync from any tab that's connected
+  requestSync(noteId) {
+    try {
+      if (!noteId) return;
+      
+      if (this.broadcastChannel) {
+        this.broadcastChannel.postMessage({
+          type: 'SYNC_REQUEST',
+          data: { noteId }
+        });
+      } else {
+        // Fallback to localStorage
+        localStorage.setItem('peridot_sync_request', JSON.stringify({
+          noteId, 
+          timestamp: Date.now()
+        }));
+        setTimeout(() => localStorage.removeItem('peridot_sync_request'), 100);
+      }
+    } catch (error) {
+      console.error('Failed to request sync:', error);
     }
   }
   
@@ -627,125 +1329,163 @@ class SyncService {
     return syncedNotes;
   }
   
-  // Start syncing a note
-  async syncNote(noteId) {
+  // Sync all dirty notes - adds a method to sync notes that have been modified
+  async syncAllDirtyNotes() {
+    if (!this.currentUserId || !this.isWebSocketConnected) {
+      return false;
+    }
+    
     try {
-      // Check if we're authenticated
-      if (!this.currentUserId) {
-        throw new Error('Not authenticated');
-      }
+      // Get all notes to check which ones need syncing
+      const notes = await storageService.getAllNotes();
       
-      // Update status to syncing
-      this.syncStatus.set(noteId, {
-        status: 'syncing',
-        lastSynced: null,
-        size: 0
-      });
-      this.notifySubscribers(noteId);
-      this.broadcastSyncUpdate(noteId, this.syncStatus.get(noteId));
+      // Build list of notes that need syncing
+      const syncPromises = [];
       
-      // Get the note
-      const note = await storageService.readNote(noteId);
-      if (!note) {
-        throw new Error('Note not found');
-      }
-      
-      // IMPORTANT: Check if this is a decrypted note that was previously encrypted
-      // If so, we need to re-encrypt it before sending to the server
-      let noteToSync = note;
-      if (note.wasDecrypted && !note.encrypted && !note.locked) {
-        console.log(`Note ${noteId} was previously decrypted - re-encrypting for sync`);
-        
-        try {
-          // Import reEncryptNote function
-          const { reEncryptNote } = await import('./encryption');
-          
-          // Re-encrypt the note
-          const reEncrypted = await reEncryptNote(note);
-          
-          // If re-encryption succeeded, use that for syncing
-          if (reEncrypted.encrypted && reEncrypted.locked) {
-            console.log(`Re-encryption successful for note ${noteId}`);
-            noteToSync = reEncrypted;
-          } else {
-            console.warn(`Re-encryption failed for note ${noteId} - will sync decrypted version`);
-          }
-        } catch (error) {
-          console.error(`Error re-encrypting note ${noteId}:`, error);
-          // Continue with the original note
+      for (const note of notes) {
+        const syncStatus = this.getSyncStatus(note.id);
+        if (
+          syncStatus.status === 'not-synced' || 
+          (note.serverModifiedAt && note.dateModified > note.serverModifiedAt)
+        ) {
+          syncPromises.push(this.syncNote(note.id));
         }
       }
       
-      // Calculate size in bytes
-      const size = new Blob([JSON.stringify(noteToSync)]).size;
-      
-      // Check if we have enough space in backend
-      if (size + this.backendStorage.used > this.backendStorage.total) {
-        throw new Error('Not enough storage space in backend');
+      if (syncPromises.length > 0) {
+        console.log(`Syncing ${syncPromises.length} dirty notes...`);
+        await Promise.all(syncPromises);
+        return true;
       }
-      
-      // Convert note to Django format
-      const djangoNote = this.convertToDjangoFormat(noteToSync);
-      
-      // Send note to backend
-      const response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
-        method: 'PUT',
-        credentials: 'include', // Include cookies for session auth
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(djangoNote)
-      });
-      
-      // If note doesn't exist yet, create it
-      if (response.status === 404) {
-        const createResponse = await fetch(`${API_BASE_URL}/notes/`, {
-          method: 'POST',
-          credentials: 'include', // Include cookies for session auth
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(djangoNote)
-        });
-        
-        if (!createResponse.ok) {
-          throw new Error(`HTTP error ${createResponse.status}`);
-        }
-      } else if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}`);
-      }
-      
-      // Update status to synced
-      this.syncStatus.set(noteId, {
-        status: 'synced',
-        lastSynced: new Date().toISOString(),
-        size
-      });
-      
-      // Update storage usage
-      this.backendStorage.used += size;
-      
-      this.notifySubscribers(noteId);
-      this.broadcastSyncUpdate(noteId, this.syncStatus.get(noteId));
-      this.persistSyncData();
       
       return true;
     } catch (error) {
-      console.error(`Failed to sync note ${noteId}:`, error);
-      
-      // Update status to failed
-      this.syncStatus.set(noteId, {
-        status: 'failed',
-        lastSynced: null,
-        error: error.message
-      });
-      
-      this.notifySubscribers(noteId);
-      this.broadcastSyncUpdate(noteId, this.syncStatus.get(noteId));
-      this.persistSyncData();
-      
+      console.error('Failed to sync dirty notes:', error);
       return false;
     }
+  }
+
+  // Clean up resources when the service is no longer needed
+  cleanup() {
+    if (this.broadcastChannel) {
+      this.broadcastChannel.close();
+    }
+    
+    if (this.syncSocket) {
+      this.syncSocket.close();
+    }
+    
+    // Remove heartbeat interval
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+    
+    // Remove connection tracking
+    this.removeActiveConnection();
+    
+    // Remove event listeners
+    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    window.removeEventListener('focus', this.handleWindowFocus);
+    window.removeEventListener('blur', this.handleWindowBlur);
+    
+    // Clear any keepalive interval
+    if (this.connectionKeepAliveInterval) {
+      clearInterval(this.connectionKeepAliveInterval);
+      this.connectionKeepAliveInterval = null;
+    }
+  }
+
+  // Helper to ensure camelCase fields from snake_case backend response
+  ensureCamelCase(data) {
+    if (!data) return data;
+    
+    const result = { ...data };
+    
+    // Convert common snake_case fields to camelCase
+    if (data.date_created) result.dateCreated = data.date_created;
+    if (data.date_modified) result.dateModified = data.date_modified;
+    if (data.folder_path) result.folderPath = data.folder_path;
+    if (data.visible_title) result.visibleTitle = data.visible_title;
+    if (data.key_params) result.keyParams = data.key_params;
+    
+    return result;
+  }
+
+  // Initialize message throttling
+  resetMessageThrottling() {
+    this._messageThrottles = {};
+    this._serverErrorCounts = {};
+    this._lastStorageUpdate = 0;
+  }
+
+  // Check if a message should be throttled
+  shouldThrottleMessage(type, noteId) {
+    if (!this._messageThrottles) {
+      this.resetMessageThrottling();
+    }
+    
+    const now = Date.now();
+    const key = noteId ? `${type}_${noteId}` : type;
+    
+    // Special handling for storage_update type - limit to one per minute
+    if (type === 'storage_update') {
+      if (now - this._lastStorageUpdate < 60000) {
+        console.log('Throttling storage update message - too frequent');
+        return true;
+      }
+      this._lastStorageUpdate = now;
+      return false;
+    }
+    
+    // Get last time this message type was processed
+    const lastProcessed = this._messageThrottles[key] || 0;
+    
+    // Store error counts for server responses
+    if (type === 'sync_update' && noteId) {
+      // Count this message
+      this._serverErrorCounts[noteId] = (this._serverErrorCounts[noteId] || 0) + 1;
+      
+      // If this note has too many updates, ignore it completely for a longer time
+      const errorCount = this._serverErrorCounts[noteId];
+      if (errorCount > 10) {
+        const backoffTime = Math.min(60000 * Math.pow(2, Math.floor(errorCount / 10) - 1), 3600000);
+        if (now - lastProcessed < backoffTime) {
+          console.log(`Complete server-side throttling for note ${noteId} - excessive messages (${errorCount})`);
+          this._messageThrottles[key] = now; // Update timestamp to keep throttling
+      return true;
+        }
+        
+        // Reset counter after backoff period
+        if (errorCount > 20) {
+          this._serverErrorCounts[noteId] = 0;
+          console.log(`Resetting throttle counter for note ${noteId} after extended backoff`);
+        }
+      }
+    }
+    
+    // Determine throttle time based on message type
+    let throttleTime = 5000; // Default 5 seconds between messages
+    
+    if (type === 'sync_update') {
+      // Increase throttle time based on number of recent messages
+      const msgCount = this._serverErrorCounts[noteId] || 0;
+      if (msgCount > 5) {
+        throttleTime = 30000; // 30 seconds if many messages
+      } else if (msgCount > 2) {
+        throttleTime = 15000; // 15 seconds if several messages
+      }
+    }
+    
+    // Check if we should throttle
+    if (now - lastProcessed < throttleTime) {
+      console.log(`Throttling ${type} message for ${noteId || 'system'} - too frequent`);
+      return true;
+    }
+    
+    // Update last processed time
+    this._messageThrottles[key] = now;
+    return false;
   }
   
   // Remove a note from backend sync
@@ -756,7 +1496,7 @@ class SyncService {
         throw new Error('Not authenticated');
       }
       
-      const currentStatus = this.syncStatus.get(noteId);
+      const currentStatus = this.getSyncStatus(noteId);
       
       if (currentStatus && currentStatus.status === 'synced') {
         // Request deletion from backend
@@ -818,6 +1558,13 @@ class SyncService {
           continue;
         }
         
+        // Skip notes that are broken or marked to skip sync
+        if (note.syncDisabled || note.skipSync) {
+          console.log(`Skipping note ${note.id} - sync disabled`);
+          results.skipped++;
+          continue;
+        }
+        
         try {
           const success = await this.syncNote(note.id);
           if (success) {
@@ -839,7 +1586,103 @@ class SyncService {
     }
   }
 
-  // Fetch all notes from the backend
+  // Helper to create a new WebSocket with proper handlers
+  _createNewWebSocket(wsUrl) {
+    try {
+      this.syncSocket = new WebSocket(wsUrl);
+      
+      // Set up connection handlers
+      this.syncSocket.onopen = this.handleSocketOpen.bind(this);
+      this.syncSocket.onmessage = this.handleSocketMessage.bind(this);
+      this.syncSocket.onclose = this.handleSocketClose.bind(this);
+      this.syncSocket.onerror = this.handleSocketError.bind(this);
+      
+      // Track connection state
+      this.isWebSocketConnected = false;
+      
+      // Set up heartbeat to detect disconnects that the browser doesn't catch
+      this.setupHeartbeat();
+      
+      // Record this tab's connection in localStorage for persistence tracking
+      this.recordActiveConnection();
+    } catch (e) {
+      console.error('Error creating WebSocket:', e);
+      
+      // Schedule a retry
+      if (!this.reconnecting && this.reconnectAttempts < this.maxReconnectAttempts) {
+        setTimeout(() => {
+          this.reconnectWebsocket();
+        }, 5000);
+      }
+    }
+  }
+
+  // Get all notes directly from the backend and update sync status
+  async getNotesFromBackend() {
+    try {
+      // Call the fetchNotesFromBackend method
+      const response = await fetch(`${API_BASE_URL}/notes/`, {
+        method: 'GET',
+        credentials: 'include', // Include cookies for session auth
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+      
+      const backendNotes = await response.json();
+      console.log(`Fetched ${backendNotes.length} notes from backend`);
+      
+      // Convert notes to local format
+      const localNotes = [];
+      for (const backendNote of backendNotes) {
+        try {
+          const localNote = this.convertFromDjangoFormat(backendNote);
+          
+          // Update sync status for this note
+          this.syncStatus.set(localNote.id, {
+            status: 'synced',
+            lastSynced: new Date().toISOString(),
+            size: new Blob([JSON.stringify(localNote)]).size
+          });
+          
+          localNotes.push(localNote);
+        } catch (error) {
+          console.error(`Failed to convert note ${backendNote.id}:`, error);
+        }
+      }
+      
+      // Update the sync status of notes that exist in local storage but not in the backend
+      // by marking them as not-synced if they were previously synced
+      const backendNoteIds = new Set(localNotes.map(note => note.id));
+      
+      // Check all current synced notes
+      for (const [noteId, status] of this.syncStatus.entries()) {
+        if (status.status === 'synced' && !backendNoteIds.has(noteId)) {
+          // This note was synced but is no longer on the backend
+          this.syncStatus.set(noteId, {
+            status: 'not-synced',
+            lastSynced: null,
+            size: 0
+          });
+        }
+      }
+      
+      // Persist updated sync statuses
+      this.persistSyncData();
+      this.notifySubscribers();
+      
+      return localNotes;
+    } catch (error) {
+      console.error('Failed to get notes from backend:', error);
+      return [];
+    }
+  }
+
+  // Fetch Notes from Backend (Original implementation that was removed)
   async fetchNotesFromBackend() {
     if (!this.currentUserId) {
       console.error('Cannot fetch notes: Not authenticated');
@@ -900,43 +1743,6 @@ class SyncService {
     }
   }
 
-  // Get all notes directly from the backend and update sync status
-  async getNotesFromBackend() {
-    try {
-      const result = await this.fetchNotesFromBackend();
-      
-      if (!result.success) {
-        console.error('Failed to get notes from backend:', result.error);
-        return [];
-      }
-      
-      // Update the sync status of notes that exist in local storage but not in the backend
-      // by marking them as not-synced if they were previously synced
-      const backendNoteIds = new Set(result.notes.map(note => note.id));
-      
-      // Check all current synced notes
-      for (const [noteId, status] of this.syncStatus.entries()) {
-        if (status.status === 'synced' && !backendNoteIds.has(noteId)) {
-          // This note was synced but is no longer on the backend
-          this.syncStatus.set(noteId, {
-            status: 'not-synced',
-            lastSynced: null,
-            size: 0
-          });
-        }
-      }
-      
-      // Persist updated sync statuses
-      this.persistSyncData();
-      this.notifySubscribers();
-      
-      return result.notes;
-    } catch (error) {
-      console.error('Failed to get notes from backend:', error);
-      return [];
-    }
-  }
-
   // Merge backend notes with local notes
   async mergeBackendWithLocalNotes() {
     try {
@@ -970,6 +1776,7 @@ class SyncService {
           
           // IMPORTANT: Don't overwrite a decrypted note with an encrypted one
           if (
+            localNote && 
             // Check for any of our decryption flags
             ((localNote.persistentDecrypted || !localNote.encrypted || !localNote.locked) &&
             (localNote.wasDecrypted || localNote.persistentDecrypted)) &&
@@ -1027,135 +1834,6 @@ class SyncService {
     } catch (error) {
       console.error('Error merging backend notes:', error);
       return { success: false, error: error.message };
-    }
-  }
-
-  // Helper method to update a local note with data from server
-  async updateLocalNoteFromServer(noteId, noteContent) {
-    try {
-      if (!noteId || !noteContent) return false;
-      
-      // Get the current note
-      const currentNote = await storageService.readNote(noteId);
-      
-      // If the note doesn't exist locally, create it
-      if (!currentNote) {
-        await storageService.writeNote(noteId, noteContent);
-        return true;
-      }
-      
-      // IMPORTANT: Don't overwrite a decrypted note with an encrypted one
-      // If current note is decrypted (unlocked) but the server version is encrypted,
-      // we want to keep our decrypted content
-      if (
-        // Check for any of our decryption flags
-        ((currentNote.persistentDecrypted || !currentNote.encrypted || !currentNote.locked) &&
-        (currentNote.wasDecrypted || currentNote.persistentDecrypted)) &&
-        // And confirm the server version is encrypted
-        noteContent.encrypted && noteContent.locked
-      ) {
-        console.log(`Preserving local decrypted state for note ${noteId}`);
-        
-        // Just update metadata, not the content or encryption state
-        const preservedNote = {
-          ...currentNote,
-          // Take some fields from server version
-          dateModified: noteContent.dateModified || currentNote.dateModified,
-          folderPath: noteContent.folderPath || currentNote.folderPath,
-          pinned: noteContent.pinned !== undefined ? noteContent.pinned : currentNote.pinned,
-          tags: noteContent.tags || currentNote.tags
-        };
-        
-        await storageService.writeNote(noteId, preservedNote);
-        return true;
-      }
-      
-      // Update the existing note with new content from server
-      // But preserve any local metadata that shouldn't be overwritten
-      const updatedNote = {
-        ...currentNote,
-        ...noteContent,
-        // The server's dateModified should take precedence
-        dateModified: noteContent.dateModified || new Date().toISOString()
-      };
-      
-      await storageService.writeNote(noteId, updatedNote);
-      return true;
-    } catch (error) {
-      console.error(`Failed to update note ${noteId} from server:`, error);
-      return false;
-    }
-  }
-  
-  // Fetch a single note from the server
-  async fetchNoteFromServer(noteId) {
-    if (!this.currentUserId || !noteId) return false;
-    
-    try {
-      // First, check if we have a local decrypted version
-      const localNote = await storageService.readNote(noteId);
-      const isLocalDecrypted = localNote && !localNote.encrypted && !localNote.locked;
-      
-      // Fetch from server
-      const response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
-        method: 'GET',
-        credentials: 'include', // Include cookies for session auth
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}`);
-      }
-      
-      const backendNote = await response.json();
-      
-      // Convert to local format
-      const serverNote = this.convertFromDjangoFormat(backendNote);
-      
-      // Check if we need to preserve local decrypted state
-      if (
-        localNote && 
-        // Check for any of our decryption flags
-        ((localNote.persistentDecrypted || !localNote.encrypted || !localNote.locked) &&
-        (localNote.wasDecrypted || localNote.persistentDecrypted)) &&
-        // And confirm the server version is encrypted
-        serverNote.encrypted && serverNote.locked
-      ) {
-        console.log(`fetchNoteFromServer: Preserving local decrypted state for note ${noteId}`);
-        
-        // Update metadata but keep the decrypted content
-        const preservedNote = {
-          ...localNote,
-          // Update specific fields from server
-          dateModified: serverNote.dateModified || localNote.dateModified,
-          folderPath: serverNote.folderPath || localNote.folderPath,
-          pinned: serverNote.pinned !== undefined ? serverNote.pinned : localNote.pinned,
-          tags: serverNote.tags || localNote.tags
-        };
-        
-        // Update local storage with preserved note
-        await storageService.writeNote(noteId, preservedNote);
-      } else {
-        // Use server version (normal case)
-        await this.updateLocalNoteFromServer(noteId, serverNote);
-      }
-      
-      // Update sync status
-      this.syncStatus.set(noteId, {
-        status: 'synced',
-        lastSynced: new Date().toISOString(),
-        size: new Blob([JSON.stringify(serverNote)]).size
-      });
-      
-      this.notifySubscribers(noteId);
-      this.persistSyncData();
-      
-      return true;
-    } catch (error) {
-      console.error(`Failed to fetch note ${noteId} from server:`, error);
-      return false;
     }
   }
 }

@@ -19,8 +19,9 @@ const NoteItem = React.memo(({
 
     // Subscribe to sync status changes
     const unsubscribe = syncService.subscribe((noteId, status) => {
-      if (noteId === note.id) {
-        setSyncStatus(status);
+      if (noteId === note.id || noteId === null) {
+        // When noteId is null, it's a global update, so refresh our status
+        setSyncStatus(noteId === null ? syncService.getSyncStatus(note.id) : status);
       }
     });
 

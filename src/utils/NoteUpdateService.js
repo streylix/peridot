@@ -17,6 +17,11 @@ class NoteUpdateService {
     this.lastUpdateTime = new Map();
     this.UPDATE_RATE_LIMIT = 2000; // 2 seconds rate limit
     
+    // Initialize additional tracking for sync operations
+    this.isSyncing = {};
+    this.updateQueue = {};
+    this.timers = {};
+    
     window.addEventListener('beforeunload', this.handleBeforeUnload.bind(this));
     
     // Set up BroadcastChannel for real-time cross-tab communication
@@ -149,14 +154,30 @@ class NoteUpdateService {
   }
 
   async queueUpdate(noteId, updates, updateModified = true, encryptionContext = null) {
+    // Skip update if there are no meaningful changes
+    if (!this.hasChanges(noteId, updates)) {
+      return;
+    }
+
     // If unload is in progress, process immediately
     if (this.isProcessingUnload) {
       return this.processImmediateUpdate(noteId, updates, updateModified, encryptionContext);
     }
 
+    // Check if the note is currently being synced; if so, delay this update
+    if (this.isSyncing[noteId]) {
+      console.log(`Note ${noteId} is currently syncing, delaying update`);
+      setTimeout(() => this.queueUpdate(noteId, updates, updateModified, encryptionContext), 1000);
+      return;
+    }
+
     // Merge with any existing pending updates for this note
     const existingUpdates = this.pendingUpdates.get(noteId) || {};
     const mergedUpdates = { ...existingUpdates, ...updates };
+    
+    // Add lastSyncAttempt to help with rate limiting in SyncService
+    mergedUpdates.lastSyncAttempt = Date.now();
+    
     this.pendingUpdates.set(noteId, mergedUpdates);
 
     // Cancel any existing timer for this note
@@ -166,62 +187,73 @@ class NoteUpdateService {
 
     // Set a new timer
     const timer = setTimeout(async () => {
-      try {
-        // Get current note state
-        const currentNote = await storageService.readNote(noteId);
-        if (!currentNote) return;
-
-        // Get the final merged updates
-        const finalUpdates = this.pendingUpdates.get(noteId) || {};
-        this.pendingUpdates.delete(noteId);
-
-        let updatedNote = {
-          ...currentNote,
-          ...finalUpdates,
-          dateModified: updateModified ? new Date().toISOString() : currentNote.dateModified
-        };
-
-        // Handle encryption if needed - ONLY if the note is already locked or we're locking it now
-        if (encryptionContext?.shouldEncrypt && 
-            (currentNote.locked || finalUpdates.locked === true)) {
-          if (typeof updatedNote.content === 'string') {
-            updatedNote = await encryptNote(updatedNote, encryptionContext.password);
-          }
-        }
-
-        // Clean up encryption fields if explicitly unlocked or not locked
-        if (finalUpdates.locked === false || (!updatedNote.locked && !currentNote.locked)) {
-          updatedNote.encrypted = false;
-          updatedNote.keyParams = undefined;
-          updatedNote.iv = undefined;
-          updatedNote.visibleTitle = undefined;
-        }
-
-        // Save to local storage
-        await storageService.writeNote(noteId, updatedNote);
-
-        // Push update to server if authenticated
-        if (this.authToken) {
-          this.pushNoteToServer(updatedNote)
-            .catch(error => console.error('Failed to push note update to server:', error));
-        }
-
-        // Notify subscribers
-        this.notifySubscribers(updatedNote);
-        
-        // Broadcast the update to other tabs
-        this.broadcastUpdate(updatedNote);
-
-        // Remove the timer
-        this.updateTimers.delete(noteId);
-
-      } catch (error) {
-        console.error('Failed to process queued note update:', error);
-        this.updateTimers.delete(noteId);
-      }
-    }, 500);
+      await this.processUpdate(noteId, updateModified, encryptionContext);
+    }, 800); // Increased debounce time to reduce frequency
 
     this.updateTimers.set(noteId, timer);
+  }
+
+  // Process a queued update
+  async processUpdate(noteId, updateModified = true, encryptionContext = null) {
+    try {
+      // Get current note state
+      const currentNote = await storageService.readNote(noteId);
+      if (!currentNote) return;
+
+      // Get the final merged updates
+      const finalUpdates = this.pendingUpdates.get(noteId) || {};
+      this.pendingUpdates.delete(noteId);
+
+      // Skip if no actual content changes - check again
+      if (!this.hasChanges(noteId, finalUpdates)) {
+        this.updateTimers.delete(noteId);
+        return;
+      }
+
+      let updatedNote = {
+        ...currentNote,
+        ...finalUpdates,
+        dateModified: updateModified ? new Date().toISOString() : currentNote.dateModified
+      };
+
+      // Handle encryption if needed - ONLY if the note is already locked or we're locking it now
+      if (encryptionContext?.shouldEncrypt && 
+          (currentNote.locked || finalUpdates.locked === true)) {
+        if (typeof updatedNote.content === 'string') {
+          updatedNote = await encryptNote(updatedNote, encryptionContext.password);
+        }
+      }
+
+      // Clean up encryption fields if explicitly unlocked or not locked
+      if (finalUpdates.locked === false || (!updatedNote.locked && !currentNote.locked)) {
+        updatedNote.encrypted = false;
+        updatedNote.keyParams = undefined;
+        updatedNote.iv = undefined;
+        updatedNote.visibleTitle = undefined;
+      }
+
+      // Save to local storage
+      await storageService.writeNote(noteId, updatedNote);
+
+      // Push update to server if authenticated
+      if (this.authToken) {
+        this.pushNoteToServer(updatedNote)
+          .catch(error => console.error('Failed to push note update to server:', error));
+      }
+
+      // Notify subscribers
+      this.notifySubscribers(updatedNote);
+      
+      // Broadcast the update to other tabs
+      this.broadcastUpdate(updatedNote);
+
+      // Remove the timer
+      this.updateTimers.delete(noteId);
+
+    } catch (error) {
+      console.error('Failed to process queued note update:', error);
+      this.updateTimers.delete(noteId);
+    }
   }
 
   // Push a note update to the server if authenticated
@@ -362,6 +394,52 @@ class NoteUpdateService {
     
     // Rate limit updates to prevent excessive server calls
     return elapsed < this.UPDATE_RATE_LIMIT;
+  }
+
+  // Check if the update contains meaningful changes worth syncing
+  hasChanges(noteId, updates) {
+    if (!noteId || !updates) return true;
+
+    // Always sync if content is changing
+    if (updates.content !== undefined) {
+      try {
+        const currentNote = storageService.readNoteSync(noteId);
+        // Compare with current content to see if there's an actual change
+        if (currentNote && currentNote.content === updates.content) {
+          // Content didn't actually change
+          if (Object.keys(updates).length === 1 || 
+              (Object.keys(updates).length === 2 && 'caretPosition' in updates)) {
+            // If it's just content and/or caret position with no actual changes, skip
+            return false;
+          }
+        }
+      } catch (e) {
+        console.warn('Error checking for changes:', e);
+        // If we can't check, assume there are changes
+        return true;
+      }
+    }
+
+    // Check for meaningful metadata changes
+    const significantFields = ['locked', 'encrypted', 'dateModified', 'pinned', 'tags', 'parentFolderId'];
+    for (const field of significantFields) {
+      if (field in updates) {
+        try {
+          const currentNote = storageService.readNoteSync(noteId);
+          if (currentNote && JSON.stringify(currentNote[field]) !== JSON.stringify(updates[field])) {
+            // There's a change in a significant field
+            return true;
+          }
+        } catch (e) {
+          // If we can't check, assume there are changes
+          return true;
+        }
+      }
+    }
+
+    // If we have fields other than caretPosition, consider it a change
+    const nonCaretFields = Object.keys(updates).filter(key => key !== 'caretPosition' && key !== 'lastSyncAttempt');
+    return nonCaretFields.length > 0;
   }
 }
 
