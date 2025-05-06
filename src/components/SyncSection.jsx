@@ -1,15 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { Trash2, RefreshCw, ArrowUp, ArrowDown, Search, XCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Trash2, RefreshCw, ArrowUp, ArrowDown, Search, XCircle, AlertCircle, CheckCircle, Info } from 'lucide-react';
 import { syncService } from '../utils/SyncService';
 import { noteContentService } from '../utils/NoteContentService';
 import { storageService } from '../utils/StorageService';
 import SyncBar from './SyncBar';
-import { ItemPresets } from './Modal';
+import { ItemPresets, ItemComponents } from './Modal';
 
-const SyncSection = ({ onNoteSelect, onClose }) => {
+// Cache for backend notes to prevent excessive API calls
+let notesCache = null;
+let lastNotesFetchTime = 0;
+const NOTES_CACHE_DURATION = 60000; // 1 minute cache
+
+const SyncSection = ({ onNoteSelect, onClose, currentUser }) => {
   const [syncedNotes, setSyncedNotes] = useState([]);
   const [filteredNotes, setFilteredNotes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  // Keep only the sync all loading state
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [autoSync, setAutoSync] = useState(() => 
     localStorage.getItem('autoSyncEnabled') === 'true'
@@ -18,52 +25,182 @@ const SyncSection = ({ onNoteSelect, onClose }) => {
     key: 'lastSynced',
     direction: 'desc'
   });
+  // Status message state
+  const [statusMessage, setStatusMessage] = useState(null);
+  
+  // Refs for cleanup and debouncing
+  const isComponentMounted = useRef(true);
+  const updateTimeoutRef = useRef(null);
 
+  // Make sure sync service has the current user ID
   useEffect(() => {
-    const loadSyncedNotes = async () => {
+    if (currentUser && currentUser.id) {
+      console.log("SyncSection: Setting user ID in sync service:", currentUser.id);
+      syncService.setAuthToken(currentUser.id.toString());
+    }
+  }, [currentUser]);
+
+  // Function to set a temporary status message
+  const showStatusMessage = (message, type = 'info', duration = 5000) => {
+    if (!isComponentMounted.current) return;
+    
+    setStatusMessage({ text: message, type });
+    if (duration) {
+      setTimeout(() => {
+        if (isComponentMounted.current) {
+          setStatusMessage(null);
+        }
+      }, duration);
+    }
+  };
+
+  // Function to load notes directly from backend with caching
+  const loadNotesFromBackend = useCallback(async (showLoader = true, bypassCache = false) => {
+    if (showLoader) {
       setIsLoading(true);
-      try {
-        const notes = syncService.getAllSyncedNotes();
-        
-        // Fetch actual note data for each synced note
-        const notesWithData = await Promise.all(
-          notes.map(async (syncedNote) => {
-            try {
-              const noteData = await storageService.readNote(syncedNote.id);
+    }
+    
+    try {
+      // Check if we have recently cached notes
+      const now = Date.now();
+      if (!bypassCache && notesCache && now - lastNotesFetchTime < NOTES_CACHE_DURATION) {
+        // Use cached notes
+        if (isComponentMounted.current) {
+          setSyncedNotes(notesCache);
+          
+          // Apply current search filter
+          if (!searchTerm.trim()) {
+            setFilteredNotes(notesCache);
+          } else {
+            const term = searchTerm.toLowerCase();
+            const filtered = notesCache.filter(note => 
+              note.title.toLowerCase().includes(term)
+            );
+            setFilteredNotes(filtered);
+          }
+        }
+        return notesCache;
+      }
+      
+      // Get notes directly from backend
+      const backendNotes = await syncService.getNotesFromBackend();
+      
+      // Fetch actual note data for each synced note
+      const notesWithData = await Promise.all(
+        backendNotes.map(async (note) => {
+          try {
+            // Check if note exists locally
+            const noteData = await storageService.readNote(note.id);
+            
+            if (noteData) {
               return {
-                ...syncedNote,
-                title: noteData ? (noteData.visibleTitle || noteContentService.getFirstLine(noteData.content)) : 'Untitled'
+                ...note,
+                id: note.id,
+                title: noteData.visibleTitle || noteContentService.getFirstLine(noteData.content) || 'Untitled',
+                status: 'synced',
+                lastSynced: syncService.getSyncStatus(note.id).lastSynced || new Date().toISOString(),
+                size: syncService.getSyncStatus(note.id).size || 0
               };
-            } catch (error) {
-              console.error(`Failed to load note ${syncedNote.id}:`, error);
+            } else {
+              // Note exists on backend but not locally, use backend data
               return {
-                ...syncedNote,
-                title: 'Untitled'
+                ...note,
+                id: note.id,
+                title: note.visibleTitle || noteContentService.getFirstLine(note.content) || 'Untitled',
+                status: 'synced',
+                lastSynced: syncService.getSyncStatus(note.id).lastSynced || new Date().toISOString(),
+                size: syncService.getSyncStatus(note.id).size || 0
               };
             }
-          })
-        );
-        
+          } catch (error) {
+            console.error(`Failed to load note ${note.id}:`, error);
+            return {
+              id: note.id,
+              title: note.visibleTitle || 'Untitled',
+              status: 'synced',
+              lastSynced: syncService.getSyncStatus(note.id).lastSynced || new Date().toISOString(),
+              size: syncService.getSyncStatus(note.id).size || 0
+            };
+          }
+        })
+      );
+      
+      // Update cache
+      notesCache = notesWithData;
+      lastNotesFetchTime = now;
+      
+      if (isComponentMounted.current) {
         setSyncedNotes(notesWithData);
-        setFilteredNotes(notesWithData);
-      } catch (error) {
-        console.error('Failed to load synced notes:', error);
-      } finally {
+        
+        // Apply current search filter
+        if (!searchTerm.trim()) {
+          setFilteredNotes(notesWithData);
+        } else {
+          const term = searchTerm.toLowerCase();
+          const filtered = notesWithData.filter(note => 
+            note.title.toLowerCase().includes(term)
+          );
+          setFilteredNotes(filtered);
+        }
+      }
+      
+      return notesWithData;
+    } catch (error) {
+      console.error('Failed to load notes from backend:', error);
+      showStatusMessage('Failed to load notes: ' + error.message, 'error');
+      return [];
+    } finally {
+      if (showLoader && isComponentMounted.current) {
         setIsLoading(false);
       }
+    }
+  }, [searchTerm]);
+
+  // Initial load of notes from backend
+  useEffect(() => {
+    // Set mounted flag
+    isComponentMounted.current = true;
+    
+    // Load notes when user is available
+    if (currentUser && currentUser.id) {
+      loadNotesFromBackend();
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      isComponentMounted.current = false;
     };
+  }, [currentUser, loadNotesFromBackend]);
 
-    loadSyncedNotes();
-
+  // Subscribe to sync status changes to update note list
+  useEffect(() => {
+    // Debounced handler for sync updates
+    const handleSyncUpdates = () => {
+      // Clear any existing timeout to prevent race conditions
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+      
+      // Set a small delay to debounce multiple rapid changes
+      updateTimeoutRef.current = setTimeout(() => {
+        if (isComponentMounted.current) {
+          // Refresh notes list without showing loading indicator
+          loadNotesFromBackend(false);
+        }
+      }, 300);
+    };
+    
     // Subscribe to sync status changes
-    const unsubscribe = syncService.subscribe(() => {
-      loadSyncedNotes();
-    });
-
+    const unsubscribe = syncService.subscribe(handleSyncUpdates);
+    
+    // Cleanup function
     return () => {
       unsubscribe();
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
     };
-  }, []);
+  }, [loadNotesFromBackend]);
 
   useEffect(() => {
     // Filter notes based on search term
@@ -78,19 +215,24 @@ const SyncSection = ({ onNoteSelect, onClose }) => {
     }
   }, [searchTerm, syncedNotes]);
 
+  const handleSort = (key) => {
+    setSortConfig(prevConfig => ({
+      key,
+      direction: prevConfig.key === key && prevConfig.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  // Apply sorting to notes
   useEffect(() => {
-    // Sort notes based on sortConfig
     const sortedNotes = [...filteredNotes].sort((a, b) => {
       if (sortConfig.key === 'size') {
-        // Size is a numeric value - Fix the sort direction
-        return sortConfig.direction === 'desc' 
+        return sortConfig.direction === 'asc' 
           ? a.size - b.size 
           : b.size - a.size;
       } else if (sortConfig.key === 'lastSynced') {
-        // Date sorting - Fix the sort direction
         const dateA = a.lastSynced ? new Date(a.lastSynced) : new Date(0);
         const dateB = b.lastSynced ? new Date(b.lastSynced) : new Date(0);
-        return sortConfig.direction === 'desc' 
+        return sortConfig.direction === 'asc' 
           ? dateA - dateB 
           : dateB - dateA;
       } else {
@@ -111,13 +253,7 @@ const SyncSection = ({ onNoteSelect, onClose }) => {
     setAutoSync(newValue);
     localStorage.setItem('autoSyncEnabled', newValue);
     syncService.setAutoSync(newValue);
-  };
-
-  const handleSort = (key) => {
-    setSortConfig(prevConfig => ({
-      key,
-      direction: prevConfig.key === key && prevConfig.direction === 'asc' ? 'desc' : 'asc'
-    }));
+    showStatusMessage(`Auto-sync ${newValue ? 'enabled' : 'disabled'}`, 'info');
   };
 
   const formatDate = (dateString) => {
@@ -135,8 +271,19 @@ const SyncSection = ({ onNoteSelect, onClose }) => {
   };
 
   const handleRemoveFromSync = async (noteId) => {
-    if (window.confirm('Are you sure you want to remove this note from sync?')) {
+    try {
+      showStatusMessage(`Removing note from sync...`, 'info');
       await syncService.removeFromSync(noteId);
+      
+      // Force cache refresh
+      notesCache = null;
+      
+      // Update the list after removal
+      await loadNotesFromBackend(false, true);
+      
+      showStatusMessage(`Note removed from sync`, 'success');
+    } catch (error) {
+      showStatusMessage(`Failed to remove note from sync: ${error.message}`, 'error');
     }
   };
 
@@ -161,6 +308,53 @@ const SyncSection = ({ onNoteSelect, onClose }) => {
     }
   };
 
+  const handleSyncAllNotes = async () => {
+    try {
+      // Use dedicated loading state for this operation
+      setIsSyncingAll(true);
+      
+      // Sync notes from local to server only (no need to fetch first with webhooks)
+      showStatusMessage(`Syncing local notes to server...`, 'info');
+      const result = await syncService.syncAllNotes();
+      
+      if (result.success) {
+        showStatusMessage(`Sync complete! ${result.results.succeeded} succeeded, ${result.results.failed} failed, ${result.results.skipped} already synced.`, 'success');
+        
+        // Force cache refresh
+        notesCache = null;
+        
+        // Refresh the notes list after syncing
+        await loadNotesFromBackend(false, true);
+      } else {
+        showStatusMessage(`Sync failed: ${result.error}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error syncing all notes:', error);
+      showStatusMessage(`An error occurred: ${error.message}`, 'error');
+    } finally {
+      if (isComponentMounted.current) {
+        setIsSyncingAll(false);
+      }
+    }
+  };
+
+  const handleSyncSingleNote = async (noteId) => {
+    try {
+      showStatusMessage(`Syncing note...`, 'info');
+      await syncService.syncNote(noteId);
+      
+      // Force cache refresh
+      notesCache = null;
+      
+      // Refresh the notes list after syncing one note
+      await loadNotesFromBackend(false, true);
+      
+      showStatusMessage(`Note synced successfully`, 'success');
+    } catch (error) {
+      showStatusMessage(`Failed to sync note: ${error.message}`, 'error');
+    }
+  };
+
   const renderSortIcon = (key) => {
     if (sortConfig.key !== key) return null;
     
@@ -173,121 +367,149 @@ const SyncSection = ({ onNoteSelect, onClose }) => {
     setSearchTerm('');
   };
 
+  // Render the status icon for the status message
+  const renderStatusIcon = (type) => {
+    switch (type) {
+      case 'success':
+        return <CheckCircle size={18} className="status-icon success" />;
+      case 'error':
+        return <AlertCircle size={18} className="status-icon error" />;
+      case 'info':
+      default:
+        return <Info size={18} className="status-icon info" />;
+    }
+  };
+
   return (
     <div className="sync-section">
-      <div className="sync-header">
-        <h3>Cloud Sync</h3>
-        <p>Sync your notes to the cloud for access across devices</p>
+      <h2>Cloud Sync</h2>
+      <p>Sync your notes to the cloud for access across devices</p>
+      
+      {/* Status message area */}
+      {statusMessage && (
+        <div className={`status-message ${statusMessage.type}`}>
+          {renderStatusIcon(statusMessage.type)}
+          <span>{statusMessage.text}</span>
+        </div>
+      )}
+      
+      <div className="sync-storage-info">
         <SyncBar />
       </div>
+      
+      <div className="sync-options">
+        <div className="auto-sync-option">
+          <ItemPresets.TEXT_SWITCH
+            label="Auto sync notes when changed"
+            subtext="Automatically sync notes whenever they're modified"
+            value={autoSync}
+            onChange={handleAutoSyncChange}
+          />
+        </div>
 
-      <div className="auto-sync-option">
-        <ItemPresets.TEXT_SWITCH
-          label="Auto-sync notes when changed"
-          subtext="Automatically sync notes whenever they're modified"
-          value={autoSync}
-          onChange={handleAutoSyncChange}
-        />
+        <div className="sync-button-container">
+          <ItemPresets.TEXT_BUTTON
+            label="Sync All Notes"
+            subtext="Sync all local notes to the server"
+            buttonText={isSyncingAll ? "Syncing..." : "Sync All Notes"}
+            onClick={handleSyncAllNotes}
+            primary="true"
+          />
+        </div>
       </div>
 
-      <div className="sync-notes-table">
-        <div className="sync-table-header">
-          <h4>Synced Notes</h4>
-          <div className="search-container">
-            <div className="search-input-wrapper">
-              <Search size={14} className="search-icon" />
-              <input
-                type="text"
-                placeholder="Search notes..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="search-input"
-              />
-              {searchTerm && (
-                <button 
-                  className="clear-search-button" 
-                  onClick={handleClearSearch}
-                  title="Clear search"
-                >
-                  <XCircle size={14} />
-                </button>
-              )}
-            </div>
+      <div className="synced-notes-container">
+        <h3>Synced Notes</h3>
+        
+        <div className="search-container">
+          <div className="search-input-wrapper">
+            <Search size={16} className="search-icon" />
+            <input 
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search notes..."
+              className="search-input"
+            />
+            {searchTerm && (
+              <button className="clear-search-button" onClick={handleClearSearch}>
+                <XCircle size={16} />
+              </button>
+            )}
           </div>
         </div>
-        {isLoading ? (
-          <div className="sync-loading">Loading synced notes...</div>
-        ) : filteredNotes.length === 0 ? (
-          <div className="sync-empty">
-            {searchTerm ? 'No matching notes found.' : 'No synced notes found. Right-click on a note to sync it.'}
+
+        {filteredNotes.length === 0 ? (
+          <div className="no-synced-notes">
+            {isLoading ? (
+              <div className="loading-indicator">Loading...</div>
+            ) : (
+              <>
+                <p>No synced notes found. Use "Sync All Notes" button to sync your notes.</p>
+              </>
+            )}
           </div>
         ) : (
-          <table className="sync-table">
-            <thead>
-              <tr>
-                <th 
-                  className="sortable-header"
-                  onClick={() => handleSort('title')}
-                >
-                  <div className="header-content">
+          <div className="synced-notes-table">
+            <table>
+              <thead>
+                <tr>
+                  <th onClick={() => handleSort('title')}>
                     Note {renderSortIcon('title')}
-                  </div>
-                </th>
-                <th 
-                  className="sortable-header"
-                  onClick={() => handleSort('lastSynced')}
-                >
-                  <div className="header-content">
+                  </th>
+                  <th onClick={() => handleSort('lastSynced')}>
                     Last Synced {renderSortIcon('lastSynced')}
-                  </div>
-                </th>
-                <th 
-                  className="sortable-header"
-                  onClick={() => handleSort('size')}
-                >
-                  <div className="header-content">
+                  </th>
+                  <th onClick={() => handleSort('size')}>
                     Size {renderSortIcon('size')}
-                  </div>
-                </th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredNotes.map(note => (
-                <tr key={note.id}>
-                  <td>
-                    <button
-                      className="note-link"
-                      onClick={() => handleOpenNote(note.id)}
-                      title={note.title || 'Untitled'}
-                    >
-                      <span className="truncated-title">
-                        {note.title || 'Untitled'}
-                      </span>
-                    </button>
-                  </td>
-                  <td>{formatDate(note.lastSynced)}</td>
-                  <td>{formatSize(note.size)}</td>
-                  <td>
-                    <button
-                      className="icon-button"
-                      onClick={() => syncService.syncNote(note.id)}
-                      title="Resync"
-                    >
-                      <RefreshCw size={16} />
-                    </button>
-                    <button
-                      className="icon-button"
-                      onClick={() => handleRemoveFromSync(note.id)}
-                      title="Remove from sync"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
+                  </th>
+                  <th>Status</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredNotes.map((note) => (
+                  <tr key={note.id}>
+                    <td 
+                      className="note-title" 
+                      onClick={() => handleOpenNote(note.id)}
+                    >
+                      {note.title || 'Untitled'}
+                    </td>
+                    <td>{formatDate(note.lastSynced)}</td>
+                    <td>{formatSize(note.size)}</td>
+                    <td>
+                      <div className={`sync-status ${note.status}`}>
+                        {note.status === 'synced' ? 'Synced' : 
+                         note.status === 'syncing' ? 'Syncing...' : 
+                         note.status === 'failed' ? 'Failed' : 'Not synced'}
+                      </div>
+                    </td>
+                    <td>
+                      <div className="note-actions">
+                        <button 
+                          className="action-button refresh-icon"
+                          onClick={() => handleSyncSingleNote(note.id)}
+                          title="Sync this note"
+                          disabled={note.status === 'syncing'}
+                        >
+                          <RefreshCw size={16} className={note.status === 'syncing' ? 'rotating' : ''} />
+                        </button>
+                        <button 
+                          className="action-button delete-icon"
+                          onClick={() => handleRemoveFromSync(note.id)}
+                          title="Remove from sync"
+                          disabled={note.status === 'syncing'}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -296,74 +518,106 @@ const SyncSection = ({ onNoteSelect, onClose }) => {
           display: flex;
           flex-direction: column;
           gap: 16px;
+          padding: 0 10px;
         }
         
-        .sync-header {
-          margin-bottom: 16px;
+        h2 {
+          margin-bottom: 4px;
+          font-size: 20px;
         }
         
-        .sync-header h3 {
-          margin: 0 0 8px 0;
-          font-size: 18px;
-        }
-        
-        .sync-header p {
+        p {
           margin: 0 0 16px 0;
           color: #999;
           font-size: 14px;
+        }
+
+        .sync-storage-info {
+          margin: 10px 0;
+        }
+        
+        .status-message {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 12px;
+          border-radius: 4px;
+          margin-bottom: 16px;
+          font-size: 14px;
+        }
+        
+        .status-message.success {
+          background-color: rgba(10, 163, 79, 0.1);
+          color: #0aa34f;
+          border-left: 3px solid #0aa34f;
+        }
+        
+        .status-message.error {
+          background-color: rgba(239, 68, 68, 0.1);
+          color: #ef4444;
+          border-left: 3px solid #ef4444;
+        }
+        
+        .status-message.info {
+          background-color: rgba(59, 130, 246, 0.1);
+          color: #3b82f6;
+          border-left: 3px solid #3b82f6;
+        }
+        
+        .status-icon.success {
+          color: #0aa34f;
+        }
+        
+        .status-icon.error {
+          color: #ef4444;
+        }
+        
+        .status-icon.info {
+          color: #3b82f6;
         }
         
         .auto-sync-option {
           margin-bottom: 16px;
         }
         
-        .sync-notes-table {
-          border: 1px solid #e0e0e0;
-          border-radius: 4px;
-          overflow: hidden;
+        .sync-button-container {
+          display: flex;
+          gap: 10px;
+          margin-top: 20px;
+          margin-bottom: 10px;
         }
 
-        .sync-table-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          background-color: #f5f5f5;
-          border-bottom: 1px solid #e0e0e0;
-          padding: 8px 12px;
+        .synced-notes-container {
+          margin-top: 10px;
         }
         
-        .sync-table-header h4 {
-          margin: 0;
+        .synced-notes-container h3 {
           font-size: 16px;
+          margin-bottom: 12px;
         }
-
+        
         .search-container {
-          position: relative;
-          min-width: 180px;
-          width: 30%;
-          max-width: 220px;
-          margin-left: 8px;
+          margin-bottom: 12px;
         }
-
+        
         .search-input-wrapper {
           position: relative;
           display: flex;
           align-items: center;
         }
-
+        
         .search-icon {
           position: absolute;
           left: 8px;
           color: #999;
         }
-
+        
         .search-input {
           width: 100%;
-          padding: 6px 30px 6px 30px;
+          padding: 8px 30px 8px 30px;
           border-radius: 4px;
           border: 1px solid #e0e0e0;
           font-size: 14px;
-          background-color: #fff;
         }
         
         .search-input:focus {
@@ -371,10 +625,6 @@ const SyncSection = ({ onNoteSelect, onClose }) => {
           border-color: #0aa34f;
         }
         
-        .dark-mode .search-input:focus {
-          border-color: #1c7a43;
-        }
-
         .clear-search-button {
           position: absolute;
           right: 8px;
@@ -384,132 +634,166 @@ const SyncSection = ({ onNoteSelect, onClose }) => {
           cursor: pointer;
           color: #999;
         }
-
+        
         .clear-search-button:hover {
           color: #666;
         }
         
-        .sync-table {
+        .no-synced-notes {
+          text-align: center;
+          padding: 30px 0;
+          color: #999;
+        }
+        
+        .loading-indicator {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          padding: 20px;
+          font-style: italic;
+          color: #999;
+        }
+        
+        .synced-notes-table {
+          width: 100%;
+          overflow-x: auto;
+        }
+        
+        table {
           width: 100%;
           border-collapse: collapse;
         }
         
-        .sync-table th,
-        .sync-table td {
+        th, td {
           padding: 10px;
           text-align: left;
           border-bottom: 1px solid #e0e0e0;
+          font-size: 14px;
         }
         
-        .sync-table th {
-          background-color: #f5f5f5;
+        th {
           font-weight: 500;
-        }
-
-        .sortable-header {
           cursor: pointer;
           user-select: none;
-        }
-
-        .sortable-header:hover {
-          background-color: #eaeaea;
-        }
-
-        .header-content {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-
-        .sort-icon {
-          color: #0aa34f;
+          color: #666;
         }
         
-        .sync-loading,
-        .sync-empty {
-          padding: 24px;
-          text-align: center;
-          color: #999;
+        th:hover {
+          background-color: #f5f5f5;
         }
         
-        .icon-button {
-          background: none;
-          border: none;
+        .note-title {
           cursor: pointer;
-          padding: 4px;
-          margin-right: 4px;
-          border-radius: 4px;
-          color: #999;
-          transition: background-color 0.2s, color 0.2s;
+          color: #0aa34f;
+          font-weight: 500;
         }
         
-        .icon-button:hover {
-          background-color: #f0f0f0;
-          color: #333;
-        }
-
-        .note-link {
-          background: none;
-          border: none;
-          padding: 0;
-          font-family: inherit;
-          font-size: inherit;
-          color: #0aa34f;
-          cursor: pointer;
-          text-align: left;
-          text-decoration: none;
-          display: block;
-          width: 100%;
-        }
-
-        .note-link:hover {
+        .note-title:hover {
           text-decoration: underline;
         }
+        
+        .note-actions {
+          display: flex;
+          gap: 8px;
+        }
+        
+        .action-button {
+          background: none;
+          border: none;
+          padding: 4px;
+          cursor: pointer;
+          border-radius: 4px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background-color 0.2s;
+        }
+        
+        .action-button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+        
+        .refresh-icon {
+          color: #4a90e2;
+        }
+        
+        .refresh-icon:hover:not(:disabled) {
+          background-color: rgba(74, 144, 226, 0.1);
+        }
+        
+        .delete-icon {
+          color: #ef4444;
+        }
+        
+        .delete-icon:hover:not(:disabled) {
+          background-color: rgba(239, 68, 68, 0.1);
+        }
+        
+        /* Add rotation animation for refresh icon */
+        @keyframes rotate {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
 
-        .truncated-title {
+        .rotating {
+          animation: rotate 1.5s linear infinite;
+        }
+        
+        .sync-status {
+          font-size: 12px;
+          padding: 2px 6px;
+          border-radius: 10px;
           display: inline-block;
-          max-width: 200px;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          text-align: center;
+        }
+        
+        .sync-status.synced {
+          background-color: rgba(10, 163, 79, 0.1);
+          color: #0aa34f;
+        }
+        
+        .sync-status.syncing {
+          background-color: rgba(234, 179, 8, 0.1);
+          color: #eab308;
+        }
+        
+        .sync-status.failed {
+          background-color: rgba(239, 68, 68, 0.1);
+          color: #ef4444;
+        }
+        
+        .sync-status.not-synced {
+          background-color: rgba(107, 114, 128, 0.1);
+          color: #6b7280;
         }
         
         /* Dark mode styles */
-        .dark-mode .sync-notes-table {
-          border-color: #404040;
+        .dark-mode .status-message.success {
+          background-color: rgba(10, 163, 79, 0.2);
         }
         
-        .dark-mode .sync-table-header {
-          background-color: #1f1f1f;
-          border-bottom-color: #404040;
+        .dark-mode .status-message.error {
+          background-color: rgba(239, 68, 68, 0.2);
         }
-
+        
+        .dark-mode .status-message.info {
+          background-color: rgba(59, 130, 246, 0.2);
+        }
+        
         .dark-mode .search-input {
           background-color: #2a2a2a;
           border-color: #404040;
           color: #fff;
         }
         
-        .dark-mode .sync-table th,
-        .dark-mode .sync-table td {
-          border-bottom-color: #404040;
-        }
-        
-        .dark-mode .sync-table th {
-          background-color: #1f1f1f;
-        }
-
-        .dark-mode .sortable-header:hover {
+        .dark-mode th:hover {
           background-color: #2a2a2a;
         }
-
-        .dark-mode .note-link {
-          color: #1c7a43;
-        }
         
-        .dark-mode .icon-button:hover {
-          background-color: #323232;
-          color: #ffffff;
+        .dark-mode th, 
+        .dark-mode td {
+          border-bottom-color: #404040;
         }
       `}</style>
     </div>

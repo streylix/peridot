@@ -2,8 +2,8 @@
 
 // API base URL for server endpoints
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://notes.peridot.software/v1' 
-  : 'http://localhost:8000/api';
+  ? 'https://notes.peridot.software/api' 
+  : '/api';
 
 class StorageService {
   constructor() {
@@ -13,7 +13,8 @@ class StorageService {
     this.DEBOUNCE_MS = 1;
     this.db = null;
     this.storageType = null;
-    this.authToken = localStorage.getItem('authToken');
+    this.currentUserId = localStorage.getItem('currentUserId');
+    this.migrateUnassociatedNotes = false;
     this.noteContentService = {
       getFirstLine: (content) => {
         // Return 'Untitled' for any empty, null, or undefined content
@@ -81,7 +82,7 @@ class StorageService {
               
             case 'server':
               // Initialize server-backed storage
-              if (this.authToken) {
+              if (this.currentUserId) {
                 this.storageType = 'server';
                 // Fetch initial data from server
                 try {
@@ -93,7 +94,7 @@ class StorageService {
                   this.storageType = 'opfs';
                 }
               } else {
-                console.warn('Server storage selected but no auth token available');
+                console.warn('Server storage selected but no user ID available');
                 await this.initIndexedDB();
                 this.storageType = 'opfs';
               }
@@ -228,7 +229,7 @@ class StorageService {
   }
   
   async writeNoteToServer(noteId, noteData) {
-    if (!this.authToken) return false;
+    if (!this.currentUserId) return false;
     
     try {
       // Convert note to Django format if needed
@@ -237,8 +238,8 @@ class StorageService {
       // Try to update first
       let response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
         method: 'PUT',
+        credentials: 'include', // Include cookies for session auth
         headers: {
-          'Authorization': `Bearer ${this.authToken}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(djangoNote)
@@ -248,8 +249,8 @@ class StorageService {
       if (response.status === 404) {
         response = await fetch(`${API_BASE_URL}/notes/`, {
           method: 'POST',
+          credentials: 'include', // Include cookies for session auth
           headers: {
-            'Authorization': `Bearer ${this.authToken}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(djangoNote)
@@ -279,13 +280,22 @@ class StorageService {
     const savePromise = new Promise((resolve, reject) => {
       const timeoutId = setTimeout(async () => {
         try {
+          // Add the current user ID to the note data for local storage
+          let dataToSave = { ...noteData };
+          
+          // Always set userId on notes for local storage types
+          if (this.storageType !== 'server') {
+            // Log which userId we're using
+            console.log(`Setting userId ${this.currentUserId} on note ${noteId}`);
+            dataToSave.userId = this.currentUserId;
+          }
+          
           switch (this.storageType) {
             case 'opfs': {
               const notesDir = await this.root.getDirectoryHandle('notes', { create: true });
               const fileHandle = await notesDir.getFileHandle(`${noteId}.json`, { create: true });
               
               // Handle encryption state for OPFS
-              let dataToSave = noteData;
               if (noteData.locked && !noteData.encrypted) {
                 const passwordsDir = await this.root.getDirectoryHandle('passwords', { create: true });
                 try {
@@ -294,7 +304,7 @@ class StorageService {
                   const password = await passFile.text();
                   
                   const { encryptNote } = await import('./encryption');
-                  dataToSave = await encryptNote(noteData, password);
+                  dataToSave = await encryptNote(dataToSave, password);
                 } catch (error) {
                   console.error('Failed to re-encrypt note:', error);
                 }
@@ -307,11 +317,11 @@ class StorageService {
             }
   
             case 'localstorage':
-              await this.writeNoteToLocalStorage(noteId, noteData);
+              await this.writeNoteToLocalStorage(noteId, dataToSave);
               break;
   
             case 'indexeddb':
-              await this.writeNoteToIndexedDB(noteId, noteData);
+              await this.writeNoteToIndexedDB(noteId, dataToSave);
               break;
   
             case 'server':
@@ -335,7 +345,7 @@ class StorageService {
     });
   
     // If using server storage and authenticated, also update server
-    if (this.storageType === 'server' && this.authToken) {
+    if (this.storageType === 'server' && this.currentUserId) {
       this.writeNoteToServer(noteId, noteData).catch(error => {
         console.error('Failed to write note to server:', error);
       });
@@ -350,7 +360,7 @@ class StorageService {
     }
     
     // If using server storage and authenticated, try to fetch from server first
-    if (this.storageType === 'server' && this.authToken) {
+    if (this.storageType === 'server' && this.currentUserId) {
       try {
         const serverNote = await this.readNoteFromServer(noteId);
         if (serverNote) {
@@ -401,13 +411,13 @@ class StorageService {
   }
 
   async readNoteFromServer(noteId) {
-    if (!this.authToken) return null;
+    if (!this.currentUserId) return null;
     
     try {
       const response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
         method: 'GET',
+        credentials: 'include', // Include cookies for session auth
         headers: {
-          'Authorization': `Bearer ${this.authToken}`,
           'Content-Type': 'application/json'
         }
       });
@@ -432,10 +442,14 @@ class StorageService {
       await this.init();
     }
     
+    console.log("getAllNotes - currentUserId:", this.currentUserId);
+    
     // If using server storage and authenticated, try to fetch all notes from server
-    if (this.storageType === 'server' && this.authToken) {
+    if (this.storageType === 'server' && this.currentUserId) {
       try {
-        return await this.getAllNotesFromServer();
+        const serverNotes = await this.getAllNotesFromServer();
+        console.log("Server returned notes:", serverNotes.length);
+        return serverNotes;
       } catch (error) {
         console.error('Failed to get all notes from server:', error);
         // Fall back to local storage
@@ -454,10 +468,11 @@ class StorageService {
         );
       }
 
+      let notes = [];
+      
       switch (this.storageType) {
         case 'opfs':
           const notesDir = await this.root.getDirectoryHandle('notes', { create: true });
-          const notes = [];
           for await (const [name, handle] of notesDir.entries()) {
             if (name.endsWith('.json')) {
               const file = await handle.getFile();
@@ -465,24 +480,53 @@ class StorageService {
               notes.push(JSON.parse(contents));
             }
           }
-          return notes;
+          break;
 
         case 'indexeddb':
           const tx = this.db.transaction('notes', 'readonly');
           const store = tx.objectStore('notes');
-          return await store.getAll();
+          notes = await store.getAll();
+          break;
 
         case 'localstorage':
-          const localNotes = [];
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
             if (key.startsWith('note_')) {
               const note = JSON.parse(localStorage.getItem(key));
-              localNotes.push(note);
+              notes.push(note);
             }
           }
-          return localNotes;
+          break;
       }
+      
+      console.log("Retrieved notes before filtering:", notes.length);
+      
+      // Filter notes by user ID for local storage types
+      if (this.currentUserId && this.storageType !== 'server') {
+        const filteredNotes = notes.filter(note => {
+          // For migrated notes that don't have userId yet
+          if (!note.userId) {
+            if (this.migrateUnassociatedNotes) {
+              // Assign the current userId to the note and save it back
+              console.log(`Migrating note ${note.id} to user ${this.currentUserId}`);
+              note.userId = this.currentUserId;
+              this.writeNote(note.id, note).catch(err => {
+                console.error('Failed to migrate note ownership:', err);
+              });
+              return true;
+            }
+            return false; // Don't include notes without userId when not migrating
+          }
+          
+          // Only include notes that belong to the current user
+          return note.userId === this.currentUserId;
+        });
+        
+        console.log(`Filtered notes for user ${this.currentUserId}:`, filteredNotes.length);
+        return filteredNotes;
+      }
+      
+      return notes;
     } catch (error) {
       console.error('Failed to get all notes:', error);
       throw error;
@@ -490,13 +534,13 @@ class StorageService {
   }
 
   async getAllNotesFromServer() {
-    if (!this.authToken) return [];
+    if (!this.currentUserId) return [];
     
     try {
       const response = await fetch(`${API_BASE_URL}/notes/`, {
         method: 'GET',
+        credentials: 'include', // Include cookies for session auth
         headers: {
-          'Authorization': `Bearer ${this.authToken}`,
           'Content-Type': 'application/json'
         }
       });
@@ -519,7 +563,7 @@ class StorageService {
     }
     
     // If using server storage and authenticated, also delete from server
-    if (this.storageType === 'server' && this.authToken) {
+    if (this.storageType === 'server' && this.currentUserId) {
       try {
         await this.deleteNoteFromServer(noteId);
       } catch (error) {
@@ -557,13 +601,13 @@ class StorageService {
   }
 
   async deleteNoteFromServer(noteId) {
-    if (!this.authToken) return false;
+    if (!this.currentUserId) return false;
     
     try {
       const response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
         method: 'DELETE',
+        credentials: 'include', // Include cookies for session auth
         headers: {
-          'Authorization': `Bearer ${this.authToken}`,
           'Content-Type': 'application/json'
         }
       });
@@ -988,7 +1032,7 @@ class StorageService {
 
   // Sync all notes from server to local storage
   async syncNotesFromServer() {
-    if (!this.authToken) return;
+    if (!this.currentUserId) return;
     
     try {
       const notes = await this.getAllNotesFromServer();
@@ -1000,6 +1044,11 @@ class StorageService {
       
       // Save all notes to local storage
       for (const note of notes) {
+        // Ensure each note has the user ID
+        if (!note.userId && this.currentUserId) {
+          note.userId = this.currentUserId;
+        }
+        
         if (this.db) {
           await this.writeNoteToIndexedDB(note.id, note);
         } else {
@@ -1014,44 +1063,57 @@ class StorageService {
     }
   }
 
-  // Set authentication token
-  setAuthToken(token) {
-    this.authToken = token;
-    localStorage.setItem('authToken', token);
+  // Set user ID (no longer storing auth token)
+  setAuthToken(token, userId) {
+    // Token is ignored in session-based auth
+    if (userId) {
+      console.log(`StorageService: Setting userId to ${userId}`);
+      this.currentUserId = userId.toString(); // Ensure it's a string for consistent comparison
+      localStorage.setItem('currentUserId', this.currentUserId);
+    }
     
     // If server storage type is preferred, initialize it
     const preferredStorage = localStorage.getItem('preferredStorage');
     if (preferredStorage === 'server') {
       this.storageType = 'server';
       this.syncNotesFromServer().catch(error => {
-        console.error('Failed to sync notes after setting auth token:', error);
+        console.error('Failed to sync notes after updating userId:', error);
       });
     }
   }
   
-  // Clear authentication token
+  // Clear user ID
   clearAuthToken() {
-    this.authToken = null;
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('refreshToken');
+    this.currentUserId = null;
+    localStorage.removeItem('currentUserId');
+    this.migrateUnassociatedNotes = false;
     
     // If using server storage, switch to indexedDB
     if (this.storageType === 'server') {
       this.initIndexedDB().then(() => {
         this.storageType = 'indexeddb';
       }).catch(error => {
-        console.error('Failed to initialize IndexedDB after clearing auth token:', error);
+        console.error('Failed to initialize IndexedDB after clearing user ID:', error);
       });
     }
   }
 
-  // Convert note from Django format to frontend format
+  // Convert from Django format
   convertFromDjangoFormat(note) {
-    // Django serializer already converts most fields to camelCase
-    return {
-      ...note,
-      // Add any specific field conversions needed here
+    const convertedNote = {
+      id: note.id,
+      userId: note.user || this.currentUserId, // Store the user ID from the server
+      content: note.content,
+      dateCreated: note.date_created,
+      dateModified: note.date_modified,
+      locked: note.locked || false,
+      encrypted: note.encrypted || false,
+      folderPath: note.folder_path || '',
+      pinned: note.pinned || false,
+      visibleTitle: note.visible_title || (note.content ? this.extractTitleFromContent(note.content) : 'Untitled'),
+      tags: note.tags || []
     };
+    return convertedNote;
   }
   
   // Convert note to Django format for sending to backend
@@ -1084,104 +1146,11 @@ class StorageService {
     return djangoNote;
   }
 
-  // Handle authentication with the Django backend
-  async authenticate(username, password) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/token/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ username, password })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Authentication failed: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      // Store tokens
-      this.authToken = data.access;
-      localStorage.setItem('authToken', data.access);
-      
-      if (data.refresh) {
-        localStorage.setItem('refreshToken', data.refresh);
-      }
-      
-      return { success: true };
-    } catch (error) {
-      console.error('Authentication failed:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Authentication failed'
-      };
-    }
-  }
-  
-  // Refresh the JWT token
-  async refreshToken() {
-    const refreshToken = localStorage.getItem('refreshToken');
-    
-    if (!refreshToken) {
-      return { success: false, error: 'No refresh token available' };
-    }
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/token/refresh/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ refresh: refreshToken })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Token refresh failed: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      // Update access token
-      this.authToken = data.access;
-      localStorage.setItem('authToken', data.access);
-      
-      return { success: true };
-    } catch (error) {
-      console.error('Token refresh failed:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Token refresh failed'
-      };
-    }
-  }
-  
-  // Logout and clear tokens
-  async logout() {
-    const refreshToken = localStorage.getItem('refreshToken');
-    
-    if (refreshToken) {
-      try {
-        await fetch(`${API_BASE_URL}/logout/`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.authToken}`
-          },
-          body: JSON.stringify({ refresh: refreshToken })
-        });
-      } catch (error) {
-        console.error('Logout API call failed:', error);
-        // Continue with local logout even if API call fails
-      }
-    }
-    
-    // Clear tokens
-    this.authToken = null;
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('refreshToken');
-    
-    return { success: true };
+  // Configure whether to automatically migrate unassociated notes to the current user
+  // This is useful for migrating existing notes to the new user-based system
+  setMigrateUnassociatedNotes(shouldMigrate) {
+    console.log(`Setting migrateUnassociatedNotes to ${shouldMigrate}`);
+    this.migrateUnassociatedNotes = shouldMigrate;
   }
 }
 

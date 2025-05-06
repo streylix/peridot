@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Modal, ItemPresets, ItemComponents } from './Modal';
 import { storageService } from '../utils/StorageService';
-import { Sun, Moon, Bug, Save, Trash2, Upload, Monitor } from 'lucide-react';
+import { Sun, Moon, Bug, Save, Trash2, Upload, Monitor, LogOut } from 'lucide-react';
 import { passwordStorage } from '../utils/PasswordStorageService';
 import { noteImportExportService } from '../utils/NoteImportExportService';
 import { noteSortingService } from '../utils/NoteSortingService';
@@ -13,8 +13,21 @@ import ResponsiveModal from './ResponsiveModal';
 import SyncSection from './SyncSection';
 import { syncService } from '../utils/SyncService';
 
+// New component for Account Info - Updated Styling
+const AccountInfo = ({ username, email }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' /* Add some space between items */ }}>
+    <ItemComponents.TEXT 
+      label="Username" 
+      subtext={username || 'N/A'} 
+    />
+    <ItemComponents.TEXT 
+      label="Email" 
+      subtext={email || 'N/A'} 
+    />
+  </div>
+);
 
-function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
+function Settings({ isOpen, onClose, setNotes, onNoteSelect, currentUser, onLogout }) {
   const fileInputRef = useRef(null);
   const [theme, setTheme] = useState('system');
   const [fileType, setFileType] = useState(() => localStorage.getItem('preferredFileType') || 'json');
@@ -240,6 +253,35 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
       label: 'General',
       items: [
         {
+          content: (
+            <ItemPresets.SUBSECTION title="Account">
+              <div style={{ marginBottom: '15px' }}>
+                <AccountInfo username={currentUser?.username} email={currentUser?.email} />
+              </div>
+              <ItemPresets.TEXT_BUTTON
+                label="Logout Session"
+                subtext="Securely end your current session."
+                buttonText={
+                  <span style={{
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    color: '#ff4444'
+                  }}>
+                    <LogOut size={16} style={{ marginRight: '8px' }} /> 
+                    Logout
+                  </span>
+                }
+                onClick={() => {
+                  if (onLogout) onLogout();
+                  onClose();
+                }}
+                primary="warning"
+              />
+            </ItemPresets.SUBSECTION>
+          )
+        },
+        {
           content: <ItemPresets.SUBSECTION title="Appearance">
             <ItemPresets.TEXT_DROPDOWN
               label="Theme"
@@ -316,7 +358,7 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
       label: 'Sync',
       items: [
         {
-          content: <SyncSection onNoteSelect={onNoteSelect} onClose={onClose} />
+          content: <SyncSection onNoteSelect={onNoteSelect} onClose={onClose} currentUser={currentUser} />
         }
       ],
       icon: () => {

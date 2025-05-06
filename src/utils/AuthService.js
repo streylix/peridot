@@ -2,19 +2,75 @@
 
 import { storageService } from './StorageService';
 
+// Update API paths to match the Django backend endpoints
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://notes.peridot.software/v1' 
-  : 'http://localhost:8000/api';
+  ? 'https://notes.peridot.software/api' 
+  : '/api';
 
 class AuthService {
   constructor() {
-    this.authToken = localStorage.getItem('authToken');
-    this.refreshToken = localStorage.getItem('refreshToken');
-    this.tokenExpiry = localStorage.getItem('tokenExpiry');
+    this.currentUserId = localStorage.getItem('currentUserId');
     this.subscribers = new Set();
+    this.serverAvailable = true;
     
-    // Setup token refresh
-    this.setupTokenRefresh();
+    console.log("AuthService initialized with userId:", this.currentUserId);
+    this.checkAuthStatus(); // Check auth status on initialization
+  }
+  
+  /**
+   * Check current authentication status
+   */
+  async checkAuthStatus() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/check-auth/`, {
+        method: 'GET',
+        credentials: 'include', // Include cookies for session authentication
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Auth status check:", data);
+        
+        if (data.isAuthenticated && data.user) {
+          // Update local user info
+          this.currentUserId = data.user.id.toString();
+          localStorage.setItem('currentUserId', this.currentUserId);
+          
+          // Update storage service
+          storageService.setAuthToken(null, this.currentUserId);
+          
+          // Notify subscribers
+          this.notifySubscribers(true);
+          return { success: true, user: data.user };
+        }
+      }
+      
+      // If not authenticated, clear local user info
+      if (this.currentUserId) {
+        localStorage.removeItem('currentUserId');
+        this.currentUserId = null;
+        this.notifySubscribers(false);
+      }
+      
+      return { success: false };
+    } catch (error) {
+      console.error("Auth status check failed:", error);
+      
+      // If we have a local user ID, we can operate in local mode
+      if (this.currentUserId) {
+        this.serverAvailable = false;
+        return { 
+          success: true, 
+          user: { id: this.currentUserId },
+          localOnly: true 
+        };
+      }
+      
+      return { success: false, error: error.message };
+    }
   }
   
   /**
@@ -22,36 +78,33 @@ class AuthService {
    */
   async login(username, password) {
     try {
-      const response = await fetch(`${API_BASE_URL}/token/`, {
+      const response = await fetch(`${API_BASE_URL}/login/`, {
         method: 'POST',
+        credentials: 'include', // Include cookies for session authentication
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ email: username, password: password })
       });
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Authentication failed: ${response.status}`);
+        throw new Error(errorData.error || `Authentication failed: ${response.status}`);
       }
       
       const data = await response.json();
+      this.serverAvailable = true;
       
-      // Store tokens
-      this.authToken = data.access;
-      this.refreshToken = data.refresh;
+      console.log("Login successful, user:", data.user);
       
-      localStorage.setItem('authToken', data.access);
-      localStorage.setItem('refreshToken', data.refresh);
+      // Store user ID
+      if (data.user && data.user.id) {
+        this.currentUserId = data.user.id.toString();
+        localStorage.setItem('currentUserId', this.currentUserId);
+      }
       
-      // Store expiry time (tokens typically valid for 5 minutes)
-      const expiryTime = new Date();
-      expiryTime.setMinutes(expiryTime.getMinutes() + 5);
-      this.tokenExpiry = expiryTime.toISOString();
-      localStorage.setItem('tokenExpiry', this.tokenExpiry);
-      
-      // Also update storage service
-      storageService.setAuthToken(data.access);
+      // Update storage service with user ID
+      storageService.setAuthToken(null, this.currentUserId);
       
       // Notify subscribers of authentication state change
       this.notifySubscribers(true);
@@ -59,6 +112,24 @@ class AuthService {
       return { success: true, user: data.user || {} };
     } catch (error) {
       console.error('Login failed:', error);
+      
+      // Check if this is a network error (server unavailable)
+      if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+        this.serverAvailable = false;
+        console.log("Server appears to be unavailable - switching to local mode");
+        
+        // If we have a userId, we can still work in local-only mode
+        if (this.currentUserId) {
+          // Notify subscribers we're authenticated (but in local mode)
+          this.notifySubscribers(true);
+          return { 
+            success: true, 
+            user: { id: this.currentUserId },
+            localOnly: true
+          };
+        }
+      }
+      
       return { 
         success: false, 
         error: error.message || 'Authentication failed'
@@ -67,85 +138,19 @@ class AuthService {
   }
   
   /**
-   * Refresh the authentication token
+   * Log out
    */
-  async refreshAuthToken() {
-    if (!this.refreshToken) {
-      return { success: false, error: 'No refresh token available' };
-    }
+  async logout(notifyServer = true) {
+    console.log("Logging out user");
     
-    try {
-      const response = await fetch(`${API_BASE_URL}/token/refresh/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ refresh: this.refreshToken })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Token refresh failed: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      // Update access token
-      this.authToken = data.access;
-      localStorage.setItem('authToken', data.access);
-      
-      // Update expiry time (tokens typically valid for 5 minutes)
-      const expiryTime = new Date();
-      expiryTime.setMinutes(expiryTime.getMinutes() + 5);
-      this.tokenExpiry = expiryTime.toISOString();
-      localStorage.setItem('tokenExpiry', this.tokenExpiry);
-      
-      // Also update storage service
-      storageService.setAuthToken(data.access);
-      
-      return { success: true };
-    } catch (error) {
-      console.error('Token refresh failed:', error);
-      this.logout(); // Force logout on token refresh failure
-      return { 
-        success: false, 
-        error: error.message || 'Token refresh failed'
-      };
-    }
-  }
-  
-  /**
-   * Set up automatic token refresh
-   */
-  setupTokenRefresh() {
-    // Check for token expiration every minute
-    setInterval(() => {
-      if (!this.authToken || !this.tokenExpiry) return;
-      
-      const now = new Date();
-      const expiry = new Date(this.tokenExpiry);
-      
-      // Refresh if token expires in less than 1 minute
-      if (expiry - now < 60000) {
-        this.refreshAuthToken().catch(error => {
-          console.error('Auto token refresh failed:', error);
-        });
-      }
-    }, 60000); // Check every minute
-  }
-  
-  /**
-   * Log out and invalidate tokens
-   */
-  async logout() {
-    if (this.refreshToken) {
+    if (notifyServer && this.serverAvailable) {
       try {
         await fetch(`${API_BASE_URL}/logout/`, {
           method: 'POST',
+          credentials: 'include', // Include cookies for session authentication
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.authToken}`
-          },
-          body: JSON.stringify({ refresh: this.refreshToken })
+            'Content-Type': 'application/json'
+          }
         });
       } catch (error) {
         console.error('Logout API call failed:', error);
@@ -153,16 +158,12 @@ class AuthService {
       }
     }
     
-    // Clear tokens
-    this.authToken = null;
-    this.refreshToken = null;
-    this.tokenExpiry = null;
+    // Clear user ID
+    this.currentUserId = null;
+    localStorage.removeItem('currentUserId');
+    this.serverAvailable = true; // Reset server availability
     
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('tokenExpiry');
-    
-    // Clear auth token in storage service
+    // Clear auth in storage service
     storageService.clearAuthToken();
     
     // Notify subscribers of authentication state change
@@ -175,42 +176,9 @@ class AuthService {
    * Check if user is currently authenticated
    */
   isAuthenticated() {
-    return !!this.authToken;
-  }
-  
-  /**
-   * Verify if current token is valid
-   */
-  async verifyToken() {
-    if (!this.authToken) {
-      return { valid: false };
-    }
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/token/verify/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ token: this.authToken })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Token verification failed: ${response.status}`);
-      }
-      
-      return { valid: true };
-    } catch (error) {
-      console.error('Token verification failed:', error);
-      
-      // Try refreshing the token if available
-      if (this.refreshToken) {
-        const refreshResult = await this.refreshAuthToken();
-        return { valid: refreshResult.success };
-      }
-      
-      return { valid: false };
-    }
+    const result = !!this.currentUserId;
+    console.log("isAuthenticated check:", result, "UserId:", this.currentUserId);
+    return result;
   }
   
   /**
@@ -225,7 +193,104 @@ class AuthService {
    * Notify subscribers of authentication state changes
    */
   notifySubscribers(isAuthenticated) {
+    console.log("Notifying subscribers of auth state change:", isAuthenticated);
     this.subscribers.forEach(callback => callback(isAuthenticated));
+  }
+
+  /**
+   * Get current user information
+   */
+  async getUserInfo() {
+    console.log("Getting user info");
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/check-auth/`, {
+        method: 'GET',
+        credentials: 'include', // Include cookies for session authentication
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to get user info: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      this.serverAvailable = true;
+      
+      if (!data.isAuthenticated) {
+        console.log("Server reports user is not authenticated");
+        
+        // If we have a local user ID, we can operate in local mode
+        if (this.currentUserId) {
+          console.log("Using local mode with stored userId");
+          return { 
+            success: true, 
+            user: { id: this.currentUserId },
+            localOnly: true 
+          };
+        }
+        
+        return { success: false, error: 'Not authenticated' };
+      }
+      
+      console.log("User info retrieved:", data.user);
+      
+      // Update current user ID
+      if (data.user && data.user.id) {
+        this.currentUserId = data.user.id.toString();
+        localStorage.setItem('currentUserId', this.currentUserId);
+        storageService.setAuthToken(null, this.currentUserId);
+      }
+      
+      return { success: true, user: data.user };
+    } catch (error) {
+      console.error('Failed to get user info:', error);
+      
+      // Check if this is a network error (server unavailable)
+      if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+        this.serverAvailable = false;
+        console.log("Server appears to be unavailable - switching to local mode");
+        
+        // If we have a userId, we can still work in local-only mode
+        if (this.currentUserId) {
+          return { 
+            success: true, 
+            user: { id: this.currentUserId },
+            localOnly: true
+          };
+        }
+      }
+      
+      return { success: false, error: error.message };
+    }
+  }
+  
+  /**
+   * Force reload user status
+   */
+  async reloadUserStatus() {
+    console.log("Reloading user status");
+    
+    try {
+      // Just call getUserInfo directly
+      return await this.getUserInfo();
+    } catch (error) {
+      console.error("Error reloading user status:", error);
+      
+      // If network error and we have userId, use local mode
+      if ((error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) && this.currentUserId) {
+        this.serverAvailable = false;
+        return { 
+          success: true, 
+          user: { id: this.currentUserId },
+          localOnly: true
+        };
+      }
+      
+      return { success: false, error: error.message };
+    }
   }
 }
 

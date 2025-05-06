@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import Settings from './components/Settings';
@@ -8,6 +9,7 @@ import PDFExportModal from './components/PDFExportModal';
 import MainContent from './components/MainContent.jsx';
 import PasswordModal from './components/PasswordModal.jsx';
 import RenameModal from './components/RenameModal.jsx';
+import AuthPage from './components/LoginPage';
 
 import { encryptNote, decryptNote, reEncryptNote, permanentlyUnlockNote } from './utils/encryption';
 import { passwordStorage } from './utils/PasswordStorageService';
@@ -19,27 +21,262 @@ import { noteImportExportService } from './utils/NoteImportExportService.js';
 import { noteSortingService } from './utils/NoteSortingService.js';
 import { FolderService } from './utils/folderUtils.js';
 import { syncService } from './utils/SyncService.js';
+import { authService } from './utils/AuthService.js';
+import { themeService } from './utils/ThemeService';
+import { buildTools, processDynamicContent } from './utils/NoteTools';
+import { downloadAsZip } from './utils/DownloadUtils';
+
+function MainAppLayout({
+  currentUser, 
+  onLogout, 
+  isSettingsOpen, setIsSettingsOpen,
+  selectedId, handleNoteSelect,
+  gifToAdd, setGifToAdd,
+  notes, setNotes,
+  isGifModalOpen, setIsGifModalOpen,
+  isPdfExportModalOpen, setIsPdfExportModalOpen,
+  pdfExportNote, setPdfExportNote,
+  isRenameModalOpen, setRenameModalOpen,
+  itemToRename, setItemToRename,
+  togglePin,
+  deleteNote,
+  handleBack,
+  handleGifModalOpen,
+  handleAddGif,
+  updateNote,
+  handleToggleSidebar,
+  appSidebarRef,
+  isLocalMode
+}) {
+  const sidebarRef = useRef();
+
+  return (
+    <div className="app">
+      <Header
+        onSettingsClick={() => setIsSettingsOpen(true)}
+        selectedId={selectedId}
+        notes={notes}
+        onTogglePin={togglePin}
+        onDeleteNote={deleteNote}
+        onBack={handleBack}
+        canGoBack={noteNavigation.canGoBack()}
+        onGifModalOpen={handleGifModalOpen}
+        setPdfExportNote={setPdfExportNote}
+        setIsPdfExportModalOpen={setIsPdfExportModalOpen}
+        onToggleSidebar={handleToggleSidebar}
+      />
+      <div className="main-container">
+        <Sidebar
+          ref={sidebarRef}
+          selectedId={selectedId}
+          onNoteSelect={handleNoteSelect}
+          notes={notes}
+          setNotes={setNotes}
+          onDeleteNote={deleteNote}
+          onTogglePin={togglePin}
+          setPdfExportNote={setPdfExportNote}
+          setIsPdfExportModalOpen={setIsPdfExportModalOpen}
+        />
+        <MainContent 
+          note={notes.find(note => note.id === selectedId)}
+          onUpdateNote={updateNote}
+          gifToAdd={gifToAdd} 
+          onGifAdded={setGifToAdd}
+          setNotes={setNotes}
+          onNoteSelect={handleNoteSelect}
+          notes={notes}
+        />
+      </div>
+      <Settings
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        setNotes={setNotes}
+        onNoteSelect={handleNoteSelect}
+        currentUser={currentUser}
+        onLogout={onLogout}
+      />
+      <PasswordModal />
+      <GifModal
+        isOpen={isGifModalOpen}
+        onClose={() => setIsGifModalOpen(false)}
+        onConfirm={handleAddGif}
+      />
+      <PDFExportModal 
+        isOpen={isPdfExportModalOpen}
+        onClose={() => setIsPdfExportModalOpen(false)}
+        noteTitle={pdfExportNote ? noteContentService.getFirstLine(pdfExportNote.content) : ''}
+        onExport={(pdfSettings) => {
+          if (pdfExportNote) {
+            noteImportExportService.downloadNote({
+              note: pdfExportNote,
+              fileType: 'pdf',
+              isEncrypted: pdfExportNote?.locked || false,
+              pdfSettings
+            });
+          }
+          setPdfExportNote(null);
+        }}
+      />
+      <RenameModal
+        isOpen={isRenameModalOpen}
+        onClose={() => {
+          setRenameModalOpen(false);
+          setItemToRename(null);
+        }}
+        item={itemToRename}
+        onSuccess={(updatedItem) => {
+          setNotes(prevNotes => 
+            prevNotes.map(note => 
+              note.id === updatedItem.id ? updatedItem : note
+            )
+          );
+        }}
+      />
+    </div>
+  );
+}
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [currentModal, setCurrentModal] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [gifToAdd, setGifToAdd] = useState(null);
   const [notes, setNotes] = useState([]);
   const [isGifModalOpen, setIsGifModalOpen] = useState(false);
-  const [downloadNoteId, setDownloadNoteId] = useState(null);
-  const [isDownloadable, setDownloadable] = useState(false);
   const [isPdfExportModalOpen, setIsPdfExportModalOpen] = useState(false);
   const [pdfExportNote, setPdfExportNote] = useState(null);
-  const [updateQueue, setUpdateQueue] = useState([]);
-  const processingRef = useRef(false);
   const [isRenameModalOpen, setRenameModalOpen] = useState(false);
   const [itemToRename, setItemToRename] = useState(null);
-  const [preferredFileType, setPreferredFileType] = useState(
-    localStorage.getItem('preferredFileType') || 'json'
-  );
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLocalMode, setIsLocalMode] = useState(false);
+  const appSidebarRef = useRef();
 
-  const selectedNote = notes.find(note => note.id === selectedId);
+  // Debug function to help diagnose issues
+  const debugUserState = () => {
+    console.log("--- Debug User State ---");
+    console.log("currentUser:", currentUser);
+    console.log("currentUserId:", localStorage.getItem('currentUserId'));
+    console.log("isAuthenticated:", isAuthenticated);
+    console.log("isLocalMode:", isLocalMode);
+    console.log("storageService.currentUserId:", storageService.currentUserId);
+    console.log("------------------------");
+  };
+
+  // Initialize - check if user is logged in
+  useEffect(() => {
+    // Add a safety timeout to prevent infinite loading
+    const loadingTimeout = setTimeout(() => {
+      if (isLoading) {
+        console.log("Loading timeout reached - forcing completion");
+        setIsLoading(false);
+      }
+    }, 5000); // 5 second timeout
+
+    const checkAuth = async () => {
+      setIsLoading(true);
+      try {
+        // Check authentication status with Django backend
+        const response = await fetch('/api/check-auth/', {
+          method: 'GET',
+          credentials: 'include', // Include cookies for session-based auth
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log("Auth check response:", data);
+          
+          if (data.isAuthenticated && data.user) {
+            console.log("User is authenticated:", data.user);
+            setCurrentUser(data.user);
+            setIsAuthenticated(true);
+            
+            // Set the user ID in local storage and storage service
+            localStorage.setItem('currentUserId', data.user.id.toString());
+            storageService.setAuthToken(null, data.user.id.toString());
+            storageService.setMigrateUnassociatedNotes(true);
+            
+            // Initialize sync service with the user ID
+            syncService.setAuthToken(data.user.id.toString());
+          } else {
+            // Server says user is not authenticated
+            console.log("User is not authenticated");
+            setIsAuthenticated(false);
+            setCurrentUser(null);
+            setIsLocalMode(false);
+            
+            // Check if we have a userId in localStorage for local mode
+            const storedUserId = localStorage.getItem('currentUserId');
+            if (storedUserId) {
+              console.log("Found stored user ID, using local mode:", storedUserId);
+              setCurrentUser({ id: storedUserId });
+              setIsAuthenticated(true);
+              setIsLocalMode(true);
+              
+              // Initialize sync service with the stored user ID for local mode
+              syncService.setAuthToken(storedUserId);
+            } else {
+              // Clear sync service auth
+              syncService.setAuthToken(null);
+            }
+          }
+        } else {
+          // Server error or offline - try local mode if we have a user ID
+          console.log("Auth check failed with status:", response.status);
+          const storedUserId = localStorage.getItem('currentUserId');
+          
+          if (storedUserId) {
+            console.log("Using local mode with stored user ID:", storedUserId);
+            setCurrentUser({ id: storedUserId });
+            setIsAuthenticated(true);
+            setIsLocalMode(true);
+            
+            // Initialize sync service with the stored user ID for local mode
+            syncService.setAuthToken(storedUserId);
+          } else {
+            setIsAuthenticated(false);
+            setCurrentUser(null);
+            
+            // Clear sync service auth
+            syncService.setAuthToken(null);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking auth status:', error);
+        
+        // Network error - try local mode
+        const storedUserId = localStorage.getItem('currentUserId');
+        if (storedUserId) {
+          console.log("Network error - falling back to local mode");
+          setCurrentUser({ id: storedUserId });
+          setIsAuthenticated(true);
+          setIsLocalMode(true);
+          
+          // Initialize sync service with the stored user ID for local mode
+          syncService.setAuthToken(storedUserId);
+        } else {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+          
+          // Clear sync service auth
+          syncService.setAuthToken(null);
+        }
+      } finally {
+        setIsLoading(false);
+        clearTimeout(loadingTimeout);
+        debugUserState();
+      }
+    };
+    
+    checkAuth();
+    
+    return () => {
+      clearTimeout(loadingTimeout);
+    };
+  }, []);
 
   useEffect(() => {
     const handleNoteUpdate = (event) => {
@@ -47,7 +284,6 @@ function App() {
         note.id === event.detail.note.id ? event.detail.note : note
       ));
     };
-  
     window.addEventListener('noteUpdate', handleNoteUpdate);
     return () => window.removeEventListener('noteUpdate', handleNoteUpdate);
   }, []);
@@ -57,7 +293,6 @@ function App() {
       setItemToRename(event.detail.item);
       setRenameModalOpen(true);
     };
-
     window.addEventListener('openRenameModal', handleRenameModal);
     return () => window.removeEventListener('openRenameModal', handleRenameModal);
   }, []);
@@ -90,31 +325,78 @@ function App() {
   useEffect(() => {
     const loadNotes = async () => {
       try {
-        const savedNotes = await storageService.getAllNotes();
-        setNotes(noteSortingService.sortNotes(savedNotes));
+        // Clear notes first to avoid showing previous user's notes
+        setNotes([]);
+        setSelectedId(null);
+        
+        if (currentUser && currentUser.id) {
+          // Debug output
+          console.log("Loading notes for user:", currentUser.id);
+          console.log("StorageService userId:", storageService.currentUserId);
+          console.log("Local mode:", isLocalMode);
+          
+          // Ensure StorageService is configured to use this user's ID
+          storageService.setAuthToken(null, currentUser.id);
+          
+          // Enable migration of unassociated notes to this user
+          storageService.setMigrateUnassociatedNotes(true);
+          
+          // If not in local mode, fetch notes from backend first
+          if (!isLocalMode) {
+            console.log("Fetching and merging backend notes...");
+            try {
+              const mergeResult = await syncService.mergeBackendWithLocalNotes();
+              console.log("Merge result:", mergeResult);
+              
+              // If we added or updated notes, update the UI
+              if (mergeResult.success && (mergeResult.added > 0 || mergeResult.updated > 0)) {
+                console.log(`Added ${mergeResult.added} notes, updated ${mergeResult.updated} notes from backend`);
+              }
+            } catch (syncError) {
+              console.error("Failed to sync with backend:", syncError);
+              // Continue with loading local notes even if sync fails
+            }
+          }
+          
+          // Load notes for the current user
+          const savedNotes = await storageService.getAllNotes();
+          console.log("Loaded notes:", savedNotes.length, savedNotes);
+          
+          const sortedNotes = noteSortingService.sortNotes(savedNotes);
+          setNotes(sortedNotes);
+          
+          // If we have notes and no selection, select the first note
+          if (sortedNotes.length > 0 && !selectedId) {
+            handleNoteSelect(sortedNotes[0].id);
+          }
+        }
       } catch (error) {
         console.error('Failed to load notes:', error);
       }
     };
-    loadNotes();
-  }, []);
+    
+    if (currentUser && currentUser.id) {
+      loadNotes();
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     const saveNotes = async () => {
       try {
-        await Promise.all(notes.map(note => 
-          storageService.writeNote(note.id, note)
-        ));
+        if (currentUser && notes.length > 0) { 
+          await Promise.all(notes.map(note => 
+            storageService.writeNote(note.id, note)
+          ));
+        }
       } catch (error) {
         console.error('Failed to save notes:', error);
       }
     };
     saveNotes();
-  }, [notes]);
+  }, [notes, currentUser]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'system';
-    
     if (savedTheme === 'system') {
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       document.body.classList.toggle('dark-mode', prefersDark);
@@ -146,29 +428,19 @@ function App() {
     if (window.confirm('Are you sure you want to delete this note?')) {
       try {
         const itemToDelete = notes.find(note => note.id === noteId);
-        
         if (FolderService.isFolder(itemToDelete)) {
-          // If it's a folder, delete all its contents first
           const childItems = notes.filter(note => note.parentFolderId === noteId);
-          
-          // Delete all child items
           for (const childItem of childItems) {
             await storageService.deleteNote(childItem.id);
           }
         }
-        
-        // Delete the note/folder itself
         await storageService.deleteNote(noteId);
-        
-        // Update notes state, removing the deleted item and its children
         setNotes(prevNotes => 
           prevNotes.filter(note => 
             note.id !== noteId && 
             note.parentFolderId !== noteId
           )
         );
-        
-        // Clear selection if the deleted item was selected
         if (noteId === selectedId) {
           setSelectedId(null);
         }
@@ -211,78 +483,117 @@ function App() {
     await noteUpdateService.queueUpdate(selectedId, updates, updateModified);
   };
 
-  const sidebarRef = useRef();
-
   const handleToggleSidebar = () => {
-    if (sidebarRef.current && sidebarRef.current.toggleSidebar) {
-      sidebarRef.current.toggleSidebar();
+    if (appSidebarRef.current && appSidebarRef.current.toggleSidebar) {
+      appSidebarRef.current.toggleSidebar();
+    }
+  };
+
+  const handleLoginSuccess = (userData) => {
+    console.log("Login success with userData:", userData);
+    setCurrentUser(userData);
+    setIsAuthenticated(true);
+    setIsLocalMode(!!userData.localOnly);
+    
+    // Ensure user ID is set in storage service
+    if (userData.id) {
+      localStorage.setItem('currentUserId', userData.id.toString());
+      storageService.setAuthToken(null, userData.id);
+      // Set flag to auto-associate existing notes with this user
+      storageService.setMigrateUnassociatedNotes(true);
+      
+      // Initialize sync service with the user ID
+      syncService.setAuthToken(userData.id.toString());
+    }
+    
+    debugUserState();
+  };
+
+  const handleLogout = async () => {
+    try {
+      if (!isLocalMode) {
+        // Only call the server logout if we're not in local mode
+        const response = await fetch('/api/logout/', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          console.error('Server logout failed:', response.status);
+        }
+      }
+      
+      // Always clear local state
+      localStorage.removeItem('currentUserId');
+      storageService.clearAuthToken();
+      syncService.setAuthToken(null); // Clear sync service auth token
+      setCurrentUser(null);
+      setIsAuthenticated(false);
+      setIsLocalMode(false);
+      setNotes([]);
+      setSelectedId(null);
+    } catch (error) {
+      console.error('Logout failed:', error);
+      
+      // Even if server logout fails, clear local state
+      localStorage.removeItem('currentUserId');
+      storageService.clearAuthToken();
+      syncService.setAuthToken(null); // Clear sync service auth token
+      setCurrentUser(null);
+      setIsAuthenticated(false);
+      setIsLocalMode(false);
+      setNotes([]);
+      setSelectedId(null);
     }
   };
 
   useEffect(() => {
-    // Update URL when selected note changes
+    if (!currentUser) return;
     if (selectedId) {
       const note = notes.find(note => note.id === selectedId);
       if (note) {
-        // Create URL-friendly slug from note title
         const title = note.visibleTitle || noteContentService.getFirstLine(note.content) || 'untitled';
         const slug = title.toLowerCase()
-          .replace(/[^\w\s-]/g, '') // Remove special characters
-          .replace(/\s+/g, '-') // Replace spaces with hyphens
-          .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
-          .slice(0, 100); // Limit length
-        
-        // Get folder path if note is in a folder
+          .replace(/[^\w\s-]/g, '')
+          .replace(/\s+/g, '-')
+          .replace(/-+/g, '-')
+          .slice(0, 100);
         let folderPath = '';
         let currentFolderId = note.parentFolderId;
-        
         if (currentFolderId) {
           const folderPathSegments = [];
           while (currentFolderId) {
             const folder = notes.find(n => n.id === currentFolderId);
             if (!folder) break;
-            
-            // Create folder slug
-            const folderName = folder.visibleTitle || 
-              noteContentService.getFirstLine(folder.content) || 
-              'folder';
+            const folderName = folder.visibleTitle || noteContentService.getFirstLine(folder.content) || 'folder';
             const folderSlug = folderName.toLowerCase()
               .replace(/[^\w\s-]/g, '')
               .replace(/\s+/g, '-')
               .replace(/-+/g, '-');
-            
             folderPathSegments.unshift(folderSlug);
             currentFolderId = folder.parentFolderId;
           }
           folderPath = folderPathSegments.join('/');
-          if (folderPath) {
-            folderPath += '/';
-          }
+          if (folderPath) folderPath += '/';
         }
-        
-        // Update URL without reloading the page
-        // Always include the noteId in the URL, even for untitled notes
         const urlSlug = (slug && slug !== 'untitled') ? `${slug}` : 'untitled';
-        window.history.pushState(
-          { noteId: selectedId }, 
-          '', 
-          `/${folderPath}${urlSlug}#${selectedId}`
-        );
+        window.history.pushState({ noteId: selectedId }, '', `/${folderPath}${urlSlug}#${selectedId}`);
       }
     } else {
-      // Reset URL to home when no note is selected
       window.history.pushState({}, '', '/');
     }
-  }, [selectedId, notes]);
+  }, [selectedId, notes, currentUser]);
 
   useEffect(() => {
-    // Handle browser navigation (back/forward)
     const handlePopState = (event) => {
+      if (!currentUser) return;
       if (event.state && event.state.noteId) {
         setSelectedId(event.state.noteId);
         noteNavigation.push(event.state.noteId);
       } else {
-        // Try to extract note ID from URL hash
         const hash = window.location.hash;
         if (hash && hash.startsWith('#')) {
           const noteId = parseInt(hash.substring(1));
@@ -292,21 +603,12 @@ function App() {
             return;
           }
         }
-        
-        // Try to match by pathname
         const pathname = window.location.pathname;
         if (pathname && pathname !== '/') {
-          // Remove leading and trailing slashes
           const path = pathname.replace(/^\/|\/$/g, '');
-          
-          // Split path by segments
           const segments = path.split('/');
           const lastSegment = segments[segments.length - 1];
-          
-          // Try to find a matching note
           let matchedNote = null;
-          
-          // Special case for untitled notes
           if (lastSegment === 'untitled' && hash && hash.startsWith('#')) {
             const noteId = parseInt(hash.substring(1));
             if (!isNaN(noteId)) {
@@ -318,163 +620,146 @@ function App() {
               }
             }
           }
-          
           for (const note of notes) {
             const title = note.visibleTitle || noteContentService.getFirstLine(note.content) || '';
             const noteSlug = title.toLowerCase()
               .replace(/[^\w\s-]/g, '')
               .replace(/\s+/g, '-')
               .replace(/-+/g, '-');
-            
             if (noteSlug === lastSegment) {
               matchedNote = note;
-              
-              // If there are multiple path segments, ensure folder structure matches
               if (segments.length > 1 && note.parentFolderId) {
                 let currentFolderId = note.parentFolderId;
                 let matchesPath = true;
-                
-                // Traverse up the folder hierarchy
                 for (let i = segments.length - 2; i >= 0; i--) {
                   const folder = notes.find(n => n.id === currentFolderId);
-                  if (!folder) {
-                    matchesPath = false;
-                    break;
-                  }
-                  
-                  const folderName = folder.visibleTitle || 
-                    noteContentService.getFirstLine(folder.content) || 
-                    'folder';
+                  if (!folder) { matchesPath = false; break; }
+                  const folderName = folder.visibleTitle || noteContentService.getFirstLine(folder.content) || 'folder';
                   const folderSlug = folderName.toLowerCase()
                     .replace(/[^\w\s-]/g, '')
                     .replace(/\s+/g, '-')
                     .replace(/-+/g, '-');
-                  
-                  if (folderSlug !== segments[i]) {
-                    matchesPath = false;
-                    break;
-                  }
-                  
+                  if (folderSlug !== segments[i]) { matchesPath = false; break; }
                   currentFolderId = folder.parentFolderId;
                 }
-                
-                if (!matchesPath) {
-                  matchedNote = null;
-                  continue;
-                }
+                if (!matchesPath) { matchedNote = null; continue; }
               }
-              
               break;
             }
           }
-          
           if (matchedNote) {
             setSelectedId(matchedNote.id);
             noteNavigation.push(matchedNote.id);
             return;
           }
         }
-        
         setSelectedId(null);
         noteNavigation.push(null);
       }
     };
-
     window.addEventListener('popstate', handlePopState);
-    
-    // Check initial URL
-    handlePopState({ state: history.state });
-    
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-    };
-  }, [notes]);
+    if (currentUser) handlePopState({ state: history.state });
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [notes, currentUser]);
+
+  // Add a loading timeout
+  useEffect(() => {
+    if (isLoading) {
+      const timeout = setTimeout(() => {
+        console.log("Forcing loading state to complete after timeout");
+        setIsLoading(false);
+      }, 5000);
+      return () => clearTimeout(timeout);
+    }
+  }, [isLoading]);
+
+  if (isLoading) {
+    return (
+      <div className="loading-container" style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        flexDirection: 'column',
+        gap: '20px'
+      }}>
+        <div>Loading application...</div>
+        <button onClick={() => setIsLoading(false)} style={{
+          padding: '8px 16px',
+          background: '#4a90e2',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer'
+        }}>
+          Skip Loading
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="app">
-      <Header
-        onSettingsClick={() => setIsSettingsOpen(true)}
-        selectedId={selectedId}
-        notes={notes}
-        onTogglePin={togglePin}
-        onDeleteNote={deleteNote}
-        onBack={handleBack}
-        canGoBack={noteNavigation.canGoBack()}
-        onDebugClick={() => setCurrentModal('small')}
-        onGifModalOpen={handleGifModalOpen}
-        setPdfExportNote={setPdfExportNote}
-        setIsPdfExportModalOpen={setIsPdfExportModalOpen}
-        onToggleSidebar={handleToggleSidebar}
-      />
-      <div className="main-container">
-        <Sidebar
-          selectedId={selectedId}
-          onNoteSelect={handleNoteSelect}
-          notes={notes}
-          setNotes={setNotes}
-          onDeleteNote={deleteNote}
-          onTogglePin={togglePin}
-          onGifAdded={setGifToAdd}
-          downloadNoteId={downloadNoteId}
-          isDownloadable={isDownloadable}
-          setDownloadable={setDownloadable}
-          setDownloadNoteId={setDownloadNoteId}
-          setPdfExportNote={setPdfExportNote}
-          setIsPdfExportModalOpen={setIsPdfExportModalOpen}
-          ref={sidebarRef}
-        />
-        <MainContent 
-          note={selectedNote}
-          onUpdateNote={updateNote}
-          gifToAdd={gifToAdd} 
-          onGifAdded={setGifToAdd}
-          setNotes={setNotes}
-          onNoteSelect={handleNoteSelect}
-          notes={notes}
-        />
-      </div>
-      <Settings
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        setNotes={setNotes}
-        onNoteSelect={handleNoteSelect}
-      />
-      <PasswordModal />
-      <GifModal
-        isOpen={isGifModalOpen}
-        onClose={() => setIsGifModalOpen(false)}
-        onConfirm={handleAddGif}
-      />
-      <PDFExportModal 
-        isOpen={isPdfExportModalOpen}
-        onClose={() => setIsPdfExportModalOpen(false)}
-        noteTitle={pdfExportNote ? noteContentService.getFirstLine(pdfExportNote.content) : ''}
-        onExport={(pdfSettings) => {
-          noteImportExportService.downloadNote({
-            note: pdfExportNote,
-            fileType: 'pdf',
-            isEncrypted: pdfExportNote?.locked || false,
-            pdfSettings
-          });
-          setPdfExportNote(null);
-        }}
-      />
-      <RenameModal
-        isOpen={isRenameModalOpen}
-        onClose={() => {
-          setRenameModalOpen(false);
-          setItemToRename(null);
-        }}
-        item={itemToRename}
-        onSuccess={(updatedItem) => {
-          setNotes(prevNotes => 
-            prevNotes.map(note => 
-              note.id === updatedItem.id ? updatedItem : note
+    <Router>
+      {isLocalMode && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: '#ff9800',
+          color: 'white',
+          textAlign: 'center',
+          padding: '4px',
+          zIndex: 9999,
+          fontSize: '14px'
+        }}>
+          Local Mode - Server Unavailable
+        </div>
+      )}
+      <Routes>
+        <Route
+          path="/auth"
+          element={
+            !isAuthenticated ? (
+              <AuthPage onLoginSuccess={handleLoginSuccess} />
+            ) : (
+              <Navigate to="/" replace />
             )
-          );
-        }}
-      />
-    </div>
+          }
+        />
+        <Route
+          path="/*"
+          element={
+            isAuthenticated ? (
+              <MainAppLayout 
+                currentUser={currentUser} 
+                onLogout={handleLogout}
+                isSettingsOpen={isSettingsOpen} setIsSettingsOpen={setIsSettingsOpen}
+                selectedId={selectedId} handleNoteSelect={handleNoteSelect}
+                gifToAdd={gifToAdd} setGifToAdd={setGifToAdd}
+                notes={notes} setNotes={setNotes}
+                isGifModalOpen={isGifModalOpen} setIsGifModalOpen={setIsGifModalOpen}
+                isPdfExportModalOpen={isPdfExportModalOpen} setIsPdfExportModalOpen={setIsPdfExportModalOpen}
+                pdfExportNote={pdfExportNote} setPdfExportNote={setPdfExportNote}
+                isRenameModalOpen={isRenameModalOpen} setRenameModalOpen={setRenameModalOpen}
+                itemToRename={itemToRename} setItemToRename={setItemToRename}
+                togglePin={togglePin}
+                deleteNote={deleteNote}
+                handleBack={handleBack}
+                handleGifModalOpen={handleGifModalOpen}
+                handleAddGif={handleAddGif}
+                updateNote={updateNote}
+                handleToggleSidebar={handleToggleSidebar}
+                appSidebarRef={appSidebarRef}
+                isLocalMode={isLocalMode}
+              />
+            ) : (
+              <Navigate to="/auth" replace />
+            )
+          }
+        />
+      </Routes>
+    </Router>
   );
 }
 

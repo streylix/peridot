@@ -1,0 +1,150 @@
+/* src/components/AuthForm.css */
+
+.auth-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 20px;
+  background-color: #f4f7f6; /* Light mode background */
+  color: #333; /* Light mode text */
+  font-family: Arial, sans-serif; /* Match body font from index.css */
+}
+
+.auth-page h2 {
+  margin-bottom: 24px;
+  color: #333; /* Light mode heading */
+  text-align: center;
+}
+
+.auth-form {
+  background: #fff; /* Light mode form background */
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 400px;
+}
+
+.auth-form div {
+  margin-bottom: 15px;
+}
+
+.auth-form label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+  color: #555; /* Light mode label */
+}
+
+.auth-form input[type="text"],
+.auth-form input[type="email"],
+.auth-form input[type="password"] {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc; /* Light mode input border */
+  border-radius: 4px;
+  box-sizing: border-box;
+  background-color: #fff; /* Light mode input background */
+  color: #333; /* Light mode input text */
+  transition: border-color 0.2s ease; /* Added transition */
+}
+
+.auth-form input[type="text"]:focus,
+.auth-form input[type="email"]:focus,
+.auth-form input[type="password"]:focus {
+  border-color: #0aa34f; /* Green focus color */
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(10, 163, 79, 0.2); /* Subtle green glow */
+}
+
+.auth-form button[type="submit"] {
+  width: 100%;
+  padding: 10px;
+  background-color: #0aa34f; /* Green button background */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  transition: background-color 0.3s ease;
+}
+
+.auth-form button[type="submit"]:hover {
+  background-color: #1c7a43; /* Darker green button hover */
+}
+
+.auth-page p {
+  margin-top: 20px;
+  color: #555; /* Light mode paragraph text */
+}
+
+.auth-page p a {
+  color: #0aa34f; /* Green link color */
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.auth-page p a:hover {
+  text-decoration: underline;
+  color: #1c7a43; /* Darker green link hover */
+}
+
+/* Dark Mode Styles */
+@media (prefers-color-scheme: dark) {
+  .auth-page {
+    background-color: #121212; /* Darker background for dark mode */
+    color: #e0e0e0;
+  }
+
+  .auth-page h2 {
+    color: #e0e0e0;
+  }
+
+  .auth-form {
+    background: #1e1e1e; /* Dark form background, matching dark-mode .info-menu */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.7);
+    border: 1px solid #333; /* Subtle border like .dark-mode .info-menu */
+  }
+
+  .auth-form label {
+    color: #bbb;
+  }
+
+  .auth-form input[type="text"],
+  .auth-form input[type="email"],
+  .auth-form input[type="password"] {
+    background-color: #2c2c2c; /* Slightly lighter than form bg for contrast */
+    color: #e0e0e0;
+    border: 1px solid #444; /* Dark mode input border */
+  }
+
+  .auth-form input[type="text"]:focus,
+  .auth-form input[type="email"]:focus,
+  .auth-form input[type="password"]:focus {
+    border-color: #19d282; /* Lighter green focus for dark mode */
+    box-shadow: 0 0 0 2px rgba(25, 210, 130, 0.2); /* Subtle lighter green glow */
+  }
+
+  .auth-form button[type="submit"] {
+    background-color: #0aa34f; /* Green button background */
+  }
+
+  .auth-form button[type="submit"]:hover {
+    background-color: #1c7a43; /* Darker green button hover */
+  }
+
+  .auth-page p {
+    color: #bbb;
+  }
+
+  .auth-page p a {
+    color: #19d282; /* Lighter green link for dark mode */
+  }
+
+  .auth-page p a:hover {
+    color: #0aa34f;
+  }
+} 

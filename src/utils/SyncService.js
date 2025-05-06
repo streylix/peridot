@@ -3,8 +3,8 @@ import { noteUpdateService } from './NoteUpdateService';
 
 // API base URL for server endpoints
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://notes.peridot.software/v1' 
-  : 'http://localhost:8000/api';
+  ? 'https://notes.peridot.software/api' 
+  : '/api';
 
 class SyncService {
   constructor() {
@@ -15,7 +15,7 @@ class SyncService {
       used: 0
     };
     this.autoSyncEnabled = localStorage.getItem('autoSyncEnabled') === 'true';
-    this.authToken = localStorage.getItem('authToken');
+    this.currentUserId = localStorage.getItem('currentUserId');
     
     // Status values: 'syncing', 'synced', 'failed', 'not-synced'
     
@@ -26,59 +26,98 @@ class SyncService {
     this.setupAutoSync();
     
     // Fetch backend storage info if authenticated
-    if (this.authToken) {
+    if (this.currentUserId) {
       this.fetchBackendStorageInfo();
     }
   }
   
-  // Set up BroadcastChannel for real-time cross-tab communication
+  // Set up broadcast channel for cross-tab sync
   setupBroadcastChannel() {
     try {
-      this.broadcastChannel = new BroadcastChannel('peridot-sync-channel');
-      
-      this.broadcastChannel.onmessage = (event) => {
-        const { type, data } = event.data;
+      if ('BroadcastChannel' in window) {
+        this.broadcastChannel = new BroadcastChannel('sync_channel');
+        this.broadcastChannel.onmessage = (event) => {
+          if (event.data.type === 'SYNC_STATUS_CHANGED') {
+            const { noteId, status } = event.data.data;
+            this.syncStatus.set(noteId, status);
+            this.notifySubscribers(noteId);
+          }
+        };
+      } else {
+        // Fallback for browsers that don't support BroadcastChannel
+        console.log('BroadcastChannel not supported in this browser, using localStorage fallback');
         
-        switch (type) {
-          case 'NOTE_UPDATED':
-            this.handleCrossBrowserNoteUpdate(data.noteId, data.note);
-            break;
-          case 'SYNC_STATUS_CHANGED':
-            this.handleCrossBrowserSyncStatusChange(data.noteId, data.status);
-            break;
+        // Check for localStorage events for sync updates
+        window.addEventListener('storage', (event) => {
+          if (event.key === 'sync_update') {
+            try {
+              const data = JSON.parse(event.newValue);
+              if (data && data.noteId && data.status) {
+                this.syncStatus.set(data.noteId, data.status);
+                this.notifySubscribers(data.noteId);
+              }
+            } catch (error) {
+              console.error('Failed to process sync update:', error);
+            }
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Failed to set up broadcast channel:', error);
+    }
+  }
+  
+  // Initialize websocket connection for real-time sync updates
+  initializeWebsocket() {
+    // If we're in development, don't set up the websocket
+    if (process.env.NODE_ENV !== 'production') {
+      return;
+    }
+    
+    try {
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${window.location.host}/api/ws/sync/`;
+      
+      this.syncSocket = new WebSocket(wsUrl);
+      
+      this.syncSocket.onopen = () => {
+        console.log('Sync websocket connected');
+        
+        // Authenticate the websocket connection
+        if (this.currentUserId) {
+          this.syncSocket.send(JSON.stringify({
+            type: 'authenticate',
+            userId: this.currentUserId
+          }));
         }
       };
-    } catch (error) {
-      console.error('BroadcastChannel not supported or failed to initialize:', error);
-      // Fall back to localStorage events for cross-tab communication
-    }
-  }
-  
-  // Handle cross-browser note update
-  async handleCrossBrowserNoteUpdate(noteId, noteData) {
-    // Update the note in local storage without triggering additional events
-    if (noteData) {
-      try {
-        // Check if we're currently viewing this note by asking any subscribers
-        const currentNote = await storageService.readNote(noteId);
-        if (currentNote) {
-          // Update the note in memory
-          const event = new CustomEvent('noteUpdate', {
-            detail: { note: noteData }
-          });
-          window.dispatchEvent(event);
+      
+      this.syncSocket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'sync_update') {
+            const { noteId, status } = data;
+            this.syncStatus.set(noteId, status);
+            this.notifySubscribers(noteId);
+          }
+        } catch (error) {
+          console.error('Failed to process sync websocket message:', error);
         }
-      } catch (error) {
-        console.error('Failed to process cross-browser note update:', error);
-      }
-    }
-  }
-  
-  // Handle cross-browser sync status change
-  handleCrossBrowserSyncStatusChange(noteId, status) {
-    if (noteId && status) {
-      this.syncStatus.set(noteId, status);
-      this.notifySubscribers(noteId);
+      };
+      
+      this.syncSocket.onclose = () => {
+        console.log('Sync websocket disconnected');
+        
+        // Try to reconnect after a delay
+        setTimeout(() => this.initializeWebsocket(), 5000);
+      };
+      
+      this.syncSocket.onerror = (error) => {
+        console.error('Sync websocket error:', error);
+      };
+    } catch (error) {
+      console.error('Failed to initialize sync websocket:', error);
     }
   }
   
@@ -106,196 +145,60 @@ class SyncService {
     }
   }
   
-  // Setup auto-sync event listener
+  // Setup auto-sync functionality
   setupAutoSync() {
-    // Listen for note update events
-    window.addEventListener('noteUpdate', this.handleNoteUpdate.bind(this));
-  }
-  
-  // Handle auto-sync when a note is updated
-  async handleNoteUpdate(event) {
-    if (!this.autoSyncEnabled) return;
-    
-    const updatedNote = event.detail.note;
-    if (!updatedNote || !updatedNote.id) return;
-    
-    // Check if this is just a caret position update or other minor update
-    // that shouldn't trigger a sync
-    const isMinorUpdate = this.isMinorNoteUpdate(updatedNote);
-    if (isMinorUpdate) {
-      return;
+    // Clear any existing subscription before creating a new one
+    if (this.noteUpdateSubscription) {
+      this.noteUpdateSubscription();
+      this.noteUpdateSubscription = null;
+      console.log('Cleared previous auto-sync subscription');
     }
     
-    // Implement cooldown to prevent excessive syncing
-    const noteId = updatedNote.id;
-    const now = Date.now();
-    if (this.lastSyncTime && this.lastSyncTime[noteId] && 
-        now - this.lastSyncTime[noteId] < 10000) { // 10 second cooldown
-      return;
-    }
-    
-    // Broadcast the note update to other tabs
-    this.broadcastNoteUpdate(updatedNote.id, updatedNote);
-    
-    // Check if this note is already synced
-    const status = this.getSyncStatus(updatedNote.id);
-    if (status && status.status === 'synced') {
-      // Auto-sync the updated note
-      await this.syncNote(updatedNote.id);
-      
-      // Update last sync time
-      if (!this.lastSyncTime) {
-        this.lastSyncTime = {};
-      }
-      this.lastSyncTime[noteId] = now;
-    }
-  }
-  
-  // Determine if an update is minor (like just caret position)
-  isMinorNoteUpdate(updatedNote) {
-    // If we have a previous version of this note stored
-    const noteId = updatedNote.id;
-    if (!this.previousNoteState) {
-      this.previousNoteState = {};
-    }
-    
-    const previousState = this.previousNoteState[noteId];
-    if (!previousState) {
-      // Store current state for future comparison
-      this.previousNoteState[noteId] = this.sanitizeNoteForComparison(updatedNote);
-      return false;
-    }
-    
-    // Create sanitized versions for comparison
-    const sanitizedPrevious = previousState;
-    const sanitizedCurrent = this.sanitizeNoteForComparison(updatedNote);
-    
-    // Compare the essential content
-    const isContentSame = sanitizedPrevious.content === sanitizedCurrent.content;
-    
-    // Update previous state for next comparison
-    this.previousNoteState[noteId] = sanitizedCurrent;
-    
-    // If content is the same, it's a minor update
-    return isContentSame;
-  }
-  
-  // Remove fields that change frequently but don't affect sync needs
-  sanitizeNoteForComparison(note) {
-    const { content, title, locked } = note;
-    return { 
-      id: note.id,
-      content, 
-      title, 
-      locked
-    };
-  }
-  
-  // Broadcast note update to other tabs
-  broadcastNoteUpdate(noteId, noteData) {
-    try {
-      if (this.broadcastChannel) {
-        this.broadcastChannel.postMessage({
-          type: 'NOTE_UPDATED',
-          data: {
-            noteId,
-            note: noteData
-          }
+    // Only set up subscription if autosync is enabled
+    if (this.autoSyncEnabled) {
+      console.log('Setting up auto-sync subscription, auth status:', !!this.currentUserId);
+      // Subscribe to note updates to automatically sync
+      this.noteUpdateSubscription = noteUpdateService.subscribe((note) => {
+        const noteId = note?.id;
+        console.log(`Auto-sync triggered for note ${noteId}`, {
+          currentUserId: this.currentUserId,
+          autoSyncEnabled: this.autoSyncEnabled,
+          isTemporary: note?.temporary,
+          authToken: !!noteUpdateService.authToken
         });
-      } else {
-        // Fallback to localStorage
-        localStorage.setItem('note_update', JSON.stringify({
-          noteId,
-          note: noteData,
-          timestamp: Date.now()
-        }));
-        // Clear it immediately to allow future updates to trigger events
-        setTimeout(() => localStorage.removeItem('note_update'), 100);
-      }
-    } catch (error) {
-      console.error('Failed to broadcast note update:', error);
+        
+        if (this.currentUserId && note && noteId) {
+          // Check if auto-sync enabled and not a temporary note
+          if (this.autoSyncEnabled && !note.temporary) {
+            console.log(`Auto-syncing note ${noteId}`);
+            this.syncNote(noteId).catch(error => {
+              console.error(`Auto-sync failed for note ${noteId}:`, error);
+            });
+          }
+        }
+      });
+    } else {
+      console.log('Auto-sync is disabled, not setting up subscription');
     }
   }
   
-  // Set auto-sync flag
-  setAutoSync(enabled) {
-    this.autoSyncEnabled = enabled;
-  }
-  
-  // Save sync metadata to localStorage
+  // Save sync data to localStorage
   persistSyncData() {
     try {
-      const syncData = {
+      // Convert Map to object for storage
+      const noteStatuses = {};
+      for (const [noteId, status] of this.syncStatus.entries()) {
+        noteStatuses[noteId] = status;
+      }
+      
+      const dataToSave = {
         backendStorage: this.backendStorage,
-        noteStatuses: Object.fromEntries(this.syncStatus)
+        noteStatuses
       };
       
-      localStorage.setItem('syncMetadata', JSON.stringify(syncData));
+      localStorage.setItem('syncMetadata', JSON.stringify(dataToSave));
     } catch (error) {
       console.error('Failed to persist sync data:', error);
-    }
-  }
-  
-  // Set up websocket connection for real-time updates
-  initializeWebsocket() {
-    // Only attempt to connect if we have authentication
-    if (!this.authToken) return;
-
-    try {
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = process.env.NODE_ENV === 'production'
-        ? `${wsProtocol}//notes.peridot.software/ws/sync`
-        : `${wsProtocol}//localhost:8000/ws/sync`;
-      
-      this.socket = new WebSocket(`${wsUrl}?token=${this.authToken}`);
-      
-      this.socket.onopen = () => {
-        console.log('WebSocket connection established');
-      };
-      
-      this.socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          if (data.type === 'NOTE_UPDATED' && data.noteId) {
-            // Remote note was updated, update local status
-            this.syncStatus.set(data.noteId, {
-              status: 'synced',
-              lastSynced: new Date().toISOString(),
-              size: data.size || 0
-            });
-            
-            this.notifySubscribers(data.noteId);
-            
-            // If we have the note open, fetch the latest version
-            storageService.readNote(data.noteId).then(note => {
-              if (note) {
-                this.fetchNoteFromBackend(data.noteId);
-              }
-            });
-          } else if (data.type === 'STORAGE_UPDATED') {
-            // Update storage limits
-            this.backendStorage = {
-              total: data.total || this.backendStorage.total,
-              used: data.used || this.backendStorage.used
-            };
-          }
-        } catch (error) {
-          console.error('Failed to process WebSocket message:', error);
-        }
-      };
-      
-      this.socket.onclose = () => {
-        console.log('WebSocket connection closed');
-        // Attempt to reconnect after a delay
-        setTimeout(() => this.initializeWebsocket(), 5000);
-      };
-      
-      this.socket.onerror = (error) => {
-        console.error('WebSocket error:', error);
-      };
-    } catch (error) {
-      console.error('Failed to initialize WebSocket:', error);
     }
   }
   
@@ -305,15 +208,186 @@ class SyncService {
     return () => this.subscribers.delete(callback);
   }
   
-  // Notify all subscribers about a sync status change
+  // Notify subscribers of sync status changes
   notifySubscribers(noteId) {
-    const status = this.syncStatus.get(noteId);
-    this.subscribers.forEach(callback => callback(noteId, status));
+    this.subscribers.forEach(callback => callback(noteId));
+  }
+  
+  // Fetch backend storage info
+  async fetchBackendStorageInfo() {
+    if (!this.currentUserId) {
+      return;
+    }
     
-    // Also dispatch a DOM event for components that aren't directly subscribed
-    window.dispatchEvent(new CustomEvent('syncStatusUpdate', {
-      detail: { noteId, status }
-    }));
+    // Check if we've fetched recently (within the last 1 minute) to reduce API spam
+    const now = Date.now();
+    if (this._lastStorageInfoFetch && now - this._lastStorageInfoFetch < 60000) {
+      return this.backendStorage;
+    }
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/storage/info/`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        this.backendStorage = {
+          total: data.total_bytes || 100 * 1024 * 1024, // Use server value or default to 100MB
+          used: data.used_bytes || 0
+        };
+        
+        // Persist the updated storage info
+        this.persistSyncData();
+        
+        // Update timestamp of last fetch
+        this._lastStorageInfoFetch = now;
+        
+        // Notify subscribers of the changed storage
+        this.notifySubscribers(null);
+        
+        return this.backendStorage;
+      } else {
+        console.error('Failed to fetch backend storage info:', response.status);
+        return this.backendStorage;
+      }
+    } catch (error) {
+      console.error('Failed to fetch backend storage info:', error);
+      return this.backendStorage;
+    }
+  }
+  
+  // Get backend storage stats
+  getBackendStorageStats() {
+    const { total, used } = this.backendStorage;
+    const available = Math.max(0, total - used);
+    const percentUsed = total > 0 ? Math.round((used / total) * 100) : 0;
+    
+    return {
+      total,
+      used,
+      available,
+      percentUsed,
+      // For human-readable formats
+      totalFormatted: this.formatBytes(total),
+      usedFormatted: this.formatBytes(used),
+      availableFormatted: this.formatBytes(available)
+    };
+  }
+  
+  // Format bytes to human-readable format
+  formatBytes(bytes, decimals = 2) {
+    if (bytes === 0) return '0 Bytes';
+    
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  }
+  
+  // Set auto-sync flag
+  setAutoSync(enabled) {
+    this.autoSyncEnabled = enabled;
+    localStorage.setItem('autoSyncEnabled', enabled.toString());
+    
+    // Reconfigure the auto-sync setup based on new setting
+    this.setupAutoSync();
+  }
+  
+  // Set authentication token (handled via session cookies now)
+  setAuthToken(userId) {
+    this.currentUserId = userId;
+    
+    // If auth state changed, update stuff
+    if (userId) {
+      // Also set auth token in noteUpdateService to enable auto-syncing
+      const authToken = localStorage.getItem('authToken');
+      if (authToken) {
+        noteUpdateService.setAuthToken(authToken);
+      }
+      
+      this.fetchBackendStorageInfo();
+      this.initializeWebsocket();
+    } else {
+      // Clear auth token in noteUpdateService
+      noteUpdateService.clearAuthToken();
+      
+      // Clear sync statuses
+      this.syncStatus.clear();
+      this.persistSyncData();
+      this.notifySubscribers(null);
+    }
+  }
+  
+  // Sync a modified note if dirty flag is set
+  async syncIfDirty(noteId) {
+    const status = this.syncStatus.get(noteId);
+    
+    if (status && status.dirty) {
+      return await this.syncNote(noteId);
+    }
+    
+    return true;
+  }
+  
+  // Mark a note as dirty (needs sync)
+  markDirty(noteId) {
+    const status = this.syncStatus.get(noteId) || {
+      status: 'not-synced',
+      lastSynced: null,
+      size: 0
+    };
+    
+    status.dirty = true;
+    this.syncStatus.set(noteId, status);
+    this.persistSyncData();
+    this.notifySubscribers(noteId);
+    
+    // If auto-sync enabled, sync the note right away
+    if (this.autoSyncEnabled && this.currentUserId) {
+      this.syncNote(noteId).catch(error => {
+        console.error(`Auto-sync failed for note ${noteId}:`, error);
+      });
+    }
+  }
+  
+  // Convert note to Django format for backend storage
+  convertToDjangoFormat(note) {
+    return {
+      id: note.id,
+      content: note.content,
+      date_created: note.dateCreated,
+      date_modified: note.dateModified,
+      locked: note.locked || false,
+      encrypted: note.encrypted || false,
+      folder_path: note.folderPath || '',
+      pinned: note.pinned || false,
+      visible_title: note.visibleTitle || '',
+      tags: note.tags || []
+    };
+  }
+  
+  // Convert from Django format to our format
+  convertFromDjangoFormat(note) {
+    return {
+      id: note.id,
+      content: note.content,
+      dateCreated: note.date_created,
+      dateModified: note.date_modified,
+      locked: note.locked || false,
+      encrypted: note.encrypted || false,
+      folderPath: note.folder_path || '',
+      pinned: note.pinned || false,
+      visibleTitle: note.visible_title || '',
+      tags: note.tags || []
+    };
   }
   
   // Broadcast sync update to other tabs
@@ -367,111 +441,11 @@ class SyncService {
     return syncedNotes;
   }
   
-  // Fetch backend storage information
-  async fetchBackendStorageInfo() {
-    if (!this.authToken) return;
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/storage/`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${this.authToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      this.backendStorage = {
-        total: data.total || this.backendStorage.total,
-        used: data.used || this.backendStorage.used
-      };
-      
-      return this.backendStorage;
-    } catch (error) {
-      console.error('Failed to fetch backend storage info:', error);
-      return this.backendStorage;
-    }
-  }
-  
-  // Fetch a note from the backend
-  async fetchNoteFromBackend(noteId) {
-    if (!this.authToken) return null;
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${this.authToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}`);
-      }
-      
-      const noteData = await response.json();
-      
-      // Convert Django response format to frontend format if needed
-      const processedNote = this.convertFromDjangoFormat(noteData);
-      
-      // Update local storage
-      await storageService.writeNote(noteId, processedNote);
-      
-      // Update sync status
-      this.syncStatus.set(noteId, {
-        status: 'synced',
-        lastSynced: new Date().toISOString(),
-        size: new Blob([JSON.stringify(processedNote)]).size
-      });
-      
-      this.notifySubscribers(noteId);
-      this.broadcastSyncUpdate(noteId, this.syncStatus.get(noteId));
-      
-      return processedNote;
-    } catch (error) {
-      console.error(`Failed to fetch note ${noteId} from backend:`, error);
-      return null;
-    }
-  }
-  
-  // Convert note from Django format to frontend format
-  convertFromDjangoFormat(djangoNote) {
-    // Django serializer already converts to camelCase, but some fields may need adjustment
-    return {
-      ...djangoNote,
-      // If there are any specific field conversions needed, add them here
-    };
-  }
-  
-  // Convert note to Django format for sending to backend
-  convertToDjangoFormat(note) {
-    // Create a copy to avoid modifying the original
-    const djangoNote = { ...note };
-    
-    // Handle caretPosition which isn't in the Django model
-    if (djangoNote.caretPosition !== undefined) {
-      // Keep it for frontend but it will be ignored by Django
-    }
-    
-    // Handle dateCreated which isn't used in PUT/POST requests
-    if (djangoNote.dateCreated !== undefined) {
-      // Keep it for frontend but it will be ignored by Django
-    }
-    
-    return djangoNote;
-  }
-  
   // Start syncing a note
   async syncNote(noteId) {
     try {
       // Check if we're authenticated
-      if (!this.authToken) {
+      if (!this.currentUserId) {
         throw new Error('Not authenticated');
       }
       
@@ -504,8 +478,8 @@ class SyncService {
       // Send note to backend
       const response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
         method: 'PUT',
+        credentials: 'include', // Include cookies for session auth
         headers: {
-          'Authorization': `Bearer ${this.authToken}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(djangoNote)
@@ -515,8 +489,8 @@ class SyncService {
       if (response.status === 404) {
         const createResponse = await fetch(`${API_BASE_URL}/notes/`, {
           method: 'POST',
+          credentials: 'include', // Include cookies for session auth
           headers: {
-            'Authorization': `Bearer ${this.authToken}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(djangoNote)
@@ -566,7 +540,7 @@ class SyncService {
   async removeFromSync(noteId) {
     try {
       // Check if we're authenticated
-      if (!this.authToken) {
+      if (!this.currentUserId) {
         throw new Error('Not authenticated');
       }
       
@@ -576,8 +550,8 @@ class SyncService {
         // Request deletion from backend
         const response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
           method: 'DELETE',
+          credentials: 'include', // Include cookies for session auth
           headers: {
-            'Authorization': `Bearer ${this.authToken}`,
             'Content-Type': 'application/json'
           }
         });
@@ -608,57 +582,9 @@ class SyncService {
     }
   }
   
-  // Set authentication token
-  setAuthToken(token) {
-    this.authToken = token;
-    localStorage.setItem('authToken', token);
-    
-    // Reinitialize websocket with new token
-    if (this.socket) {
-      this.socket.close();
-    }
-    this.initializeWebsocket();
-    
-    // Fetch backend storage info with new token
-    this.fetchBackendStorageInfo();
-  }
-  
-  // Clear authentication token
-  clearAuthToken() {
-    this.authToken = null;
-    localStorage.removeItem('authToken');
-    
-    // Close websocket
-    if (this.socket) {
-      this.socket.close();
-      this.socket = null;
-    }
-  }
-  
-  // Get backend storage stats
-  getBackendStorageStats() {
-    return {
-      total: this.backendStorage.total,
-      used: this.backendStorage.used,
-      available: this.backendStorage.total - this.backendStorage.used,
-      percentUsed: (this.backendStorage.used / this.backendStorage.total) * 100
-    };
-  }
-  
-  // Cleanup resources on unmount
-  cleanup() {
-    if (this.broadcastChannel) {
-      this.broadcastChannel.close();
-    }
-    
-    if (this.socket) {
-      this.socket.close();
-    }
-  }
-  
   // Sync all notes to the backend
   async syncAllNotes() {
-    if (!this.authToken) {
+    if (!this.currentUserId) {
       return { success: false, error: 'Not authenticated' };
     }
     
@@ -697,6 +623,169 @@ class SyncService {
       return { success: true, results };
     } catch (error) {
       console.error('Failed to sync all notes:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Fetch all notes from the backend
+  async fetchNotesFromBackend() {
+    if (!this.currentUserId) {
+      console.error('Cannot fetch notes: Not authenticated');
+      return { success: false, error: 'Not authenticated', notes: [] };
+    }
+    
+    try {
+      console.log('Fetching notes from backend...');
+      const response = await fetch(`${API_BASE_URL}/notes/`, {
+        method: 'GET',
+        credentials: 'include', // Include cookies for session auth
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+      
+      const backendNotes = await response.json();
+      console.log(`Fetched ${backendNotes.length} notes from backend`);
+      
+      // Convert notes to local format
+      const localNotes = [];
+      for (const backendNote of backendNotes) {
+        try {
+          const localNote = this.convertFromDjangoFormat(backendNote);
+          
+          // Update sync status for this note
+          this.syncStatus.set(localNote.id, {
+            status: 'synced',
+            lastSynced: new Date().toISOString(),
+            size: new Blob([JSON.stringify(localNote)]).size
+          });
+          
+          localNotes.push(localNote);
+        } catch (error) {
+          console.error(`Failed to convert note ${backendNote.id}:`, error);
+        }
+      }
+      
+      // Save updated sync statuses
+      this.persistSyncData();
+      
+      return { 
+        success: true, 
+        notes: localNotes,
+        count: localNotes.length
+      };
+    } catch (error) {
+      console.error('Failed to fetch notes from backend:', error);
+      return { 
+        success: false, 
+        error: error.message,
+        notes: []
+      };
+    }
+  }
+
+  // Get all notes directly from the backend and update sync status
+  async getNotesFromBackend() {
+    try {
+      const result = await this.fetchNotesFromBackend();
+      
+      if (!result.success) {
+        console.error('Failed to get notes from backend:', result.error);
+        return [];
+      }
+      
+      // Update the sync status of notes that exist in local storage but not in the backend
+      // by marking them as not-synced if they were previously synced
+      const backendNoteIds = new Set(result.notes.map(note => note.id));
+      
+      // Check all current synced notes
+      for (const [noteId, status] of this.syncStatus.entries()) {
+        if (status.status === 'synced' && !backendNoteIds.has(noteId)) {
+          // This note was synced but is no longer on the backend
+          this.syncStatus.set(noteId, {
+            status: 'not-synced',
+            lastSynced: null,
+            size: 0
+          });
+        }
+      }
+      
+      // Persist updated sync statuses
+      this.persistSyncData();
+      this.notifySubscribers();
+      
+      return result.notes;
+    } catch (error) {
+      console.error('Failed to get notes from backend:', error);
+      return [];
+    }
+  }
+
+  // Merge backend notes with local notes
+  async mergeBackendWithLocalNotes() {
+    try {
+      const { success, notes: backendNotes, error } = await this.fetchNotesFromBackend();
+      
+      if (!success) {
+        console.error('Failed to merge notes:', error);
+        return { success: false, error };
+      }
+      
+      if (backendNotes.length === 0) {
+        console.log('No backend notes to merge');
+        return { success: true, added: 0, updated: 0 };
+      }
+      
+      console.log(`Processing ${backendNotes.length} backend notes for merge`);
+      
+      // Get all local notes
+      const localNotes = await storageService.getAllNotes();
+      const localNoteIds = new Set(localNotes.map(note => note.id));
+      
+      let added = 0;
+      let updated = 0;
+      
+      // Process each backend note
+      for (const backendNote of backendNotes) {
+        if (localNoteIds.has(backendNote.id)) {
+          // Note exists locally - Always update with server version
+          await storageService.writeNote(backendNote.id, backendNote);
+          updated++;
+          
+          // Update sync status to reflect the sync
+          this.syncStatus.set(backendNote.id, {
+            status: 'synced',
+            lastSynced: new Date().toISOString(),
+            size: new Blob([JSON.stringify(backendNote)]).size
+          });
+        } else {
+          // Note doesn't exist locally, add it
+          await storageService.writeNote(backendNote.id, backendNote);
+          added++;
+          
+          // Set sync status for the new note
+          this.syncStatus.set(backendNote.id, {
+            status: 'synced',
+            lastSynced: new Date().toISOString(),
+            size: new Blob([JSON.stringify(backendNote)]).size
+          });
+        }
+      }
+      
+      // Persist updated sync statuses
+      this.persistSyncData();
+      
+      // Notify subscribers of changes
+      this.notifySubscribers();
+      
+      console.log(`Merge complete: Added ${added} notes, updated ${updated} notes`);
+      return { success: true, added, updated };
+    } catch (error) {
+      console.error('Error merging backend notes:', error);
       return { success: false, error: error.message };
     }
   }
