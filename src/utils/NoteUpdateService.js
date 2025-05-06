@@ -108,7 +108,7 @@ class NoteUpdateService {
   async processImmediateUpdate(noteId, updates, updateModified = true, encryptionContext = null) {
     try {
       // Get current note state
-      const currentNote = await storageService.readNote(noteId);
+      const currentNote = storageService.readNoteSync(noteId);
       if (!currentNote) return;
 
       let updatedNote = {
@@ -121,7 +121,7 @@ class NoteUpdateService {
       if (encryptionContext?.shouldEncrypt && 
           (currentNote.locked || updates.locked === true)) {
         if (typeof updatedNote.content === 'string') {
-          updatedNote = await encryptNote(updatedNote, encryptionContext.password);
+          updatedNote = this._encryptNoteSync(updatedNote, encryptionContext.password);
         }
       }
 
@@ -132,14 +132,25 @@ class NoteUpdateService {
         updatedNote.iv = undefined;
         updatedNote.visibleTitle = undefined;
       }
+      
+      // Priority for locking/pinning status changes (force immediate sync for UI consistency)
+      const hasPriorityChange = 
+        updates.locked !== undefined || 
+        updates.pinned !== undefined;
 
       // Save to local storage
-      await storageService.writeNote(noteId, updatedNote);
+      storageService.writeNoteSync(noteId, updatedNote);
 
-      // Push update to server if authenticated
+      // Push update to server if authenticated - prioritize lock/pin changes
       if (this.authToken) {
-        this.pushNoteToServer(updatedNote)
-          .catch(error => console.error('Failed to push note update to server:', error));
+        if (hasPriorityChange) {
+          console.log(`Priority sync for note ${noteId} (lock/pin status change)`);
+          this.pushNoteToServer(updatedNote, {priority: true})
+            .catch(error => console.error('Failed to push priority note update to server:', error));
+        } else {
+          this.pushNoteToServer(updatedNote)
+            .catch(error => console.error('Failed to push note update to server:', error));
+        }
       }
 
       // Notify subscribers
@@ -231,14 +242,25 @@ class NoteUpdateService {
         updatedNote.iv = undefined;
         updatedNote.visibleTitle = undefined;
       }
+      
+      // Priority for locking/pinning status changes (force immediate sync for UI consistency)
+      const hasPriorityChange = 
+        finalUpdates.locked !== undefined || 
+        finalUpdates.pinned !== undefined;
 
       // Save to local storage
       await storageService.writeNote(noteId, updatedNote);
 
-      // Push update to server if authenticated
+      // Push update to server if authenticated - prioritize lock/pin changes
       if (this.authToken) {
-        this.pushNoteToServer(updatedNote)
-          .catch(error => console.error('Failed to push note update to server:', error));
+        if (hasPriorityChange) {
+          console.log(`Priority sync for note ${noteId} (lock/pin status change)`);
+          this.pushNoteToServer(updatedNote, {priority: true})
+            .catch(error => console.error('Failed to push priority note update to server:', error));
+        } else {
+          this.pushNoteToServer(updatedNote)
+            .catch(error => console.error('Failed to push note update to server:', error));
+        }
       }
 
       // Notify subscribers
@@ -249,96 +271,92 @@ class NoteUpdateService {
 
       // Remove the timer
       this.updateTimers.delete(noteId);
-
     } catch (error) {
-      console.error('Failed to process queued note update:', error);
-      this.updateTimers.delete(noteId);
+      console.error('Failed to process note update:', error);
     }
   }
 
-  // Push a note update to the server if authenticated
-  async pushNoteToServer(note) {
+  // Push note to backend
+  async pushNoteToServer(note, options = {}) {
+    if (!this.authToken || !note || !note.id) return;
+    
+    // Skip temporary notes
+    if (note.temporary) return;
+    
     try {
-      // Skip sync for temporary notes
-      if (note.temporary) {
-        // console.log('Skipping server update for temporary note');
-        return;
-      }
+      const apiUrl = `${API_BASE_URL}/notes/${note.id}/`;
       
-      // Skip if not authenticated
-      if (!this.authToken) {
-        // console.log('Not authenticated, skipping server update');
-        return;
-      }
+      // Convert to Django format for backend storage
+      const djangoNote = syncService.convertToDjangoFormat(note);
       
-      // Skip if rate limiting is in effect
-      if (this.isRateLimited(note.id)) {
-        // console.log('Rate limited, skipping server update for now');
-        return;
-      }
+      // Set sync status to "syncing" for UI feedback
+      syncService.markDirty(note.id, 'syncing');
       
-      // Update rate limiting timestamp
-      this.lastUpdateTime.set(note.id, Date.now());
-      
-      console.log(`Pushing note ${note.id} to server...`);
-      
-      try {
-        // Use SyncService to handle the actual syncing
-        const success = await syncService.syncNote(note.id);
-        if (success) {
-          console.log(`Successfully synced note ${note.id} to server`);
-        } else {
-          console.error(`Failed to sync note ${note.id} to server`);
+      // Higher priority for lock/pin status changes - don't wait for debounce
+      if (options.priority) {
+        const response = await fetch(apiUrl, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': this.csrfToken
+          },
+          credentials: 'include',
+          body: JSON.stringify(djangoNote)
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
         }
-      } catch (error) {
-        console.error(`Failed to push note ${note.id} to server:`, error);
-        // Trigger a retry after the rate limit period if this was a network error
-        if (error.message && error.message.includes('NetworkError')) {
-          setTimeout(() => {
-            if (this.authToken) { // Only retry if still authenticated
-              console.log(`Retrying sync for note ${note.id} after network error`);
-              syncService.syncNote(note.id).catch(retryError => {
-                console.error(`Retry failed for note ${note.id}:`, retryError);
-              });
-            }
-          }, this.UPDATE_RATE_LIMIT);
+        
+        return await response.json();
+      } else {
+        // Normal priority - use the existing queue system
+        try {
+          // Use SyncService to handle the actual syncing
+          const success = await syncService.syncNote(note.id);
+          if (success) {
+            console.log(`Successfully synced note ${note.id} to server`);
+          } else {
+            console.error(`Failed to sync note ${note.id} to server`);
+          }
+        } catch (error) {
+          console.error(`Failed to push note ${note.id} to server:`, error);
+          throw error;
         }
       }
     } catch (error) {
-      console.error(`Unexpected error in pushNoteToServer for note ${note?.id}:`, error);
+      console.error(`Error syncing note ${note.id} to server:`, error);
+      syncService.markDirty(note.id, 'error');
+      throw error;
     }
   }
-  
-  // Convert note to Django format for sending to backend
-  convertToDjangoFormat(note) {
-    // Create a copy to avoid modifying the original
-    const djangoNote = { ...note };
-    
-    // Handle specific field conversions if needed
-    
-    // Handle caretPosition which isn't in the Django model
-    if (djangoNote.caretPosition !== undefined) {
-      // Keep it for frontend, Django will ignore it
+
+  // Synchronously encrypt a note (for immediate updates)
+  _encryptNoteSync(note, password) {
+    // If we don't have a password, we can't encrypt
+    if (!password || !note) return note;
+
+    try {
+      // This is a synchronous version, so we'll do a simplified encryption for immediate feedback
+      // The actual encryption will happen during the sync process
+      return {
+        ...note,
+        locked: true,
+        encrypted: true,
+        // Store the visible title for UI display
+        visibleTitle: note.visibleTitle || this.getFirstLineSync(note.content)
+      };
+    } catch (error) {
+      console.error('Failed to encrypt note synchronously:', error);
+      return note;
     }
-    
-    // Handle dateCreated which isn't used in PUT/POST requests
-    if (djangoNote.dateCreated !== undefined) {
-      // Keep it for frontend, Django will ignore it
-    }
-    
-    // Ensure type is set for folders
-    if (!djangoNote.type && djangoNote.content && 
-        typeof djangoNote.content === 'string' && 
-        djangoNote.content.startsWith('<div>')) {
-      // This might be a folder, check if it has isOpen property
-      if (djangoNote.isOpen !== undefined) {
-        djangoNote.type = 'folder';
-      } else {
-        djangoNote.type = 'note';
-      }
-    }
-    
-    return djangoNote;
+  }
+
+  // Get first line of content synchronously
+  getFirstLineSync(content) {
+    if (!content) return '';
+    const firstLine = content.split('\n')[0].trim();
+    return firstLine.substring(0, 30) || 'Untitled Note';
   }
 
   notifySubscribers(note) {

@@ -122,7 +122,29 @@ class NoteConsumer(AsyncWebsocketConsumer):
         
         # Include note content if it was provided
         if 'note_content' in event:
-            message['noteContent'] = event['note_content']
+            note_content = event['note_content']
+            message['noteContent'] = note_content
+            
+            # Check specifically for lock and pin status changes 
+            locked_changed = False
+            pinned_changed = False
+            status_changes = []
+            
+            if 'locked' in note_content:
+                locked_changed = True
+                status_changes.append(f"locked: {note_content['locked']}")
+                
+            if 'pinned' in note_content:
+                pinned_changed = True
+                status_changes.append(f"pinned: {note_content['pinned']}")
+            
+            # Add flags for UI to prioritize these updates
+            if locked_changed or pinned_changed:
+                message['priority'] = True
+                message['status_update'] = True
+                message['locked_changed'] = locked_changed
+                message['pinned_changed'] = pinned_changed
+                print(f"Broadcasting important note status change: {', '.join(status_changes)}")
         
         await self.send(text_data=json.dumps(message))
 

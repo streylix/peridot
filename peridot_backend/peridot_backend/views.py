@@ -23,7 +23,20 @@ def notify_note_update(user_id, note_id, status, note_content=None):
         # Include note content in the WebSocket message if provided
         # This allows other clients to update their local copies without making a separate request
         if note_content:
+            # Ensure boolean fields are explicitly formatted as booleans
+            if 'locked' in note_content:
+                note_content['locked'] = bool(note_content['locked'])
+            if 'pinned' in note_content:
+                note_content['pinned'] = bool(note_content['pinned'])
+            if 'encrypted' in note_content:
+                note_content['encrypted'] = bool(note_content['encrypted'])
+                
             message["note_content"] = note_content
+            
+            # Log when locked or pinned status is being changed
+            if 'locked' in note_content or 'pinned' in note_content:
+                print(f"Note {note_id} update includes important status changes: "
+                      f"locked={note_content.get('locked')}, pinned={note_content.get('pinned')}")
             
         async_to_sync(channel_layer.group_send)(
             f"user_{user_id}",
@@ -31,6 +44,8 @@ def notify_note_update(user_id, note_id, status, note_content=None):
         )
     except Exception as e:
         print(f"WebSocket notification error: {e}")
+        import traceback
+        print(traceback.format_exc())
 
 # Helper function to notify WebSocket clients about storage updates
 def notify_storage_update(user_id, storage_data):
@@ -338,33 +353,102 @@ def note_detail(request, note_id):
         try:
             data = json.loads(request.body)
             
+            # Debug log the incoming data
+            print(f"Updating note {note_id} with data: {json.dumps(data, default=str)[:500]}...")
+            
             with transaction.atomic():
                 # Calculate old and new content size
-                old_content_size = len(note.content.encode('utf-8')) if note.content else 0
-                new_content = data.get('content', note.content)
-                new_content_size = len(new_content.encode('utf-8')) if new_content else 0
+                if isinstance(note.content, list):
+                    old_content_size = len(json.dumps(note.content).encode('utf-8'))
+                else:
+                    old_content_size = len(note.content.encode('utf-8')) if note.content else 0
+                    
+                # Safely handle key_params and iv fields
+                try:
+                    # Check for both camelCase and snake_case versions of fields
+                    key_params = data.get('keyParams', data.get('key_params'))
+                    if key_params is not None:
+                        # Ensure it's a valid JSON object
+                        if not isinstance(key_params, dict):
+                            key_params = json.loads(key_params) if isinstance(key_params, str) else None
+                            print(f"Converted key_params to: {type(key_params)}")
+                    
+                    iv = data.get('iv')
+                    if iv is not None:
+                        # Ensure it's a valid JSON array
+                        if not isinstance(iv, list) and iv is not None:
+                            iv = json.loads(iv) if isinstance(iv, str) else None
+                            print(f"Converted iv to: {type(iv)}")
+                    
+                    # Handle encrypted content serialization
+                    new_content = data.get('content', note.content)
+                    if isinstance(new_content, list) and data.get('encrypted', False) and data.get('locked', False):
+                        print(f"Note {note_id} has encrypted content as list with length {len(new_content)}")
+                        # Calculate content size for lists
+                        new_content_size = len(json.dumps(new_content).encode('utf-8'))
+                    else:
+                        # Calculate content size for strings
+                        new_content_size = len(new_content.encode('utf-8')) if new_content else 0
+                except Exception as conversion_error:
+                    print(f"Error converting encryption data: {conversion_error}")
+                    # Continue with original values if conversion fails
+                    key_params = note.key_params
+                    iv = note.iv
                 
-                # Get user storage
+                # Ensure content type is consistent with encryption state
+                if data.get('locked', False) and data.get('encrypted', False):
+                    # For locked/encrypted notes, ensure content is properly handled
+                    if not isinstance(new_content, list) and new_content is not None:
+                        try:
+                            # Try to parse it if it might be a stringified array
+                            if isinstance(new_content, str) and new_content.startswith('[') and new_content.endswith(']'):
+                                new_content = json.loads(new_content)
+                                print(f"Converted string content to array for encrypted note")
+                        except Exception as content_error:
+                            print(f"Error converting encrypted content: {content_error}")
+                
+                # Update the note with proper field name handling
+                note.content = new_content
+                
+                # Log current and new locked/pinned status for debugging
+                current_locked = note.locked
+                current_pinned = note.pinned
+                new_locked = data.get('locked', note.locked)
+                new_pinned = data.get('pinned', note.pinned)
+                
+                if current_locked != new_locked:
+                    print(f"Changing lock status for note {note_id} from {current_locked} to {new_locked}")
+                
+                if current_pinned != new_pinned:
+                    print(f"Changing pin status for note {note_id} from {current_pinned} to {new_pinned}")
+                
+                note.locked = new_locked
+                note.encrypted = data.get('encrypted', note.encrypted)
+                note.folder_path = data.get('folder_path', data.get('folderPath', note.folder_path))
+                note.pinned = new_pinned
+                note.visible_title = data.get('visible_title', data.get('visibleTitle', note.visible_title))
+                note.tags = data.get('tags', note.tags)
+                
+                # Safely update encryption fields with fallback to current values
+                if 'keyParams' in data or 'key_params' in data:
+                    note.key_params = key_params
+                if 'iv' in data:
+                    note.iv = iv
+                
+                try:
+                    note.save()
+                    print(f"Note {note_id} saved successfully")
+                except Exception as save_error:
+                    print(f"Error saving note {note_id}: {save_error}")
+                    print(f"Note data: locked={note.locked}, encrypted={note.encrypted}, pinned={note.pinned}")
+                    print(f"Key params type: {type(note.key_params)}, IV type: {type(note.iv)}")
+                    raise
+                
+                # Update storage usage
                 storage = UserStorage.objects.get(user=user)
-                
-                # Check if user has enough storage for the size difference
                 size_difference = new_content_size - old_content_size
                 if size_difference > 0 and storage.used_bytes + size_difference > storage.total_bytes:
                     return JsonResponse({'error': 'Storage quota exceeded'}, status=400)
-                
-                # Update the note
-                note.content = new_content
-                note.locked = data.get('locked', note.locked)
-                note.encrypted = data.get('encrypted', note.encrypted)
-                note.folder_path = data.get('folder_path', note.folder_path)
-                note.pinned = data.get('pinned', note.pinned)
-                note.visible_title = data.get('visible_title', note.visible_title)
-                note.tags = data.get('tags', note.tags)
-                note.key_params = data.get('keyParams', note.key_params)
-                note.iv = data.get('iv', note.iv)
-                note.save()
-                
-                # Update storage usage
                 storage.used_bytes += size_difference
                 storage.save()
                 
@@ -418,9 +502,13 @@ def note_detail(request, note_id):
                     'iv': note.iv
                 })
             
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        except json.JSONDecodeError as json_error:
+            print(f"Invalid JSON format: {json_error}")
+            return JsonResponse({'error': 'Invalid JSON format'}, status=400)
         except Exception as e:
+            import traceback
+            print(f"Error updating note {note_id}: {e}")
+            print(traceback.format_exc())
             return JsonResponse({'error': str(e)}, status=500)
     
     elif request.method == 'DELETE':

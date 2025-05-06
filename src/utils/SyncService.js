@@ -417,22 +417,60 @@ class SyncService {
           break;
           
         case 'sync_update':
-          // Simple approach: when we get a sync_update message, just fetch that note from the server
+          // Handle note updates from server, including lock/pin status changes
           if (data.noteId) {
             console.log(`Received sync update for note ${data.noteId} from WebSocket`);
             
-            // Check if this is a note we're currently editing to avoid conflicts
+            // Check if this is a priority update (like lock/pin status change)
+            const isPriority = data.priority === true;
+            const isStatusUpdate = data.status_update === true;
+            const lockedChanged = data.locked_changed === true;
+            const pinnedChanged = data.pinned_changed === true;
+            
+            if (isPriority) {
+              console.log(`Priority update detected for note ${data.noteId}`);
+              
+              if (isStatusUpdate) {
+                console.log(`Status update: locked=${lockedChanged ? 'changed' : 'unchanged'}, pinned=${pinnedChanged ? 'changed' : 'unchanged'}`);
+              }
+            }
+            
+            // If we have the full note content in the message, use it directly
+                if (data.noteContent) {
+              this.updateLocalNoteFromServer(data.noteId, data.noteContent, {
+                isPriority,
+                isStatusUpdate,
+                lockedChanged,
+                pinnedChanged
+              })
+                .then(success => {
+                  if (success) {
+                    console.log(`Successfully updated note ${data.noteId} from WebSocket data`);
+                } else {
+                    console.warn(`Failed to update note ${data.noteId} from WebSocket data`);
+                    // Fallback to fetching from server
+                    this.fetchNoteFromServer(data.noteId);
+                  }
+                })
+                .catch(error => {
+                  console.error(`Error updating note ${data.noteId} from WebSocket:`, error);
+                  // Fallback to fetching from server
+                  this.fetchNoteFromServer(data.noteId);
+                });
+            } else {
+              // No note content in message, fetch from server
                   this.fetchNoteFromServer(data.noteId)
                     .then(success => {
                       if (success) {
-                  console.log(`Successfully refreshed note ${data.noteId} from server`);
-                } else {
-                  console.warn(`Failed to refresh note ${data.noteId} from server`);
-                }
-              })
-              .catch(error => {
-                console.error(`Error fetching note ${data.noteId} from server:`, error);
-              });
+                    console.log(`Successfully refreshed note ${data.noteId} from server`);
+                  } else {
+                    console.warn(`Failed to refresh note ${data.noteId} from server`);
+                  }
+                })
+                .catch(error => {
+                  console.error(`Error fetching note ${data.noteId} from server:`, error);
+                });
+            }
           }
           break;
           
@@ -465,6 +503,170 @@ class SyncService {
       }
     } catch (error) {
       console.error('Failed to process WebSocket message:', error);
+    }
+  }
+  
+  // Update a local note from server data received via WebSocket
+  async updateLocalNoteFromServer(noteId, noteContent, options = {}) {
+    if (!noteId || !noteContent) return false;
+    
+    const { isPriority, isStatusUpdate, lockedChanged, pinnedChanged } = options;
+    
+    try {
+      // Convert from server format (camelCase fields)
+      const serverNote = this.ensureCamelCase(noteContent);
+      
+      // Get the current local note to check if it's being edited
+      const localNote = await storageService.readNote(noteId);
+      
+      if (!localNote) {
+        // If note doesn't exist locally, just save the server version
+        await storageService.writeNote(noteId, serverNote);
+        
+        // Dispatch an update event with skipSync flag to prevent loops
+        window.dispatchEvent(new CustomEvent('noteUpdate', { 
+          detail: { note: {...serverNote, skipSync: true }}
+        }));
+        
+        // Update sync status
+        this.syncStatus.set(noteId, {
+          status: 'synced',
+          lastSynced: new Date().toISOString(),
+          size: new Blob([JSON.stringify(serverNote)]).size
+        });
+        
+        this.notifySubscribers(noteId);
+        this.persistSyncData();
+        return true;
+      }
+      
+      // Special handling for status updates (lock/pin changes)
+      if (isStatusUpdate) {
+        console.log(`Processing status update for note ${noteId}`);
+        
+        // Create a merged note that prioritizes lock and pin status from server
+        const mergedNote = {
+          ...localNote,
+          // Update lock/pin status based on what changed
+          ...(lockedChanged && { locked: serverNote.locked }),
+          ...(pinnedChanged && { pinned: serverNote.pinned }),
+          // Take other metadata from server where available
+          dateModified: serverNote.dateModified || localNote.dateModified,
+          folderPath: serverNote.folderPath || localNote.folderPath,
+          tags: serverNote.tags || localNote.tags
+        };
+        
+        // Special handling for encrypted notes when lock status changes
+        if (lockedChanged && serverNote.locked && serverNote.encrypted) {
+          // If the note was unlocked locally but is now locked from server
+          if (localNote.wasDecrypted || !localNote.locked) {
+            console.log(`Note ${noteId} was unlocked locally but is now locked from server`);
+            // We need to preserve the decrypted content but mark it as locked
+            mergedNote.wasDecrypted = true;
+            // Don't override content for locked notes, keep the decrypted content
+          } else {
+            // Note wasn't previously decrypted, use server content
+            mergedNote.content = serverNote.content;
+            mergedNote.iv = serverNote.iv;
+            mergedNote.keyParams = serverNote.keyParams;
+          }
+        } else if (lockedChanged && !serverNote.locked) {
+          // Note was unlocked from another client
+          console.log(`Note ${noteId} was unlocked from another client`);
+          // Take the unlocked content from server
+          mergedNote.content = serverNote.content;
+          mergedNote.encrypted = false;
+          mergedNote.wasDecrypted = false;
+          mergedNote.keyParams = undefined;
+          mergedNote.iv = undefined;
+        }
+        
+        // Update local storage with merged note
+        await storageService.writeNote(noteId, mergedNote);
+        
+        // Dispatch an update event with skipSync flag to prevent loops
+        window.dispatchEvent(new CustomEvent('noteUpdate', { 
+          detail: { note: {...mergedNote, skipSync: true }}
+        }));
+      }
+      // For priority updates (lock/pin changes), create a specialized merged note
+      else if (isPriority) {
+        console.log(`Processing priority update for note ${noteId} (lock/pin status change)`);
+        
+        // Create a merged note that prioritizes lock and pin status from server
+        const mergedNote = {
+          ...localNote,
+          // Always take lock/pin status from server
+          locked: serverNote.locked !== undefined ? serverNote.locked : localNote.locked,
+          pinned: serverNote.pinned !== undefined ? serverNote.pinned : localNote.pinned,
+          // Take other metadata from server where available
+          dateModified: serverNote.dateModified || localNote.dateModified,
+          folderPath: serverNote.folderPath || localNote.folderPath,
+          tags: serverNote.tags || localNote.tags
+        };
+        
+        // Special handling for locked notes - maintain decrypted state if possible
+        if (localNote.wasDecrypted && serverNote.locked && serverNote.encrypted) {
+          console.log(`Preserving local decrypted state while updating lock status`);
+          // Don't override content for locked notes, keep the decrypted content if we have it
+        } else if (serverNote.content) {
+          // Take server content if it's available and we're not preserving decrypted content
+          mergedNote.content = serverNote.content;
+        }
+        
+        // Update local storage with merged note
+        await storageService.writeNote(noteId, mergedNote);
+        
+        // Dispatch an update event with skipSync flag to prevent loops
+        window.dispatchEvent(new CustomEvent('noteUpdate', { 
+          detail: { note: {...mergedNote, skipSync: true }}
+        }));
+      }
+      // Special handling for encrypted notes - preserve local decrypted state if available
+      else if (localNote.wasDecrypted && serverNote.encrypted && serverNote.locked) {
+        console.log(`Preserving local decrypted state for note ${noteId} while updating lock status`);
+        
+        // Create a merged note that keeps local content but updates metadata
+        const mergedNote = {
+          ...localNote,
+          dateModified: serverNote.dateModified || localNote.dateModified,
+          folderPath: serverNote.folderPath || localNote.folderPath,
+          pinned: serverNote.pinned !== undefined ? serverNote.pinned : localNote.pinned,
+          locked: serverNote.locked, // Ensure we update the lock status
+          tags: serverNote.tags || localNote.tags
+        };
+        
+        // Update local storage with preserved note
+        await storageService.writeNote(noteId, mergedNote);
+        
+        // Dispatch an update event with skipSync flag to prevent loops
+        window.dispatchEvent(new CustomEvent('noteUpdate', { 
+          detail: { note: {...mergedNote, skipSync: true }}
+        }));
+      } else {
+        // Regular update with server content
+        await storageService.writeNote(noteId, serverNote);
+        
+        // Dispatch an update event with skipSync flag to prevent loops
+        window.dispatchEvent(new CustomEvent('noteUpdate', { 
+          detail: { note: {...serverNote, skipSync: true }}
+        }));
+      }
+      
+      // Update sync status
+      this.syncStatus.set(noteId, {
+        status: 'synced',
+        lastSynced: new Date().toISOString(),
+        size: new Blob([JSON.stringify(serverNote)]).size
+      });
+      
+      this.notifySubscribers(noteId);
+      this.persistSyncData();
+      
+      return true;
+    } catch (error) {
+      console.error(`Error updating note ${noteId} from server data:`, error);
+      return false;
     }
   }
   
@@ -1619,70 +1821,28 @@ class SyncService {
 
   // Get all notes directly from the backend and update sync status
   async getNotesFromBackend() {
+    if (!this.currentUserId) {
+      console.log('Cannot get notes from backend: Not authenticated');
+      return [];
+    }
+    
     try {
-      // Call the fetchNotesFromBackend method
-      const response = await fetch(`${API_BASE_URL}/notes/`, {
-        method: 'GET',
-        credentials: 'include', // Include cookies for session auth
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      const { success, notes } = await this.fetchNotesFromBackend();
       
-      if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}`);
+      if (!success || !notes) {
+        console.error('Failed to get notes from backend');
+        return [];
       }
       
-      const backendNotes = await response.json();
-      console.log(`Fetched ${backendNotes.length} notes from backend`);
-      
-      // Convert notes to local format
-      const localNotes = [];
-      for (const backendNote of backendNotes) {
-        try {
-          const localNote = this.convertFromDjangoFormat(backendNote);
-          
-          // Update sync status for this note
-          this.syncStatus.set(localNote.id, {
-            status: 'synced',
-            lastSynced: new Date().toISOString(),
-            size: new Blob([JSON.stringify(localNote)]).size
-          });
-          
-          localNotes.push(localNote);
-        } catch (error) {
-          console.error(`Failed to convert note ${backendNote.id}:`, error);
-        }
-      }
-      
-      // Update the sync status of notes that exist in local storage but not in the backend
-      // by marking them as not-synced if they were previously synced
-      const backendNoteIds = new Set(localNotes.map(note => note.id));
-      
-      // Check all current synced notes
-      for (const [noteId, status] of this.syncStatus.entries()) {
-        if (status.status === 'synced' && !backendNoteIds.has(noteId)) {
-          // This note was synced but is no longer on the backend
-          this.syncStatus.set(noteId, {
-            status: 'not-synced',
-            lastSynced: null,
-            size: 0
-          });
-        }
-      }
-      
-      // Persist updated sync statuses
-      this.persistSyncData();
-      this.notifySubscribers();
-      
-      return localNotes;
+      // Return the notes directly in the format expected by SyncSection
+      return notes;
     } catch (error) {
       console.error('Failed to get notes from backend:', error);
       return [];
     }
   }
 
-  // Fetch Notes from Backend (Original implementation that was removed)
+  // Fetch Notes from Backend 
   async fetchNotesFromBackend() {
     if (!this.currentUserId) {
       console.error('Cannot fetch notes: Not authenticated');
@@ -1727,6 +1887,8 @@ class SyncService {
       
       // Save updated sync statuses
       this.persistSyncData();
+      // Notify subscribers about the sync status changes
+      this.notifySubscribers();
       
       return { 
         success: true, 
@@ -1792,6 +1954,7 @@ class SyncService {
               dateModified: backendNote.dateModified || localNote.dateModified,
               folderPath: backendNote.folderPath || localNote.folderPath,
               pinned: backendNote.pinned !== undefined ? backendNote.pinned : localNote.pinned,
+              locked: backendNote.locked, // Ensure we update the lock status
               tags: backendNote.tags || localNote.tags
             };
             

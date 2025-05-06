@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/Users/ethan/Documents/GitHub/peridot/peridot_backend/run_with_uvicorn.py", line 11, in <module>
+    import uvicorn
+ModuleNotFoundError: No module named 'uvicorn'
