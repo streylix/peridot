@@ -17,7 +17,8 @@ export class FolderService {
       type: 'folder',
       pinned: false,
       locked: false,
-      isOpen: false
+      isOpen: false,
+      visibleTitle: name
     };
   }
 
@@ -273,18 +274,36 @@ export class FolderService {
       const updatedItem = {
         ...item,
         content: updatedContent,
-        dateModified: new Date().toISOString()
+        dateModified: new Date().toISOString(),
+        visibleTitle: newName // Explicitly set visibleTitle to ensure it's updated
       };
       
+      // Save the renamed item to storage
       await storageService.writeNote(item.id, updatedItem);
+      
+      // Dispatch a noteUpdate event to trigger sync with the backend
+      window.dispatchEvent(new CustomEvent('noteUpdate', {
+        detail: { note: updatedItem }
+      }));
+      
       return updatedItem;
     }
+    
     const updatedItem = {
       ...item,
       content: newName,
       dateModified: new Date().toISOString(),
       visibleTitle: newName
     }
+    
+    // Save the renamed item to storage
+    await storageService.writeNote(item.id, updatedItem);
+    
+    // Dispatch a noteUpdate event to trigger sync with the backend
+    window.dispatchEvent(new CustomEvent('noteUpdate', {
+      detail: { note: updatedItem }
+    }));
+    
     return updatedItem;
   }
 
@@ -293,10 +312,18 @@ export class FolderService {
   }
 
   static toggleFolder(folder) {
-    return {
+    const updatedFolder = {
       ...folder,
-      isOpen: !folder.isOpen
+      isOpen: !folder.isOpen,
+      dateModified: new Date().toISOString() // Set dateModified to trigger sync
     };
+    
+    // Dispatch a noteUpdate event to trigger sync with the backend
+    window.dispatchEvent(new CustomEvent('noteUpdate', {
+      detail: { note: updatedFolder }
+    }));
+    
+    return updatedFolder;
   }
 
   static addToFolder(folder, item) {

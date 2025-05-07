@@ -194,7 +194,10 @@ def notes_list(request):
                 'tags': note.tags,
                 'user': user.id,
                 'key_params': note.key_params,
-                'iv': note.iv
+                'iv': note.iv,
+                'type': note.type,
+                'parent_folder_id': note.parent_folder_id,
+                'is_open': note.is_open
             })
         
         return JsonResponse(notes_data, safe=False)
@@ -236,15 +239,18 @@ def notes_list(request):
                     'content': content,
                     'locked': data.get('locked', False),
                     'encrypted': data.get('encrypted', False),
-                    'folder_path': data.get('folder_path', ''),
+                    'folder_path': data.get('folder_path', data.get('folderPath', '')),
                     'pinned': data.get('pinned', False),
-                    'visible_title': data.get('visible_title', ''),
-                    'tags': data.get('tags', [])
+                    'visible_title': data.get('visible_title', data.get('visibleTitle', '')),
+                    'tags': data.get('tags', []),
+                    'type': data.get('type', 'note'),
+                    'parent_folder_id': data.get('parent_folder_id', data.get('parentFolderId')),
+                    'is_open': data.get('is_open', data.get('isOpen', False))
                 }
                 
                 # Handle encryption fields
                 if data.get('encrypted') and data.get('locked'):
-                    note_data['key_params'] = data.get('key_params')
+                    note_data['key_params'] = data.get('key_params', data.get('keyParams'))
                     note_data['iv'] = data.get('iv')
                 
                 try:
@@ -275,7 +281,10 @@ def notes_list(request):
                         'visibleTitle': note.visible_title,
                         'tags': note.tags,
                         'keyParams': note.key_params,
-                        'iv': note.iv
+                        'iv': note.iv,
+                        'type': note.type,
+                        'parentFolderId': note.parent_folder_id,
+                        'isOpen': note.is_open
                     }
                     
                     notify_note_update(user.id, note_id, note_status, note_content)
@@ -302,7 +311,10 @@ def notes_list(request):
                         'tags': note.tags,
                         'user': user.id,
                         'key_params': note.key_params,
-                        'iv': note.iv
+                        'iv': note.iv,
+                        'type': note.type,
+                        'parent_folder_id': note.parent_folder_id,
+                        'is_open': note.is_open
                     }, status=201)
                 except Exception as create_error:
                     # Log detailed error information for debugging
@@ -345,7 +357,10 @@ def note_detail(request, note_id):
             'tags': note.tags,
             'user': user.id,
             'key_params': note.key_params,
-            'iv': note.iv
+            'iv': note.iv,
+            'type': note.type,
+            'parent_folder_id': note.parent_folder_id,
+            'is_open': note.is_open
         })
     
     elif request.method == 'PUT':
@@ -429,6 +444,11 @@ def note_detail(request, note_id):
                 note.visible_title = data.get('visible_title', data.get('visibleTitle', note.visible_title))
                 note.tags = data.get('tags', note.tags)
                 
+                # Handle folder-specific fields
+                note.type = data.get('type', note.type)
+                note.parent_folder_id = data.get('parent_folder_id', data.get('parentFolderId', note.parent_folder_id))
+                note.is_open = data.get('is_open', data.get('isOpen', note.is_open))
+                
                 # Safely update encryption fields with fallback to current values
                 if 'keyParams' in data or 'key_params' in data:
                     note.key_params = key_params
@@ -472,7 +492,10 @@ def note_detail(request, note_id):
                     'visibleTitle': note.visible_title,
                     'tags': note.tags,
                     'keyParams': note.key_params,
-                    'iv': note.iv
+                    'iv': note.iv,
+                    'type': note.type,
+                    'parentFolderId': note.parent_folder_id,
+                    'isOpen': note.is_open
                 }
                 
                 notify_note_update(user.id, note_id, note_status, note_content)
@@ -499,7 +522,10 @@ def note_detail(request, note_id):
                     'tags': note.tags,
                     'user': user.id,
                     'key_params': note.key_params,
-                    'iv': note.iv
+                    'iv': note.iv,
+                    'type': note.type,
+                    'parent_folder_id': note.parent_folder_id,
+                    'is_open': note.is_open
                 })
             
         except json.JSONDecodeError as json_error:

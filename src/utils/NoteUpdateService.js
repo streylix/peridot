@@ -165,6 +165,39 @@ class NoteUpdateService {
   }
 
   async queueUpdate(noteId, updates, updateModified = true, encryptionContext = null) {
+    // Do a more precise check for content-only changes vs cursor-only changes
+    const currentNote = await storageService.readNote(noteId);
+    
+    // Track if this is a meaningful content change or just cursor movement
+    let isContentChange = false;
+    
+    if (currentNote) {
+      // Check if this is just a cursor position update
+      const onlyHasCaret = Object.keys(updates).length === 1 && 'caretPosition' in updates;
+      
+      // For folders, check if content or visibleTitle changed
+      if (currentNote.type === 'folder') {
+        if (updates.content && updates.content !== currentNote.content) {
+          isContentChange = true;
+        }
+        if (updates.visibleTitle && updates.visibleTitle !== currentNote.visibleTitle) {
+          isContentChange = true;
+        }
+      } 
+      // For regular notes, check content changes
+      else if (updates.content && updates.content !== currentNote.content) {
+        isContentChange = true;
+      }
+      
+      // Status changes (pinned, locked) always count as meaningful
+      if ('pinned' in updates || 'locked' in updates) {
+        isContentChange = true;
+      }
+      
+      // Only update the modification date if there's a real content change
+      updateModified = isContentChange && updateModified;
+    }
+    
     // Skip update if there are no meaningful changes
     if (!this.hasChanges(noteId, updates)) {
       return;
@@ -188,6 +221,9 @@ class NoteUpdateService {
     
     // Add lastSyncAttempt to help with rate limiting in SyncService
     mergedUpdates.lastSyncAttempt = Date.now();
+    
+    // Track if this is a meaningful content change
+    mergedUpdates.isContentChange = isContentChange || existingUpdates.isContentChange;
     
     this.pendingUpdates.set(noteId, mergedUpdates);
 
@@ -221,11 +257,19 @@ class NoteUpdateService {
         return;
       }
 
+      // Determine if we should update the modification date
+      const shouldUpdateModified = updateModified && finalUpdates.isContentChange;
+
       let updatedNote = {
         ...currentNote,
         ...finalUpdates,
-        dateModified: updateModified ? new Date().toISOString() : currentNote.dateModified
+        dateModified: shouldUpdateModified ? new Date().toISOString() : currentNote.dateModified
       };
+
+      // Store values to help with sync optimization
+      if (finalUpdates.content) {
+        updatedNote.lastContentChange = Date.now();
+      }
 
       // Handle encryption if needed - ONLY if the note is already locked or we're locking it now
       if (encryptionContext?.shouldEncrypt && 
@@ -251,17 +295,23 @@ class NoteUpdateService {
       // Save to local storage
       await storageService.writeNote(noteId, updatedNote);
 
-      // Push update to server if authenticated - prioritize lock/pin changes
-      if (this.authToken) {
+      // Only sync with server if there was a real content change or priority status change
+      if ((finalUpdates.isContentChange || hasPriorityChange) && this.authToken) {
         if (hasPriorityChange) {
           console.log(`Priority sync for note ${noteId} (lock/pin status change)`);
           this.pushNoteToServer(updatedNote, {priority: true})
             .catch(error => console.error('Failed to push priority note update to server:', error));
-        } else {
+        } else if (finalUpdates.isContentChange) {
+          console.log(`Content changed for note ${noteId}, syncing to server`);
           this.pushNoteToServer(updatedNote)
             .catch(error => console.error('Failed to push note update to server:', error));
         }
+      } else {
+        console.log(`Skipping server sync for note ${noteId} - no meaningful changes`);
       }
+
+      // Remove isContentChange from the note before notifying
+      delete updatedNote.isContentChange;
 
       // Notify subscribers
       this.notifySubscribers(updatedNote);

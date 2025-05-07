@@ -673,6 +673,61 @@ function App() {
     }
   }, [isLoading]);
 
+  // Add effect to synchronize folder data on app load
+  useEffect(() => {
+    // Check if user is authenticated
+    const currentUserId = localStorage.getItem('currentUserId');
+    if (currentUserId) {
+      // Force refresh of notes from server on app load
+      console.log('App mounted - refreshing folder data from server');
+      syncService.fetchNotesFromBackend().then(({ success, notes }) => {
+        if (success && notes && notes.length > 0) {
+          // Filter for folders
+          const folders = notes.filter(note => note.type === 'folder');
+          if (folders.length > 0) {
+            console.log(`Refreshing ${folders.length} folders from server`);
+            // Notes have already been saved by fetchNotesFromBackend
+            // Just trigger a UI refresh
+            window.dispatchEvent(new CustomEvent('foldersUpdated'));
+          }
+        }
+      }).catch(error => {
+        console.error('Error refreshing folders on app load:', error);
+      });
+    }
+  }, []);
+
+  // Set up periodic background refresh to keep content in sync across devices/tabs
+  useEffect(() => {
+    // Check if user is authenticated
+    const currentUserId = localStorage.getItem('currentUserId');
+    if (!currentUserId) return;
+    
+    console.log('Setting up periodic background refresh...');
+    
+    // Check for updates every 30 seconds in the background
+    const refreshInterval = setInterval(async () => {
+      // Skip if WebSocket is connected (it will handle updates)
+      if (syncService.isWebSocketConnected) return;
+      
+      // Skip if page is not visible to conserve resources
+      if (document.visibilityState !== 'visible') return;
+      
+      try {
+        // Check for changes since last update
+        const hasChanges = await syncService.fetchLatestChanges();
+        if (hasChanges) {
+          console.log('Background refresh found and applied updates');
+        }
+      } catch (error) {
+        console.error('Background refresh error:', error);
+      }
+    }, 30000); // 30 seconds
+    
+    // Clean up interval on unmount
+    return () => clearInterval(refreshInterval);
+  }, []);
+
   if (isLoading) {
     return (
       <div className="loading-container" style={{ 

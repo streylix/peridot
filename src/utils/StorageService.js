@@ -166,8 +166,8 @@ class StorageService {
     // For folders, handle the special case
     if (typeof content === 'string' && content.startsWith('<div>')) {
       const match = content.match(/<div[^>]*>(.*?)<\/div>/);
-      // Ensure we return 'Untitled' for empty divs, not an empty string
-      return (match && match[1] && match[1].trim()) ? match[1].trim() : 'Untitled';
+      // Ensure we return 'Untitled Folder' for empty divs, not an empty string
+      return (match && match[1] && match[1].trim()) ? match[1].trim() : 'Untitled Folder';
     }
   
     // For regular notes, use noteContentService
@@ -1140,6 +1140,16 @@ class StorageService {
         djangoNote.type = 'folder';
       } else {
         djangoNote.type = 'note';
+      }
+    }
+    
+    // Ensure folder visibleTitle matches content
+    if (djangoNote.type === 'folder' && djangoNote.content) {
+      const folderTitle = djangoNote.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1];
+      if (folderTitle) {
+        djangoNote.visibleTitle = folderTitle;
+      } else if (!djangoNote.visibleTitle) {
+        djangoNote.visibleTitle = 'Untitled Folder';
       }
     }
     

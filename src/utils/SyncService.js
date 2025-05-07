@@ -32,6 +32,8 @@ class SyncService {
     // Fetch backend storage info if authenticated
     if (this.currentUserId) {
       this.fetchBackendStorageInfo();
+      // Start periodic polling for folder updates as fallback when WebSockets fail
+      this.setupFolderPolling();
     }
     
     // Handle page visibility changes to manage connection state
@@ -76,7 +78,7 @@ class SyncService {
                     if (success) {
                       // Broadcast that we've synced it
                       this.broadcastSyncUpdate(data.noteId, this.getSyncStatus(data.noteId), true);
-                    }
+          }
                   })
                   .catch(error => console.error(`Error syncing note in response to request: ${data.noteId}`, error));
               }
@@ -312,9 +314,10 @@ class SyncService {
         }
       }
       
-      // Refresh notes from server when coming back to the app
-      this.fetchNotesFromBackend().catch(e => 
-        console.error('Failed to fetch notes after visibility change:', e));
+      // Immediately check for changes when page becomes visible
+      console.log('Page became visible, checking for latest changes...');
+      this.fetchLatestChanges()
+        .catch(e => console.error('Failed to fetch latest changes after visibility change:', e));
     }
   }
   
@@ -324,6 +327,10 @@ class SyncService {
     if (!this.isWebSocketConnected) {
       this.reconnectWebsocket();
     }
+    
+    // Also check for latest changes when window gets focus
+    this.fetchLatestChanges()
+      .catch(e => console.error('Failed to fetch latest changes after window focus:', e));
   }
   
   // Handle window blur - no need to disconnect, just log the event
@@ -429,7 +436,7 @@ class SyncService {
             
             if (isPriority) {
               console.log(`Priority update detected for note ${data.noteId}`);
-              
+                  
               if (isStatusUpdate) {
                 console.log(`Status update: locked=${lockedChanged ? 'changed' : 'unchanged'}, pinned=${pinnedChanged ? 'changed' : 'unchanged'}`);
               }
@@ -465,7 +472,7 @@ class SyncService {
                     console.log(`Successfully refreshed note ${data.noteId} from server`);
                   } else {
                     console.warn(`Failed to refresh note ${data.noteId} from server`);
-                  }
+                }
                 })
                 .catch(error => {
                   console.error(`Error fetching note ${data.noteId} from server:`, error);
@@ -521,6 +528,19 @@ class SyncService {
       
       if (!localNote) {
         // If note doesn't exist locally, just save the server version
+        // For folders, ensure visibleTitle is set correctly
+        if (serverNote.type === 'folder') {
+          // Extract title from content if needed
+          if (!serverNote.visibleTitle && serverNote.content) {
+            const extractedTitle = serverNote.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1];
+            if (extractedTitle) {
+              serverNote.visibleTitle = extractedTitle;
+            } else {
+              serverNote.visibleTitle = 'Untitled Folder';
+            }
+          }
+        }
+        
         await storageService.writeNote(noteId, serverNote);
         
         // Dispatch an update event with skipSync flag to prevent loops
@@ -538,6 +558,17 @@ class SyncService {
         this.notifySubscribers(noteId);
         this.persistSyncData();
         return true;
+      }
+      
+      // Special handling for folders to ensure visibleTitle is updated properly
+      if (localNote.type === 'folder' && serverNote.content) {
+        // Extract the folder name from the content
+        const extractedTitle = serverNote.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1];
+        if (extractedTitle) {
+          serverNote.visibleTitle = extractedTitle;
+        } else if (!serverNote.visibleTitle) {
+          serverNote.visibleTitle = 'Untitled Folder';
+        }
       }
       
       // Special handling for status updates (lock/pin changes)
@@ -832,7 +863,7 @@ class SyncService {
       // Special handling for encrypted notes
       if (localNote && localNote.wasDecrypted && serverNote.encrypted && serverNote.locked) {
         console.log(`Preserving local decrypted state for note ${noteId}`);
-        
+    
         // Create a merged note that keeps local content but updates metadata
         const mergedNote = {
           ...localNote,
@@ -906,6 +937,125 @@ class SyncService {
       const note = await storageService.readNote(noteId);
       if (!note) {
         throw new Error('Note not found');
+      }
+      
+      // Check if this is just a cursor position update without content changes
+      // Enhanced check to determine if there are any meaningful changes
+      let hasContentChanges = false;
+      
+      // For regular notes, check content changes
+      if (note.type !== 'folder' && note.lastSyncedContent && note.content !== note.lastSyncedContent) {
+        hasContentChanges = true;
+      }
+      
+      // For folders, check both content and visibleTitle changes
+      if (note.type === 'folder') {
+        if (note.lastSyncedContent && note.content !== note.lastSyncedContent) {
+          hasContentChanges = true;
+        }
+        if (note.lastSyncedVisibleTitle && note.visibleTitle !== note.lastSyncedVisibleTitle) {
+          hasContentChanges = true;
+        }
+      }
+      
+      // Always consider status changes (pinned, locked) as meaningful
+      if (note.lastSyncedPinned !== undefined && note.pinned !== note.lastSyncedPinned) {
+        hasContentChanges = true;
+      }
+      if (note.lastSyncedLocked !== undefined && note.locked !== note.lastSyncedLocked) {
+        hasContentChanges = true;
+      }
+      
+      // Skip sync if there are no meaningful changes
+      if (!hasContentChanges && note.lastSyncedContent) {
+        console.log(`Note ${noteId} has no meaningful changes, skipping sync`);
+        
+        // Just update status to synced without sending to server
+        const syncedStatus = {
+          status: 'synced',
+          lastSynced: new Date().toISOString()
+        };
+        this.syncStatus.set(noteId, syncedStatus);
+        this.notifySubscribers(noteId);
+        this.persistSyncData();
+        return true;
+      }
+      
+      // Check if this note exists on the server and get its last modification time
+      try {
+        const response = await fetch(`${API_BASE_URL}/notes/${noteId}/`, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const serverNote = await response.json();
+          
+          // Compare timestamps to prevent overwriting newer data with older data
+          if (serverNote.date_modified) {
+            const serverModTime = new Date(serverNote.date_modified).getTime();
+            const localModTime = new Date(note.dateModified).getTime();
+            
+            // More strict comparison - only override if server is definitely newer
+            // Allow for 3 second margin to account for clock differences
+            const timeDifference = serverModTime - localModTime;
+            const toleranceMs = 3000; // 3 second tolerance
+            
+            if (timeDifference > toleranceMs) {
+              console.log(`Server version of note ${noteId} is newer by ${timeDifference}ms, aborting sync`);
+              console.log(`Server: ${new Date(serverModTime).toISOString()}, Local: ${new Date(localModTime).toISOString()}`);
+              
+              // Update local note with server data
+              const convertedNote = this.convertFromDjangoFormat(serverNote);
+              await storageService.writeNote(noteId, {
+                ...note,
+                ...convertedNote,
+                // Keep local cursor position and any decrypted state
+                caretPosition: note.caretPosition,
+                wasDecrypted: note.wasDecrypted
+              });
+              
+              // Update sync status
+              const syncedStatus = {
+                status: 'synced',
+                lastSynced: new Date().toISOString()
+              };
+              this.syncStatus.set(noteId, syncedStatus);
+              this.notifySubscribers(noteId);
+              this.persistSyncData();
+              
+              // Notify UI of the update
+              window.dispatchEvent(new CustomEvent('noteUpdate', {
+                detail: { note: { ...convertedNote, skipSync: true } }
+              }));
+              
+              return true;
+            }
+            // If server and client times are within tolerance, compare content
+            else if (Math.abs(timeDifference) <= toleranceMs) {
+              // If server note has exactly the same content, skip the update
+              if (serverNote.content === note.content) {
+                console.log(`Note ${noteId} content unchanged on server, skipping sync`);
+                
+                // Just update status to synced without sending to server
+                const syncedStatus = {
+                  status: 'synced',
+                  lastSynced: new Date().toISOString()
+                };
+                this.syncStatus.set(noteId, syncedStatus);
+                this.notifySubscribers(noteId);
+                this.persistSyncData();
+                return true;
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.warn(`Error checking server version of note ${noteId}:`, error);
+        // Continue with sync even if check fails
       }
       
       // Mark this note as being edited locally to prevent conflicts
@@ -985,7 +1135,11 @@ class SyncService {
       try {
         const updatedNote = await storageService.readNote(noteId);
         if (updatedNote) {
-          // Add server timestamp and remove editing flag
+          // Store data to prevent unnecessary syncing for caret position changes
+          updatedNote.lastSyncedContent = updatedNote.content;
+          updatedNote.lastSyncedVisibleTitle = updatedNote.visibleTitle;
+          updatedNote.lastSyncedPinned = updatedNote.pinned;
+          updatedNote.lastSyncedLocked = updatedNote.locked;
           updatedNote.serverModifiedAt = new Date().toISOString();
           updatedNote.lastSyncedModified = updatedNote.dateModified;
           updatedNote.isCurrentlyEditing = false;
@@ -1084,7 +1238,7 @@ class SyncService {
     // Check if the update is only for cursor position or other non-content fields
     const significantFields = [
       'content', 'locked', 'encrypted', 'pinned', 'tags', 
-      'parentFolderId', 'folderPath'
+      'parentFolderId', 'folderPath', 'type', 'isOpen'
     ];
     
     // Last modified should have changed for any significant update
@@ -1101,7 +1255,7 @@ class SyncService {
         if (modifiedTime - lastSyncedTime < 2000) {
           // Very recent change might be from our own sync, skip it
           return true;
-        }
+      }
       }
       
       return false;
@@ -1347,7 +1501,10 @@ class SyncService {
       folder_path: note.folderPath || '',
       pinned: note.pinned || false,
       visible_title: note.visibleTitle || '',
-      tags: note.tags || []
+      tags: note.tags || [],
+      type: note.type || 'note',
+      parent_folder_id: note.parentFolderId || null,
+      is_open: note.isOpen || false
     };
 
     // For encrypted notes, make sure we include encryption metadata
@@ -1389,7 +1546,10 @@ class SyncService {
       folderPath: note.folder_path || '',
       pinned: note.pinned || false,
       visibleTitle: note.visible_title || '',
-      tags: note.tags || []
+      tags: note.tags || [],
+      type: note.type || 'note',
+      parentFolderId: note.parent_folder_id || null,
+      isOpen: note.is_open || false
     };
 
     // For encrypted notes, make sure we include encryption metadata
@@ -1535,8 +1695,8 @@ class SyncService {
   async syncAllDirtyNotes() {
     if (!this.currentUserId || !this.isWebSocketConnected) {
       return false;
-    }
-    
+      }
+      
     try {
       // Get all notes to check which ones need syncing
       const notes = await storageService.getAllNotes();
@@ -1551,7 +1711,7 @@ class SyncService {
           (note.serverModifiedAt && note.dateModified > note.serverModifiedAt)
         ) {
           syncPromises.push(this.syncNote(note.id));
-        }
+      }
       }
       
       if (syncPromises.length > 0) {
@@ -1583,9 +1743,15 @@ class SyncService {
       this.heartbeatInterval = null;
     }
     
+    // Remove folder polling interval
+    if (this.folderPollingInterval) {
+      clearInterval(this.folderPollingInterval);
+      this.folderPollingInterval = null;
+    }
+    
     // Remove connection tracking
     this.removeActiveConnection();
-    
+          
     // Remove event listeners
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     window.removeEventListener('focus', this.handleWindowFocus);
@@ -1619,8 +1785,8 @@ class SyncService {
     this._messageThrottles = {};
     this._serverErrorCounts = {};
     this._lastStorageUpdate = 0;
-  }
-
+      }
+      
   // Check if a message should be throttled
   shouldThrottleMessage(type, noteId) {
     if (!this._messageThrottles) {
@@ -1997,6 +2163,154 @@ class SyncService {
     } catch (error) {
       console.error('Error merging backend notes:', error);
       return { success: false, error: error.message };
+    }
+  }
+
+  // Set up periodic polling for folder updates when WebSockets aren't working
+  setupFolderPolling() {
+    // Clear any existing polling interval
+    if (this.folderPollingInterval) {
+      clearInterval(this.folderPollingInterval);
+    }
+    
+    // Poll every 10 seconds
+    this.folderPollingInterval = setInterval(async () => {
+      // Skip if WebSocket is connected
+      if (this.isWebSocketConnected) return;
+      
+      try {
+        // Get all notes from the server
+        const { success, notes } = await this.fetchNotesFromBackend();
+        
+        if (success && notes && notes.length > 0) {
+          // Filter for folders only
+          const folders = notes.filter(note => note.type === 'folder');
+          
+          if (folders.length > 0) {
+            console.log(`Polling found ${folders.length} folders, updating local state`);
+            
+            // Update local state for each folder
+            for (const folder of folders) {
+              const localFolder = await storageService.readNote(folder.id);
+              
+              // Skip if local folder doesn't exist or is newer
+              if (!localFolder) continue;
+              if (new Date(localFolder.dateModified) > new Date(folder.dateModified)) continue;
+              
+              // Check if visibleTitle or content has changed
+              if (localFolder.visibleTitle !== folder.visibleTitle || 
+                  localFolder.content !== folder.content) {
+                console.log(`Updating folder ${folder.id} from polling`);
+                
+                // Update the local folder
+                await storageService.writeNote(folder.id, folder);
+                
+                // Dispatch update event with skipSync flag to prevent loops
+                window.dispatchEvent(new CustomEvent('noteUpdate', {
+                  detail: { note: {...folder, skipSync: true }}
+                }));
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error in folder polling:', error);
+      }
+    }, 10000); // Poll every 10 seconds
+  }
+
+  // New method to fetch the latest changes from the server
+  async fetchLatestChanges() {
+    if (!this.currentUserId) return false;
+    
+    try {
+      console.log('Fetching latest changes from server...');
+      
+      // Fetch notes from the server
+      const { success, notes } = await this.fetchNotesFromBackend();
+      
+      if (success && notes && notes.length > 0) {
+        console.log(`Fetched ${notes.length} notes, checking for updates...`);
+        
+        let updatedCount = 0;
+        
+        // Compare each server note with local version
+        for (const serverNote of notes) {
+          try {
+            const localNote = await storageService.readNote(serverNote.id);
+            
+            // Skip if note doesn't exist locally
+            if (!localNote) continue;
+            
+            // Compare timestamps - server version newer?
+            const serverModTime = new Date(serverNote.dateModified).getTime();
+            const localModTime = new Date(localNote.dateModified).getTime();
+            
+            // If server is newer, update the local version
+            if (serverModTime > localModTime) {
+              console.log(`Server has newer version of note ${serverNote.id}, updating local copy`);
+              
+              // Preserve caretPosition and other local state
+              const mergedNote = {
+                ...serverNote,
+                caretPosition: localNote.caretPosition,
+                isCurrentlyEditing: localNote.isCurrentlyEditing
+              };
+              
+              // Special handling for encrypted notes we've already decrypted
+              if (localNote.wasDecrypted && serverNote.encrypted && serverNote.locked) {
+                console.log(`Preserving decrypted state for note ${serverNote.id}`);
+                mergedNote.wasDecrypted = true;
+                mergedNote.content = localNote.content;
+              }
+              
+              // Update local storage
+              await storageService.writeNote(serverNote.id, mergedNote);
+              
+              // Notify UI about the update
+              window.dispatchEvent(new CustomEvent('noteUpdate', {
+                detail: { note: {...mergedNote, skipSync: true }}
+              }));
+              
+              updatedCount++;
+            } 
+            // Also check for server-side folder name changes even if timestamps match
+            else if (serverNote.type === 'folder' && 
+                     serverNote.visibleTitle !== localNote.visibleTitle) {
+              console.log(`Folder ${serverNote.id} title changed on server, updating local copy`);
+              
+              // Just update the folder title
+              const mergedNote = {
+                ...localNote,
+                visibleTitle: serverNote.visibleTitle,
+                content: serverNote.content
+              };
+              
+              // Update local storage
+              await storageService.writeNote(serverNote.id, mergedNote);
+              
+              // Trigger folder refresh UI event
+              window.dispatchEvent(new CustomEvent('foldersUpdated', {
+                detail: { folders: [mergedNote] }
+              }));
+              
+              updatedCount++;
+            }
+          } catch (error) {
+            console.error(`Error checking note ${serverNote.id} for updates:`, error);
+          }
+        }
+        
+        if (updatedCount > 0) {
+          console.log(`Updated ${updatedCount} local notes from server`);
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Failed to fetch latest changes:', error);
+      return false;
     }
   }
 }

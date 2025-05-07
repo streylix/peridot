@@ -1,0 +1,53 @@
+[
+  {
+    "id": 1746575555644,
+    "dateModified": "2025-05-06T23:57:14.698Z",
+    "type": "folder",
+    "pinned": false,
+    "locked": false,
+    "isOpen": true,
+    "userId": "1",
+    "content": "arch2",
+    "visibleTitle": "arch2"
+  },
+  {
+    "id": 1746575361443,
+    "content": "test2",
+    "locked": false,
+    "encrypted": false,
+    "pinned": false,
+    "tags": [],
+    "iv": null,
+    "dateCreated": "2025-05-06T23:49:25.897Z",
+    "dateModified": "2025-05-06T23:49:25.897Z",
+    "folderPath": "",
+    "parentFolderId": 1746575555644,
+    "visibleTitle": "test2",
+    "keyParams": null,
+    "syncStatus": {
+      "status": "synced",
+      "lastSynced": "2025-05-07T00:16:53.005Z"
+    },
+    "userId": "1"
+  },
+  {
+    "id": 1746575364994,
+    "content": "test3",
+    "locked": false,
+    "encrypted": false,
+    "pinned": false,
+    "tags": [],
+    "iv": null,
+    "dateCreated": "2025-05-06T23:49:27.896Z",
+    "dateModified": "2025-05-06T23:49:27.896Z",
+    "folderPath": "",
+    "parentFolderId": 1746575555644,
+    "visibleTitle": "test3",
+    "keyParams": null,
+    "syncStatus": {
+      "status": "synced",
+      "lastSynced": "2025-05-07T00:16:53.012Z"
+    },
+    "userId": "1"
+  }
+]

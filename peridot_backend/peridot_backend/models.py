@@ -17,6 +17,9 @@ class Note(models.Model):
     tags = models.JSONField(default=list, blank=True)
     key_params = models.JSONField(null=True, blank=True)
     iv = models.JSONField(null=True, blank=True)
+    type = models.CharField(max_length=50, default='note')  # 'note' or 'folder'
+    parent_folder_id = models.BigIntegerField(null=True, blank=True)  # Reference to parent folder
+    is_open = models.BooleanField(default=False)  # For folders
     
     class Meta:
         unique_together = ['id', 'user']
