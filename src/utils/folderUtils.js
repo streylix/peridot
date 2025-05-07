@@ -9,17 +9,29 @@ import { encryptNote } from './encryption'; // Add encryption import
 const VERIFICATION_STRING = "VALID_PASSWORD_VERIFICATION";
 
 export class FolderService {
-  static createFolder(name = 'Untitled Folder') {
-    return {
-      id: Date.now(),
-      content: `<div>${name}</div>`,
+  static createFolder(title = 'Untitled Folder', notes = [], options = {}) {
+    // Generate a unique ID for the folder
+    const id = this.generateId();
+    
+    // Create the content with the title (consistent format across app)
+    const content = `<div>${title}</div>`;
+    
+    // Create basic folder object with all synchronized properties
+    const folder = {
+      id,
+      content,
+      dateCreated: new Date().toISOString(),
       dateModified: new Date().toISOString(),
       type: 'folder',
-      pinned: false,
-      locked: false,
-      isOpen: false,
-      visibleTitle: name
+      pinned: options.pinned || false,
+      locked: options.locked || false,
+      visibleTitle: title // This needs to be kept in sync with content
     };
+    
+    // Add local-only properties (not synchronized with server)
+    folder.isOpen = options.isOpen || false; // Local UI state only
+    
+    return folder;
   }
 
   static togglePin(folder) {
@@ -312,18 +324,14 @@ export class FolderService {
   }
 
   static toggleFolder(folder) {
-    const updatedFolder = {
+    // Return updated folder with isOpen toggled but no dateModified update
+    // and no sync event dispatch - making it a purely local state change
+    return {
       ...folder,
-      isOpen: !folder.isOpen,
-      dateModified: new Date().toISOString() // Set dateModified to trigger sync
+      isOpen: !folder.isOpen
+      // No longer updating dateModified
+      // No longer dispatching a sync event
     };
-    
-    // Dispatch a noteUpdate event to trigger sync with the backend
-    window.dispatchEvent(new CustomEvent('noteUpdate', {
-      detail: { note: updatedFolder }
-    }));
-    
-    return updatedFolder;
   }
 
   static addToFolder(folder, item) {
@@ -360,5 +368,63 @@ export class FolderService {
   
     // Delete the folder itself
     await storageService.deleteNote(folder.id);
+  }
+
+  static addNoteToFolder(note, folderId) {
+    if (!note || !folderId) return note;
+
+    // Create updated note with folder assignment
+    const updatedNote = {
+      ...note,
+      parentFolderId: folderId,
+      dateModified: new Date().toISOString() // Update modification date to trigger sync
+    };
+
+    // Dispatch an event to trigger sync with the backend
+    window.dispatchEvent(new CustomEvent('noteUpdate', {
+      detail: { note: updatedNote }
+    }));
+
+    return updatedNote;
+  }
+
+  static removeNoteFromFolder(note) {
+    if (!note || !note.parentFolderId) return note;
+
+    // Create updated note without folder assignment
+    const updatedNote = {
+      ...note,
+      parentFolderId: null,
+      dateModified: new Date().toISOString() // Update modification date to trigger sync
+    };
+
+    // Dispatch an event to trigger sync with the backend
+    window.dispatchEvent(new CustomEvent('noteUpdate', {
+      detail: { note: updatedNote }
+    }));
+
+    return updatedNote;
+  }
+
+  // Add a updateFolderTitle method to ensure consistent title updates
+  static updateFolderTitle(folder, newTitle) {
+    if (!folder || folder.type !== 'folder') return folder;
+    
+    // Create a copy of the folder
+    const updatedFolder = { ...folder };
+    
+    // Update both content and visibleTitle consistently
+    updatedFolder.content = `<div>${newTitle}</div>`;
+    updatedFolder.visibleTitle = newTitle;
+    
+    // Update the modification date
+    updatedFolder.dateModified = new Date().toISOString();
+    
+    return updatedFolder;
+  }
+
+  // And update the generateId method
+  static generateId() {
+    return Date.now().toString();
   }
 }

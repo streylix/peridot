@@ -1118,41 +1118,63 @@ class StorageService {
   
   // Convert note to Django format for sending to backend
   convertToDjangoFormat(note) {
-    // Create a copy to avoid modifying the original
-    const djangoNote = { ...note };
-    
-    // Handle caretPosition which isn't in the Django model
-    if (djangoNote.caretPosition !== undefined) {
-      // Keep it for frontend but it will be ignored by Django
-    }
-    
-    // Handle dateCreated which might be renamed in Django
-    if (djangoNote.dateCreated !== undefined) {
-      // Keep it for frontend but it will be handled by Django's created_at
-    }
-    
-    // Ensure type is set for folders
-    if (!djangoNote.type && djangoNote.content && 
-        typeof djangoNote.content === 'string' && 
-        djangoNote.content.startsWith('<div>')) {
-      // This might be a folder, check if it has isOpen property
-      if (djangoNote.isOpen !== undefined) {
-        djangoNote.type = 'folder';
-      } else {
-        djangoNote.type = 'note';
+    // Ensure parentFolderId is properly included in the Django format
+    const djangoNote = {
+      id: note.id,
+      content: note.content,
+      date_created: note.dateCreated,
+      date_modified: note.dateModified,
+      locked: note.locked || false,
+      encrypted: note.encrypted || false,
+      folder_path: note.folderPath || '',
+      pinned: note.pinned || false,
+      visible_title: note.visibleTitle || '',
+      tags: note.tags || [],
+      type: note.type || 'note',
+      parent_folder_id: note.parentFolderId || null,
+      is_open: note.isOpen || false
+    };
+
+    // Extract visibleTitle for folders if it's not already set
+    if (note.type === 'folder' && !djangoNote.visible_title && djangoNote.content) {
+      try {
+        const titleMatch = djangoNote.content.match(/<div[^>]*>(.*?)<\/div>/);
+        if (titleMatch && titleMatch[1]) {
+          djangoNote.visible_title = titleMatch[1].trim() || 'Untitled Folder';
+        } else {
+          djangoNote.visible_title = 'Untitled Folder';
+        }
+      } catch (e) {
+        console.warn('Failed to extract folder title:', e);
+        djangoNote.visible_title = 'Untitled Folder';
       }
     }
-    
-    // Ensure folder visibleTitle matches content
-    if (djangoNote.type === 'folder' && djangoNote.content) {
-      const folderTitle = djangoNote.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1];
-      if (folderTitle) {
-        djangoNote.visibleTitle = folderTitle;
-      } else if (!djangoNote.visibleTitle) {
-        djangoNote.visibleTitle = 'Untitled Folder';
+
+    // For encrypted notes, make sure we include encryption metadata
+    if (note.encrypted && note.locked) {
+      if (note.keyParams) {
+        djangoNote.key_params = {
+          salt: Array.isArray(note.keyParams.salt) 
+            ? note.keyParams.salt 
+            : Array.from(note.keyParams.salt),
+          iterations: note.keyParams.iterations
+        };
+      }
+      
+      if (note.iv) {
+        djangoNote.iv = Array.isArray(note.iv) 
+          ? note.iv 
+          : Array.from(note.iv);
+      }
+        
+      // Ensure content is properly formatted if it's an encrypted array
+      if (Array.isArray(note.content)) {
+        djangoNote.content = note.content;
+      } else if (note.content instanceof Uint8Array) {
+        djangoNote.content = Array.from(note.content);
       }
     }
-    
+
     return djangoNote;
   }
 

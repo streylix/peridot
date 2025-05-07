@@ -1491,6 +1491,7 @@ class SyncService {
   
   // Convert note to Django format for backend storage
   convertToDjangoFormat(note) {
+    // Create Django format note, but exclude isOpen from sync
     const djangoNote = {
       id: note.id,
       content: note.content,
@@ -1503,8 +1504,8 @@ class SyncService {
       visible_title: note.visibleTitle || '',
       tags: note.tags || [],
       type: note.type || 'note',
-      parent_folder_id: note.parentFolderId || null,
-      is_open: note.isOpen || false
+      parent_folder_id: note.parentFolderId || null
+      // Deliberately removing is_open to prevent sync
     };
 
     // For encrypted notes, make sure we include encryption metadata
@@ -1548,8 +1549,8 @@ class SyncService {
       visibleTitle: note.visible_title || '',
       tags: note.tags || [],
       type: note.type || 'note',
-      parentFolderId: note.parent_folder_id || null,
-      isOpen: note.is_open || false
+      parentFolderId: note.parent_folder_id || null
+      // Deliberately omitting isOpen to use local state only
     };
 
     // For encrypted notes, make sure we include encryption metadata
@@ -2274,25 +2275,38 @@ class SyncService {
               
               updatedCount++;
             } 
-            // Also check for server-side folder name changes even if timestamps match
-            else if (serverNote.type === 'folder' && 
-                     serverNote.visibleTitle !== localNote.visibleTitle) {
-              console.log(`Folder ${serverNote.id} title changed on server, updating local copy`);
+            // Even if timestamps match, check for folder relationships that may have changed
+            else if (
+              // Different parent folder
+              localNote.parentFolderId !== serverNote.parentFolderId ||
+              // Folder title changed
+              (serverNote.type === 'folder' && serverNote.visibleTitle !== localNote.visibleTitle) ||
+              // Folder content changed
+              (serverNote.type === 'folder' && serverNote.content !== localNote.content)
+            ) {
+              console.log(`Note ${serverNote.id} folder relationship or folder metadata changed, updating local copy`);
               
-              // Just update the folder title
+              // Create merged note with updated folder relationship and preserved local state
               const mergedNote = {
                 ...localNote,
-                visibleTitle: serverNote.visibleTitle,
-                content: serverNote.content
+                parentFolderId: serverNote.parentFolderId,
+                visibleTitle: serverNote.type === 'folder' ? serverNote.visibleTitle : localNote.visibleTitle,
+                content: serverNote.type === 'folder' ? serverNote.content : localNote.content
               };
               
               // Update local storage
               await storageService.writeNote(serverNote.id, mergedNote);
               
-              // Trigger folder refresh UI event
-              window.dispatchEvent(new CustomEvent('foldersUpdated', {
-                detail: { folders: [mergedNote] }
-              }));
+              // Trigger appropriate UI event
+              if (serverNote.type === 'folder') {
+                window.dispatchEvent(new CustomEvent('foldersUpdated', {
+                  detail: { folders: [mergedNote] }
+                }));
+              } else {
+                window.dispatchEvent(new CustomEvent('noteUpdate', {
+                  detail: { note: {...mergedNote, skipSync: true }}
+                }));
+              }
               
               updatedCount++;
             }

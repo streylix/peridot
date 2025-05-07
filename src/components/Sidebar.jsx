@@ -22,7 +22,7 @@ const CustomTooltip = ({ children, content }) => (
 );
 
 const ActionButtons = ({ onCreateNote, onCreateFolder, onSortChange }) => (
-  <div className="flex justify-center items-center gap-4 w-full">
+  <div className="sidebar-btn-group">
     <CustomTooltip content="Create new note">
       <button 
         type="button"
@@ -327,15 +327,22 @@ const Sidebar = React.forwardRef(({
       
       if (!draggedItem) return;
       
-      // Remove parentFolderId to move out of folder
-      draggedItem.parentFolderId = null;
-      draggedItem.dateModified = new Date().toISOString();
-  
-      setNotes(prevNotes => prevNotes.map(note => 
-        note.id === id ? draggedItem : note
-      ));
-  
-      await storageService.writeNote(id, draggedItem);
+      // Only process if the item actually needs to be removed from a folder
+      if (draggedItem.parentFolderId) {
+        // Use the FolderService to remove the note from its folder
+        const updatedItem = FolderService.removeNoteFromFolder(draggedItem);
+        
+        // Update local state
+        setNotes(prevNotes => prevNotes.map(note => 
+          note.id === id ? updatedItem : note
+        ));
+        
+        // Save to storage
+        await storageService.writeNote(id, updatedItem);
+        
+        // Log for debugging
+        console.log(`Removed note ${id} from folder ${draggedItem.parentFolderId}`);
+      }
     } catch (error) {
       console.error('Failed to move item:', error);
     }
@@ -357,7 +364,7 @@ const Sidebar = React.forwardRef(({
   const createNewNote = async () => {
     const newNote = {
       id: Date.now(),
-      content: '',
+      content: '<div></div>',
       dateModified: new Date().toISOString(),
       pinned: false,
       caretPosition: 0,
@@ -414,48 +421,72 @@ const Sidebar = React.forwardRef(({
     return searchService.searchNotes(notes, searchTerm);
   }, [notes, searchTerm, sortMethod]);
 
-  const handleItemSelect = useCallback((itemId) => {
-    const selectedItem = notes.find(item => item.id === itemId);
-    
-    if (FolderService.isFolder(selectedItem)) {
-      // If it's a folder, toggle its expanded state
-      const updatedNotes = notes.map(item => 
-        item.id === itemId 
-          ? { ...item, isOpen: !item.isOpen }
-          : item
-      );
-      
-      setNotes(updatedNotes);
-      
-      // Optionally save the updated folder state
-      storageService.writeNote(itemId, {
-        ...selectedItem,
-        isOpen: !selectedItem.isOpen
-      });
-    } else {
-      // For notes, proceed with normal selection
-      onNoteSelect(itemId);
+  const getFolderState = (folderId) => {
+    try {
+      const folderStates = JSON.parse(localStorage.getItem('folder_states') || '{}');
+      return folderStates[folderId] || false;
+    } catch (e) {
+      return false;
     }
+  };
+
+  const saveFolderState = (folderId, isOpen) => {
+    try {
+      const folderStates = JSON.parse(localStorage.getItem('folder_states') || '{}');
+      folderStates[folderId] = isOpen;
+      localStorage.setItem('folder_states', JSON.stringify(folderStates));
+    } catch (e) {
+      console.error('Failed to save folder state:', e);
+    }
+  };
+
+  const handleItemSelect = useCallback((itemId) => {
+    if (!itemId) return;
+
+    // Find the selected item
+    const selectedItem = notes.find(note => note.id === itemId);
+    if (!selectedItem) return;
+
+    // If it's a note, just set it as the selected note
+    if (selectedItem.type !== 'folder') {
+      onNoteSelect(itemId);
+      return;
+    }
+
+    // For folders, toggle the isOpen state without saving to storage
+    const isCurrentlyOpen = selectedItem.isOpen || false;
+    const newOpenState = !isCurrentlyOpen;
+    
+    // Update folder state in localStorage
+    saveFolderState(itemId, newOpenState);
+    
+    // Update UI state in React
+    let updatedNotes = notes.map(note => 
+      note.id === itemId ? { ...note, isOpen: newOpenState } : note
+    );
+    setNotes(updatedNotes);
   }, [notes, onNoteSelect, setNotes]);
+
+  useEffect(() => {
+    if (notes.length > 0) {
+      // Initialize isOpen state for all folders from localStorage
+      const updatedNotes = notes.map(note => {
+        if (note.type === 'folder') {
+          return { ...note, isOpen: getFolderState(note.id) };
+        }
+        return note;
+      });
+      
+      // Only update if there are changes
+      if (JSON.stringify(updatedNotes) !== JSON.stringify(notes)) {
+        setNotes(updatedNotes);
+      }
+    }
+  }, [notes.length]); // Only run when notes array length changes (initial load)
 
   const handleSortChange = useCallback((value) => {
     setNotes(prevNotes => noteSortingService.sortNotes(notes, value));
   }, [notes]);
-
-  // const wrappedNoteSelect = useCallback((noteId) => {
-  //   onNoteSelect(noteId);
-    
-  //   // If on mobile, close sidebar
-  //   if (isMobile) {
-  //     const sidebar = document.querySelector('.sidebar');
-  //     const mainContent = document.querySelector('.main-content');
-      
-  //     if (sidebar && mainContent) {
-  //       sidebar.classList.add('hidden');
-  //       mainContent.classList.add('full-width');
-  //     }
-  //   }
-  // }, [onNoteSelect, isMobile]);
 
   return (
     <div 
