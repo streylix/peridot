@@ -4,7 +4,7 @@ A secure, feature-rich note-taking application built with React.
 
 ## Test it yourself!
 
-[View website here](https://peridot-iota.vercel.app/)
+[View website here](https://peridot-po7r0zloo-ethans-projects-63da81ee.vercel.app/)
 
 ## Features
 
