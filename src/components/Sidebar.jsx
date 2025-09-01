@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect, useImperativeHandle } from 'react';
 import { useMobileSidebar } from './useMobileSidebar';
-import { SquarePen, FolderPlus } from 'lucide-react';
+import { PenSquare, FolderPlus } from 'lucide-react';
 import NoteItem from './NoteItem';
 import InfoMenu from './InfoMenu';
 import { noteContentService } from '../utils/NoteContentService';
@@ -29,7 +29,7 @@ const ActionButtons = ({ onCreateNote, onCreateFolder, onSortChange }) => (
         className="new-note-btn"
         onClick={onCreateNote}
       >
-        <SquarePen />
+        <PenSquare />
       </button>
     </CustomTooltip>
 
