@@ -1,0 +1,62 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: ./compose/Dockerfile
+    image: peridot-web:dev
+    command: /start
+    volumes:
+      - ./backend:/app
+      - venv_data:/opt/venv
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./env_files/.env
+    environment:
+      SERVICE_ROLE: web
+      IN_DOCKER: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: ./compose/Dockerfile.frontend
+    image: peridot-frontend:dev
+    command: /start_frontend
+    volumes:
+      - ./src:/app/src
+      - ./index.html:/app/index.html
+      - ./vite.config.js:/app/vite.config.js
+      - ./package.json:/app/package.json
+      - node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - web
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: peridot-db
+      POSTGRES_USER: peridotadmin
+      POSTGRES_PASSWORD: PeridotDev123!
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "peridotadmin", "-d", "peridot-db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  venv_data:
+  node_modules:

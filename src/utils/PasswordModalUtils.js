@@ -1,7 +1,5 @@
-import { encryptNote, decryptNote } from './encryption';
+import { apiService } from './ApiService.js';
 import { noteContentService } from './NoteContentService';
-import { passwordStorage } from './PasswordStorageService';
-import { storageService } from './StorageService';
 import { noteImportExportService } from './NoteImportExportService';
 import { FolderService } from './folderUtils';
 
@@ -26,7 +24,7 @@ class PasswordModalUtils {
   notifySubscribers() {
     this.subscribers.forEach(callback => callback({
       modalType: this.modalType,
-      noteId: this.noteId
+      noteId: this.noteId,
     }));
   }
 
@@ -73,10 +71,11 @@ class PasswordModalUtils {
     this.notifySubscribers();
   }
 
-  openDownloadLockModal(folderId, folder) {
+  openDownloadFolderModal(folderId, folder, callbacks = null) {
     this.modalType = 'download-folder';
     this.noteId = folderId;
     this.noteData = folder;
+    this.callbacks = callbacks;
     this.notifySubscribers();
   }
 
@@ -93,144 +92,72 @@ class PasswordModalUtils {
       if (!confirmPassword) return { success: false, error: 'Please fill in both password fields' };
       if (password !== confirmPassword) return { success: false, error: 'Passwords do not match' };
     }
-  
+
     try {
       switch (this.modalType) {
         case 'lock': {
-          // First encrypt the note
-          const encryptedNote = await encryptNote(this.noteData, password);
-          if (!encryptedNote) {
-            throw new Error('Encryption failed');
-          }
-  
-          // Store password before modifying note
-          await passwordStorage.storePassword(this.noteData.id, password);
-          
-          const finalNote = {
-            ...encryptedNote,
-            id: this.noteData.id,
-            locked: true,
-            encrypted: true,
-            // Preserve visible title for locked state
-            visibleTitle: this.noteData.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 'Untitled'
-          };
-          
-          await storageService.writeNote(this.noteData.id, finalNote);
-          window.dispatchEvent(new CustomEvent('noteUpdate', { detail: { note: finalNote }}));
+          const lockedNote = await apiService.lockNote(this.noteId, password, confirmPassword);
+          window.dispatchEvent(new CustomEvent('noteUpdate', { detail: { note: lockedNote } }));
           break;
         }
-  
+
         case 'unlock': {
-          const decryptResult = await decryptNote(this.noteData, password);
-          if (!decryptResult.success) {
-            return { success: false, error: 'Invalid password' };
-          }
-  
-          // Remove stored password only after successful decryption
-          try {
-            await passwordStorage.removePassword(this.noteData.id);
-          } catch (e) {
-            console.warn('Password removal failed, proceeding with unlock:', e);
-          }
-          
-          const unlockedNote = {
-            ...decryptResult.note,
-            id: this.noteData.id,
-            locked: false,
-            encrypted: false,
-            visibleTitle: undefined
-          };
-          
-          await storageService.writeNote(this.noteData.id, unlockedNote);
-          window.dispatchEvent(new CustomEvent('noteUpdate', { detail: { note: unlockedNote }}));
+          const result = await apiService.unlockNote(this.noteId, password);
+          if (!result.success) return { success: false, error: 'Invalid password' };
+          // Return the in-memory decrypted note so MainContent can display it
+          window.dispatchEvent(new CustomEvent('noteUpdate', { detail: { note: result.note } }));
           break;
         }
-  
+
         case 'download': {
+          // Unlock for download only — decrypt on the fly and export
+          const result = await apiService.unlockNote(this.noteId, password);
+          if (!result.success) return { success: false, error: 'Invalid password' };
+          const decryptedNote = result.note;
           const fileType = localStorage.getItem('preferredFileType') || 'json';
           await noteImportExportService.downloadNote({
-            note: this.noteData,
+            note: decryptedNote,
             fileType,
-            isEncrypted: true,
-            password,
-            onPdfExport: (decryptedNote) => {
+            isEncrypted: false,
+            onPdfExport: (note) => {
               if (this.callbacks?.setPdfExportNote) {
-                this.callbacks.setPdfExportNote(decryptedNote);
+                this.callbacks.setPdfExportNote(note);
                 this.callbacks.setIsPdfExportModalOpen(true);
               }
-            }
+            },
           });
           break;
         }
 
         case 'lockFolder': {
-          const lockedFolder = await FolderService.lockFolder(this.noteData, password);
-          await storageService.writeNote(this.noteData.id, lockedFolder);
-          window.dispatchEvent(new CustomEvent('noteUpdate', { 
-            detail: { note: lockedFolder }
-          }));
+          const lockedFolder = await apiService.lockNote(this.noteId, password);
+          window.dispatchEvent(new CustomEvent('noteUpdate', { detail: { note: lockedFolder } }));
           break;
         }
 
         case 'unlockFolder': {
-          const result = await FolderService.unlockFolder(this.noteData, password);
-          if (!result.success) {
-            return { success: false, error: result.error };
-          }
-          
-          // Update the folder in storage
-          await storageService.writeNote(this.noteData.id, result.folder);
-  
-          // Notify the UI that the folder has been unlocked
-          window.dispatchEvent(new CustomEvent('folderUnlocked', { 
-            detail: { folderId: this.noteData.id }
-          }));
+          const result = await apiService.unlockNote(this.noteId, password);
+          if (!result.success) return { success: false, error: result.error || 'Invalid password' };
+          window.dispatchEvent(new CustomEvent('folderUnlocked', { detail: { folderId: this.noteId } }));
           break;
         }
 
         case 'unlockFolderPermanent': {
-          const result = await FolderService.unlockFolder(this.noteData, password);
-          if (!result.success) {
-            return { success: false, error: result.error };
-          }
-    
-          // Permanently unlock the folder
-          const unlockedFolder = {
-            ...this.noteData,
-            locked: false,
-            isOpen: true,
-            // Remove verification data
-            verificationData: undefined
-          };
-    
-          await storageService.writeNote(this.noteData.id, unlockedFolder);
-          await passwordStorage.removePassword(this.noteData.id);
-          
-          window.dispatchEvent(new CustomEvent('noteUpdate', { 
-            detail: { note: unlockedFolder }
-          }));
+          const unlockedFolder = await apiService.unlockNotePermanent(this.noteId, password);
+          window.dispatchEvent(new CustomEvent('noteUpdate', { detail: { note: unlockedFolder } }));
           break;
         }
 
         case 'download-folder': {
-          // Use the folder service to verify the password
-          const result = await FolderService.unlockFolder(this.noteData, password);
-          if (!result.success) {
-            return { success: false, error: result.error || 'Invalid password' };
-          }
-  
-          // Get all notes for the folder download
-          const notes = await storageService.getAllNotes();
-          
-          // Get preferred file type
+          const result = await apiService.unlockNote(this.noteId, password);
+          if (!result.success) return { success: false, error: result.error || 'Invalid password' };
+          const notes = await apiService.getAllNotes();
           const fileType = localStorage.getItem('preferredFileType') || 'json';
-          
-          // Use FolderService to download
           await FolderService.processDownload(this.noteData, notes, fileType);
           break;
         }
       }
-  
+
       this.closeModal();
       return { success: true };
     } catch (error) {

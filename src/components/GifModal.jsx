@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from './Modal';
 import { Search } from 'lucide-react';
+import { apiService } from '../utils/ApiService';
 
 function GifModal({ isOpen, onClose, onConfirm }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [gifs, setGifs] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-
-  const GIPHY_API_KEY = 'GkVHnnWLvZCSOlLfkGF1vyBilm4h4iCS';
 
   const searchGifs = async (query) => {
     if (!query) {
@@ -17,11 +16,8 @@ function GifModal({ isOpen, onClose, onConfirm }) {
 
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_API_KEY}&q=${query}&limit=20&offset=0&rating=g&lang=en&bundle=messaging_non_clips`
-      );
-      const data = await response.json();
-      setGifs(data.data);
+      const results = await apiService.searchGifs(query);
+      setGifs(results);
     } catch (error) {
       console.error('Error fetching GIFs:', error);
     } finally {

@@ -1,5 +1,4 @@
-import { storageService } from './StorageService';
-import { encryptNote } from './encryption';
+import { apiService } from './ApiService.js';
 
 class NoteUpdateService {
   constructor() {
@@ -8,7 +7,6 @@ class NoteUpdateService {
     this.subscribers = new Set();
     this.isProcessingUnload = false;
 
-    // Bind the unload handler to ensure correct context
     this.handleBeforeUnload = this.handleBeforeUnload.bind(this);
     window.addEventListener('beforeunload', this.handleBeforeUnload);
   }
@@ -20,24 +18,18 @@ class NoteUpdateService {
 
   notifySubscribers(updatedNote) {
     this.subscribers.forEach(callback => callback(updatedNote));
-    
     window.dispatchEvent(new CustomEvent('noteUpdate', {
       detail: { note: updatedNote }
     }));
   }
 
-  async handleBeforeUnload(event) {
+  async handleBeforeUnload() {
     if (this.pendingUpdates.size === 0) return;
-
     this.isProcessingUnload = true;
-
     try {
-      // Process all pending updates synchronously
       for (const [noteId, updates] of this.pendingUpdates.entries()) {
         await this.processImmediateUpdate(noteId, updates);
       }
-    } catch (error) {
-      console.error('Error processing updates on unload:', error);
     } finally {
       this.isProcessingUnload = false;
       this.pendingUpdates.clear();
@@ -45,101 +37,55 @@ class NoteUpdateService {
     }
   }
 
-  async processImmediateUpdate(noteId, updates, updateModified = true, encryptionContext = null) {
+  async processImmediateUpdate(noteId, updates, updateModified = true) {
     try {
-      // Get current note state
-      const currentNote = await storageService.readNote(noteId);
+      const currentNote = await apiService.readNote(noteId);
       if (!currentNote) return;
 
-      let updatedNote = {
+      const updatedNote = {
         ...currentNote,
         ...updates,
-        dateModified: updateModified ? new Date().toISOString() : currentNote.dateModified
+        dateModified: updateModified ? new Date().toISOString() : currentNote.dateModified,
       };
 
-      // Handle encryption if needed
-      if (encryptionContext?.shouldEncrypt) {
-        if (typeof updatedNote.content === 'string') {
-          updatedNote = await encryptNote(updatedNote, encryptionContext.password);
-        }
-      }
-
-      // Clean up encryption fields if needed
-      if (!updatedNote.locked && !updates.locked) {
-        delete updatedNote.encrypted;
-        delete updatedNote.keyParams;
-        delete updatedNote.iv;
-        delete updatedNote.visibleTitle;
-      }
-
-      // Save to storage
-      await storageService.writeNote(noteId, updatedNote);
-
-      // Notify subscribers
-      this.notifySubscribers(updatedNote);
-
+      // apiService.writeNote automatically sends the session password for
+      // locked notes so the backend can re-encrypt. No client-side crypto needed.
+      const saved = await apiService.writeNote(noteId, updatedNote);
+      this.notifySubscribers(saved);
     } catch (error) {
       console.error('Failed to process immediate note update:', error);
     }
   }
 
-  async queueUpdate(noteId, updates, updateModified = true, encryptionContext = null) {
-    // If unload is in progress, process immediately
+  async queueUpdate(noteId, updates, updateModified = true) {
     if (this.isProcessingUnload) {
-      return this.processImmediateUpdate(noteId, updates, updateModified, encryptionContext);
+      return this.processImmediateUpdate(noteId, updates, updateModified);
     }
 
-    // Merge with any existing pending updates for this note
     const existingUpdates = this.pendingUpdates.get(noteId) || {};
-    const mergedUpdates = { ...existingUpdates, ...updates };
-    this.pendingUpdates.set(noteId, mergedUpdates);
+    this.pendingUpdates.set(noteId, { ...existingUpdates, ...updates });
 
-    // Cancel any existing timer for this note
     if (this.updateTimers.has(noteId)) {
       clearTimeout(this.updateTimers.get(noteId));
     }
 
-    // Set a new timer
     const timer = setTimeout(async () => {
       try {
-        // Get current note state
-        const currentNote = await storageService.readNote(noteId);
+        const currentNote = await apiService.readNote(noteId);
         if (!currentNote) return;
 
-        // Get the final merged updates
         const finalUpdates = this.pendingUpdates.get(noteId) || {};
         this.pendingUpdates.delete(noteId);
 
-        let updatedNote = {
+        const updatedNote = {
           ...currentNote,
           ...finalUpdates,
-          dateModified: updateModified ? new Date().toISOString() : currentNote.dateModified
+          dateModified: updateModified ? new Date().toISOString() : currentNote.dateModified,
         };
 
-        // Handle encryption if needed
-        if (encryptionContext?.shouldEncrypt) {
-          if (typeof updatedNote.content === 'string') {
-            updatedNote = await encryptNote(updatedNote, encryptionContext.password);
-          }
-        }
-
-        // Clean up encryption fields if needed
-        if (!updatedNote.locked && !finalUpdates.locked) {
-          delete updatedNote.encrypted;
-          delete updatedNote.keyParams;
-          delete updatedNote.iv;
-          delete updatedNote.visibleTitle;
-        }
-
-        // Save to storage
-        await storageService.writeNote(noteId, updatedNote);
-
-        // Notify subscribers
-        this.notifySubscribers(updatedNote);
-
-        // Remove the timer
+        const saved = await apiService.writeNote(noteId, updatedNote);
+        this.notifySubscribers(saved);
         this.updateTimers.delete(noteId);
-
       } catch (error) {
         console.error('Failed to process note update:', error);
         this.updateTimers.delete(noteId);
@@ -147,7 +93,6 @@ class NoteUpdateService {
       }
     }, 200);
 
-    // Store the timer
     this.updateTimers.set(noteId, timer);
   }
 
@@ -159,7 +104,6 @@ class NoteUpdateService {
     this.pendingUpdates.delete(noteId);
   }
 
-  // Cleanup method to remove event listener when service is no longer needed
   cleanup() {
     window.removeEventListener('beforeunload', this.handleBeforeUnload);
   }

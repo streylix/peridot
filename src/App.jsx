@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import Settings from './components/Settings';
+import Login from './components/Login';
 import { noteNavigation } from './utils/NoteNavigationUtil';
 import GifModal from './components/GifModal';
 import PDFExportModal from './components/PDFExportModal';
@@ -11,7 +12,7 @@ import RenameModal from './components/RenameModal.jsx';
 
 import { encryptNote, decryptNote, reEncryptNote, permanentlyUnlockNote } from './utils/encryption';
 import { passwordStorage } from './utils/PasswordStorageService';
-import { storageService } from './utils/StorageService.js';
+import { apiService, storageService } from './utils/ApiService.js';
 import { noteContentService } from './utils/NoteContentService.js';
 import { noteUpdateService } from './utils/NoteUpdateService.js';
 import { passwordModalUtils } from './utils/PasswordModalUtils.js';
@@ -20,6 +21,7 @@ import { noteSortingService } from './utils/NoteSortingService.js';
 import { FolderService } from './utils/folderUtils.js';
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(null); // null = loading
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentModal, setCurrentModal] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
@@ -86,7 +88,15 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+  // Check authentication on mount
   useEffect(() => {
+    apiService.me().then(user => {
+      setIsAuthenticated(!!user);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
     const loadNotes = async () => {
       try {
         const savedNotes = await storageService.getAllNotes();
@@ -96,20 +106,10 @@ function App() {
       }
     };
     loadNotes();
-  }, []);
+  }, [isAuthenticated]);
 
-  useEffect(() => {
-    const saveNotes = async () => {
-      try {
-        await Promise.all(notes.map(note => 
-          storageService.writeNote(note.id, note)
-        ));
-      } catch (error) {
-        console.error('Failed to save notes:', error);
-      }
-    };
-    saveNotes();
-  }, [notes]);
+  // Note persistence is handled per-note by NoteUpdateService → ApiService.
+  // No bulk-save needed here.
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'system';
@@ -217,6 +217,14 @@ function App() {
       sidebarRef.current.toggleSidebar();
     }
   };
+
+  if (isAuthenticated === null) {
+    return <div className="app-loading" />;
+  }
+
+  if (!isAuthenticated) {
+    return <Login onLogin={() => setIsAuthenticated(true)} />;
+  }
 
   return (
     <div className="app">

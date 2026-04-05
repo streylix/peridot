@@ -3,8 +3,7 @@ import NoteEditor from './NoteEditor';
 import EmptyState from './EmptyState';
 import LockedWindow from './LockedWindow';
 import { noteImportExportService } from '../utils/NoteImportExportService';
-import { passwordStorage } from '../utils/PasswordStorageService';
-import { decryptNote, encryptNote } from '../utils/encryption';
+import { apiService } from '../utils/ApiService';
 import { noteUpdateService } from '../utils/NoteUpdateService';
 
 function MainContent({ 
@@ -224,41 +223,21 @@ function MainContent({
 
   const handleUnlock = async (password) => {
     if (!note) return false;
-
     try {
-      const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true'
-      
-      if (!verifyBypass){
-        const storedPassword = await passwordStorage.getPassword(note.id);
-        if ((!storedPassword || password !== storedPassword)) {
-          return false;
-        }
-      }
-
-      const decryptResult = await decryptNote(note, password, false);
-      
-      if (!decryptResult.success) {
-        console.error('Decryption failed:', decryptResult.error);
-        return false;
-      }
-
-      setDecryptedNote(decryptResult.note);
+      const result = await apiService.unlockNote(note.id, password);
+      if (!result.success) return false;
+      setDecryptedNote(result.note);
       setCurrentPassword(password);
       setIsUnlocked(true);
       return true;
     } catch (err) {
-      console.error('Error unlocking note:', err);
       return false;
     }
   };
 
   const handleUpdateNote = async (updates, updateModified = true) => {
-    const encryptionContext = isUnlocked && currentPassword ? {
-      shouldEncrypt: true,
-      password: currentPassword
-    } : null;
-    
-    await noteUpdateService.queueUpdate(note.id, updates, updateModified, encryptionContext);
+    // Session password is stored in apiService; NoteUpdateService picks it up automatically.
+    await noteUpdateService.queueUpdate(note.id, updates, updateModified);
   };
 
   if (!note) {
