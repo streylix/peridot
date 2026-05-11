@@ -623,7 +623,11 @@ def note_unlock(request, note_id):
     plaintext = _normalize_legacy_content(plaintext)
     data = NoteSerializer(note).data
     data["content"] = plaintext
-    data["visibleTitle"] = _extract_title(plaintext)
+    # Preserve the note's existing visible_title if it's a real value (e.g. a
+    # date title from a legacy export). Only fall back to first-line extraction
+    # when there isn't one.
+    if not (note.visible_title and note.visible_title.strip() and note.visible_title != "Untitled"):
+        data["visibleTitle"] = _extract_title(plaintext)
     data["encrypted"] = False
     return Response({"success": True, "note": data})
 
@@ -672,7 +676,8 @@ def note_unlock_permanent(request, note_id):
 
     plaintext = _normalize_legacy_content(plaintext)
     note.content = plaintext
-    note.visible_title = _extract_title(plaintext)
+    if not (note.visible_title and note.visible_title.strip() and note.visible_title != "Untitled"):
+        note.visible_title = _extract_title(plaintext)
     note.preview_content = _extract_preview(plaintext)
     note.locked = False
     note.encrypted = False

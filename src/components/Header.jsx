@@ -61,18 +61,18 @@ function Header({
       const path = [];
       let currentItem = selectedNote;
       
-      const currentTitle = currentItem.locked ? 
-        currentItem.visibleTitle : 
-        noteContentService.getFirstLine(currentItem.content);
+      const currentTitle = currentItem.locked
+        ? currentItem.visibleTitle
+        : (currentItem.visibleTitle || noteContentService.getFirstLine(currentItem.content));
       path.unshift(currentTitle);
-  
+
       while (currentItem.parentFolderId) {
         const parentFolder = notes.find(n => n.id === currentItem.parentFolderId);
         if (!parentFolder) break;
-  
+
         const folderTitle = parentFolder.locked
           ? parentFolder.visibleTitle || 'Untitled'
-          : noteContentService.getFirstLine(parentFolder.content);
+          : (parentFolder.visibleTitle || noteContentService.getFirstLine(parentFolder.content));
         
         path.unshift(folderTitle);
         currentItem = parentFolder;
