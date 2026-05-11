@@ -178,7 +178,13 @@ const livePreview = ViewPlugin.fromClass(
             }
             const markerLine = view.state.doc.lineAt(node.from).number;
             if (!activeLines.has(markerLine)) {
-              items.push(Decoration.replace({}).range(node.from, node.to));
+              // Swallow whitespace that immediately follows the marker so the
+              // gap left by `# ` / `- ` / `> ` disappears with the marker.
+              let to = node.to;
+              const docText = view.state.doc.sliceString(to, to + 4);
+              const ws = docText.match(/^[ \t]+/);
+              if (ws) to += ws[0].length;
+              items.push(Decoration.replace({}).range(node.from, to));
             }
           }
 
