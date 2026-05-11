@@ -155,6 +155,22 @@ def _normalize_legacy_content(content: str) -> str:
     return content
 
 
+def _ensure_title_prefix(content: str, title: str) -> str:
+    """Prepend `title` as the first line of `content` if the body's existing
+    first line doesn't already match. Legacy notes kept a separate visible
+    title from their body text; the new editor treats line one as the title,
+    so we surface the legacy title there too."""
+    if not title or title == "Untitled":
+        return content
+    body = content or ""
+    first = next((line for line in body.splitlines() if line.strip()), "").strip()
+    if first == title.strip():
+        return body
+    if body and not body.startswith("\n"):
+        body = "\n" + body
+    return f"{title}\n{body}" if body else title
+
+
 def _strip_markdown_line(line: str) -> str:
     text = re.sub(r"^\s{0,3}#{1,6}\s+", "", line)
     text = re.sub(r"^\s{0,3}[-*+]\s+\[[ xX]\]\s+", "", text)
@@ -640,12 +656,12 @@ def note_unlock(request, note_id):
         return Response({"error": "Invalid password"}, status=status.HTTP_401_UNAUTHORIZED)
 
     plaintext = _normalize_legacy_content(plaintext)
+    legacy_title = (note.visible_title or "").strip()
+    if legacy_title and legacy_title != "Untitled":
+        plaintext = _ensure_title_prefix(plaintext, legacy_title)
     data = NoteSerializer(note).data
     data["content"] = plaintext
-    # Preserve the note's existing visible_title if it's a real value (e.g. a
-    # date title from a legacy export). Only fall back to first-line extraction
-    # when there isn't one.
-    if not (note.visible_title and note.visible_title.strip() and note.visible_title != "Untitled"):
+    if not (legacy_title and legacy_title != "Untitled"):
         data["visibleTitle"] = _extract_title(plaintext)
     data["encrypted"] = False
     return Response({"success": True, "note": data})
@@ -694,8 +710,11 @@ def note_unlock_permanent(request, note_id):
         return Response({"error": "Invalid password"}, status=status.HTTP_401_UNAUTHORIZED)
 
     plaintext = _normalize_legacy_content(plaintext)
+    legacy_title = (note.visible_title or "").strip()
+    if legacy_title and legacy_title != "Untitled":
+        plaintext = _ensure_title_prefix(plaintext, legacy_title)
     note.content = plaintext
-    if not (note.visible_title and note.visible_title.strip() and note.visible_title != "Untitled"):
+    if not (legacy_title and legacy_title != "Untitled"):
         note.visible_title = _extract_title(plaintext)
     note.preview_content = _extract_preview(plaintext)
     note.locked = False
