@@ -351,6 +351,8 @@ function MarkdownEditor({ note, onUpdateNote }) {
   const hostRef = useRef(null);
   const viewRef = useRef(null);
   const noteIdRef = useRef(null);
+  const noteRef = useRef(note);
+  noteRef.current = note;
   const onUpdateRef = useRef(onUpdateNote);
   onUpdateRef.current = onUpdateNote;
 
@@ -443,17 +445,34 @@ function MarkdownEditor({ note, onUpdateNote }) {
     hostRef.current.addEventListener('mousedown', focusHandler);
     viewRef.current = view;
     if (typeof window !== 'undefined') window.__peridotCMView = view;
+    // Load current note content into the freshly-created view. Doing this here
+    // (instead of relying solely on the sync effect) handles React StrictMode's
+    // setup/cleanup/setup cycle, where the sync effect would otherwise have
+    // already marked noteIdRef and skip-loaded the second view.
+    const current = noteRef.current;
+    if (current) {
+      const incoming = current.content || '';
+      const caretPosition = Math.min(current.caretPosition ?? incoming.length, incoming.length);
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: incoming },
+        selection: { anchor: caretPosition },
+        annotations: syncLoad.of(true),
+      });
+      noteIdRef.current = current.id;
+      view.focus();
+    }
     return () => {
       hostRef.current?.removeEventListener('mousedown', focusHandler);
       view.destroy();
       viewRef.current = null;
+      noteIdRef.current = null;
       if (typeof window !== 'undefined' && window.__peridotCMView === view) {
         delete window.__peridotCMView;
       }
     };
   }, []);
 
-  // Sync content when the selected note changes.
+  // Sync content when the selected note changes after the editor is already mounted.
   useEffect(() => {
     const view = viewRef.current;
     if (!view || !note) return;
