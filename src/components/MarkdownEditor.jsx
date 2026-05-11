@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { EditorState } from '@codemirror/state';
-import { EditorView, Decoration, ViewPlugin, WidgetType, keymap } from '@codemirror/view';
+import { EditorView, Decoration, ViewPlugin, WidgetType, keymap, placeholder } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
 import { GFM } from '@lezer/markdown';
 import { syntaxTree } from '@codemirror/language';
@@ -161,28 +161,38 @@ const livePreview = ViewPlugin.fromClass(
             }
           }
 
-          // Block markers — hide unless cursor is on the same line.
+          // Block markers — hide unless cursor is on the same line. Skip ListMark
+          // when the item is a task; the TaskMarker handler below replaces the
+          // whole `- [ ]` prefix and the two ranges would overlap.
           if (BLOCK_MARK_NAMES.has(name) && node.from < node.to) {
+            if (name === 'ListMark') {
+              const line = view.state.doc.lineAt(node.from);
+              const lineText = view.state.doc.sliceString(line.from, line.to);
+              if (/^\s*(?:[-*+]|\d+[.)])\s+\[(?: |x|X)\]/.test(lineText)) {
+                return;
+              }
+            }
             const markerLine = view.state.doc.lineAt(node.from).number;
             if (!activeLines.has(markerLine)) {
               items.push(Decoration.replace({}).range(node.from, node.to));
             }
           }
 
-          // Task checkboxes — replace `[ ]` / `[x]` with a clickable checkbox widget when
-          // the cursor isn't on this line. When the cursor is on the line, leave the raw
-          // `[ ]` text visible so it can be edited normally.
+          // Task checkboxes stay as widgets even on the active line. Replace the
+          // whole `- [ ]` (or `* [x]`, `1. [ ]` …) prefix with the checkbox so the
+          // list marker never bleeds through when the cursor is on the line.
           if (name === 'TaskMarker') {
-            const markerLine = view.state.doc.lineAt(node.from).number;
-            if (!activeLines.has(markerLine)) {
-              const text = view.state.doc.sliceString(node.from, node.to);
-              const checked = /x/i.test(text);
-              items.push(
-                Decoration.replace({
-                  widget: new CheckboxWidget(checked, node.from, node.to),
-                }).range(node.from, node.to)
-              );
-            }
+            const line = view.state.doc.lineAt(node.from);
+            const beforeMarker = view.state.doc.sliceString(line.from, node.from);
+            const listPrefix = beforeMarker.match(/^(\s*)(?:[-*+]|\d+[.)])\s+$/);
+            const replaceFrom = listPrefix ? line.from + listPrefix[1].length : node.from;
+            const text = view.state.doc.sliceString(node.from, node.to);
+            const checked = /x/i.test(text);
+            items.push(
+              Decoration.replace({
+                widget: new CheckboxWidget(checked, node.from, node.to),
+              }).range(replaceFrom, node.to)
+            );
           }
         },
       });
@@ -196,7 +206,7 @@ const livePreview = ViewPlugin.fromClass(
 
 const editorTheme = EditorView.theme(
   {
-    '&': { fontSize: '15px' },
+    '&': { fontSize: 'var(--md-editor-font-size, 15px)' },
     '.cm-scroller': {
       fontFamily:
         'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
@@ -266,6 +276,73 @@ const darkOverrides = EditorView.theme(
   { dark: true }
 );
 
+const isUrl = (text) => /^https?:\/\/\S+$/i.test(text.trim());
+
+const wrapSelection = (before, after = before, fallback = 'text') => (view) => {
+  const selection = view.state.selection.main;
+  const selected = view.state.doc.sliceString(selection.from, selection.to);
+  const body = selected || fallback;
+  view.dispatch({
+    changes: { from: selection.from, to: selection.to, insert: `${before}${body}${after}` },
+    selection: {
+      anchor: selection.from + before.length,
+      head: selection.from + before.length + body.length,
+    },
+  });
+  return true;
+};
+
+const insertLink = (view) => {
+  const selection = view.state.selection.main;
+  const selected = view.state.doc.sliceString(selection.from, selection.to) || 'link text';
+  const url = window.prompt('Link URL');
+  if (!url) return true;
+  const link = `[${selected}](${url})`;
+  view.dispatch({
+    changes: { from: selection.from, to: selection.to, insert: link },
+    selection: {
+      anchor: selection.from + 1,
+      head: selection.from + 1 + selected.length,
+    },
+  });
+  return true;
+};
+
+const continueList = (view) => {
+  const selection = view.state.selection.main;
+  if (!selection.empty) return false;
+  const line = view.state.doc.lineAt(selection.head);
+  const beforeCursor = line.text.slice(0, selection.head - line.from);
+  const match = beforeCursor.match(/^(\s*)([-*+]|\d+[.)])\s+(\[(?: |x|X)\]\s+)?(.*)$/);
+  if (!match) return false;
+
+  const [, indent, marker, taskMarker = '', textAfterMarker] = match;
+  if (!textAfterMarker.trim()) {
+    view.dispatch({
+      changes: { from: line.from, to: selection.head, insert: indent },
+    });
+    return true;
+  }
+
+  const nextMarker = /^\d/.test(marker)
+    ? marker.replace(/\d+/, n => String(Number(n) + 1))
+    : marker;
+  view.dispatch({
+    changes: {
+      from: selection.head,
+      insert: `\n${indent}${nextMarker} ${taskMarker}`,
+    },
+  });
+  return true;
+};
+
+const editorKeys = keymap.of([
+  { key: 'Mod-b', run: wrapSelection('**', '**', 'bold text') },
+  { key: 'Mod-i', run: wrapSelection('*', '*', 'italic text') },
+  { key: 'Mod-k', run: insertLink },
+  { key: 'Enter', run: continueList },
+]);
+
 function MarkdownEditor({ note, onUpdateNote }) {
   const hostRef = useRef(null);
   const viewRef = useRef(null);
@@ -286,9 +363,12 @@ function MarkdownEditor({ note, onUpdateNote }) {
     const debouncedSave = debounce((content) => {
       onUpdateRef.current?.({ content }, true);
     }, 200);
+    const debouncedSaveCaret = debounce((caretPosition) => {
+      onUpdateRef.current?.({ caretPosition }, false);
+    }, 250);
 
     const linkClickHandler = EditorView.domEventHandlers({
-      mousedown(event, view) {
+      mousedown(event) {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return false;
         const linkEl = target.closest('[data-href]');
@@ -303,6 +383,17 @@ function MarkdownEditor({ note, onUpdateNote }) {
         }
         return false;
       },
+      paste(event) {
+        const text = event.clipboardData?.getData('text/plain');
+        const selection = view.state.selection.main;
+        if (!text || selection.empty || !isUrl(text)) return false;
+        const selected = view.state.doc.sliceString(selection.from, selection.to);
+        event.preventDefault();
+        view.dispatch({
+          changes: { from: selection.from, to: selection.to, insert: `[${selected}](${text.trim()})` },
+        });
+        return true;
+      },
     });
 
     const view = new EditorView({
@@ -310,8 +401,10 @@ function MarkdownEditor({ note, onUpdateNote }) {
         doc: '',
         extensions: [
           history(),
+          editorKeys,
           keymap.of([...defaultKeymap, ...historyKeymap]),
           markdown({ extensions: [GFM] }),
+          placeholder('Start writing...'),
           EditorView.lineWrapping,
           editorTheme,
           darkOverrides,
@@ -320,6 +413,9 @@ function MarkdownEditor({ note, onUpdateNote }) {
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               debouncedSave(update.state.doc.toString());
+            }
+            if (update.selectionSet) {
+              debouncedSaveCaret(update.state.selection.main.head);
             }
           }),
         ],
@@ -358,9 +454,10 @@ function MarkdownEditor({ note, onUpdateNote }) {
     if (noteIdRef.current === note.id) return;
     noteIdRef.current = note.id;
     const incoming = note.content || '';
+    const caretPosition = Math.min(note.caretPosition ?? incoming.length, incoming.length);
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: incoming },
-      selection: { anchor: incoming.length },
+      selection: { anchor: caretPosition },
     });
     view.focus();
   }, [note?.id, note?.content]);

@@ -4,6 +4,7 @@ class NoteUpdateService {
   constructor() {
     this.updateTimers = new Map();
     this.pendingUpdates = new Map();
+    this.pendingUpdateModified = new Map();
     this.subscribers = new Set();
     this.isProcessingUnload = false;
 
@@ -16,10 +17,10 @@ class NoteUpdateService {
     return () => this.subscribers.delete(callback);
   }
 
-  notifySubscribers(updatedNote) {
-    this.subscribers.forEach(callback => callback(updatedNote));
+  notifySubscribers(updatedNote, updateModified = true) {
+    this.subscribers.forEach(callback => callback(updatedNote, { updateModified }));
     window.dispatchEvent(new CustomEvent('noteUpdate', {
-      detail: { note: updatedNote }
+      detail: { note: updatedNote, updateModified }
     }));
   }
 
@@ -28,11 +29,13 @@ class NoteUpdateService {
     this.isProcessingUnload = true;
     try {
       for (const [noteId, updates] of this.pendingUpdates.entries()) {
-        await this.processImmediateUpdate(noteId, updates);
+        const updateModified = this.pendingUpdateModified.get(noteId) ?? true;
+        await this.processImmediateUpdate(noteId, updates, updateModified);
       }
     } finally {
       this.isProcessingUnload = false;
       this.pendingUpdates.clear();
+      this.pendingUpdateModified.clear();
       this.updateTimers.clear();
     }
   }
@@ -51,7 +54,7 @@ class NoteUpdateService {
       // apiService.writeNote automatically sends the session password for
       // locked notes so the backend can re-encrypt. No client-side crypto needed.
       const saved = await apiService.writeNote(noteId, updatedNote);
-      this.notifySubscribers(saved);
+      this.notifySubscribers(saved, updateModified);
     } catch (error) {
       console.error('Failed to process immediate note update:', error);
     }
@@ -64,6 +67,8 @@ class NoteUpdateService {
 
     const existingUpdates = this.pendingUpdates.get(noteId) || {};
     this.pendingUpdates.set(noteId, { ...existingUpdates, ...updates });
+    const existingUpdateModified = this.pendingUpdateModified.get(noteId) || false;
+    this.pendingUpdateModified.set(noteId, existingUpdateModified || updateModified);
 
     if (this.updateTimers.has(noteId)) {
       clearTimeout(this.updateTimers.get(noteId));
@@ -75,21 +80,24 @@ class NoteUpdateService {
         if (!currentNote) return;
 
         const finalUpdates = this.pendingUpdates.get(noteId) || {};
+        const finalUpdateModified = this.pendingUpdateModified.get(noteId) ?? true;
         this.pendingUpdates.delete(noteId);
+        this.pendingUpdateModified.delete(noteId);
 
         const updatedNote = {
           ...currentNote,
           ...finalUpdates,
-          dateModified: updateModified ? new Date().toISOString() : currentNote.dateModified,
+          dateModified: finalUpdateModified ? new Date().toISOString() : currentNote.dateModified,
         };
 
         const saved = await apiService.writeNote(noteId, updatedNote);
-        this.notifySubscribers(saved);
+        this.notifySubscribers(saved, finalUpdateModified);
         this.updateTimers.delete(noteId);
       } catch (error) {
         console.error('Failed to process note update:', error);
         this.updateTimers.delete(noteId);
         this.pendingUpdates.delete(noteId);
+        this.pendingUpdateModified.delete(noteId);
       }
     }, 200);
 
@@ -102,6 +110,7 @@ class NoteUpdateService {
       this.updateTimers.delete(noteId);
     }
     this.pendingUpdates.delete(noteId);
+    this.pendingUpdateModified.delete(noteId);
   }
 
   cleanup() {

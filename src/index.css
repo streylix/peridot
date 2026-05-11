@@ -36,6 +36,14 @@ header {
   background: linear-gradient(to bottom, rgba(30, 30, 30, 0.2), transparent);
 }
 
+.header-left {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
 .main-content.opening {
   transition: width 0.3s ease-out;
 }
@@ -254,10 +262,9 @@ header.full-width{
   display: block;
 }
 
-/* Let .main-content be the sole scroller — the host expands as content grows
-   so CodeMirror's auto scroll-into-view doesn't double-scroll. */
-.md-editor-host {
-  min-height: calc(100vh - 80px);
+.md-editor-host,
+.md-editor-host .cm-editor {
+  height: calc(100vh - 45px);
 }
 
 .md-editor-host .cm-editor {
@@ -265,10 +272,7 @@ header.full-width{
 }
 
 .md-editor-host .cm-scroller {
-  /* Disable internal scrolling; the page-level scroller (.main-content) handles it. */
-  overflow: visible;
-  height: auto;
-  min-height: calc(100vh - 80px);
+  overflow: auto;
 }
 
 .cm-md-task {
@@ -278,10 +282,41 @@ header.full-width{
 }
 
 .cm-md-task-box {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
   width: 1em;
   height: 1em;
+  margin: 0;
+  border: 1px solid rgba(10, 163, 79, 0.7);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.85);
   cursor: pointer;
   vertical-align: middle;
+}
+
+.cm-md-task-box::before {
+  content: "";
+  width: 0.55em;
+  height: 0.55em;
+  transform: scale(0);
+  transition: transform 0.12s ease-in-out;
+  clip-path: polygon(14% 44%, 0 59%, 39% 100%, 100% 18%, 84% 5%, 36% 69%);
+  background: white;
+}
+
+.cm-md-task-box:checked {
+  background: #0aa34f;
+  border-color: #0aa34f;
+}
+
+.cm-md-task-box:checked::before {
+  transform: scale(1);
+}
+
+.cm-md-task-box:focus-visible {
+  outline: 2px solid rgba(10, 163, 79, 0.35);
+  outline-offset: 2px;
 }
 
 .dark-mode .md-editor-host .cm-content {
@@ -295,6 +330,16 @@ header.full-width{
 .dark-mode .md-editor-host .cm-md-quote {
   color: rgba(255,255,255,0.7);
   border-left-color: rgba(255,255,255,0.35);
+}
+
+.dark-mode .cm-md-task-box {
+  background: rgba(31, 31, 31, 0.95);
+  border-color: rgba(10, 163, 79, 0.85);
+}
+
+.dark-mode .cm-md-task-box:checked {
+  background: #0aa34f;
+  border-color: #2ee985;
 }
 
 #inner-note{
@@ -529,6 +574,7 @@ header.full-width{
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .header-buttons button {
@@ -546,6 +592,15 @@ header.full-width{
 
 .header-buttons button:hover {
   opacity: 1;
+}
+
+.header-buttons button:disabled {
+  cursor: not-allowed;
+  opacity: 0.25;
+}
+
+.header-buttons button:disabled:hover {
+  opacity: 0.25;
 }
 
 .note-header {
@@ -619,6 +674,24 @@ header.full-width{
   background: none;
 }
 
+.note-tab {
+  min-width: 0;
+  max-width: min(46vw, calc(100vw - 520px));
+  margin-left: 42px;
+  display: flex;
+  align-items: center;
+}
+
+.note-tab-title {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.72;
+  font-size: 14px;
+}
+
 #back-btn:hover {
   opacity: 1;
 }
@@ -658,29 +731,6 @@ header.full-width{
     color: #333;
     padding: 8px;
   }
-
-  .note-tab {
-    display: flex;
-    align-items: center;
-    padding: 4px 12px;
-    border-radius: 4px;
-    margin-left: 4px;
-    position: absolute;
-    left: 14vh;
-    max-width: calc(100% - 200px);
-  }
-  
-  .note-tab-title {
-    font-size: 14px;
-    /* color: #c7c7c7; */
-    color: #333;
-    opacity: 0.8;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-
 
   /* Light mode styles */
 .stats-menu {

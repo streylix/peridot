@@ -71,7 +71,8 @@
   }
 
   .note-tab {
-    left: 7vh;
+    margin-left: 8px;
+    max-width: calc(100vw - 220px);
   }
 
   .main-content.full-width {

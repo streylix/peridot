@@ -393,12 +393,12 @@ const Sidebar = React.forwardRef(({
   }, []);
 
   useEffect(() => {
-    const unsubscribe = noteUpdateService.subscribe((updatedNote) => {
+    const unsubscribe = noteUpdateService.subscribe((updatedNote, { updateModified } = {}) => {
       setNotes(prevNotes => {
         const updatedNotes = prevNotes.map(note =>
           note.id === updatedNote.id ? updatedNote : note
         );
-        return noteSortingService.sortNotes(updatedNotes);
+        return updateModified === false ? updatedNotes : noteSortingService.sortNotes(updatedNotes);
       });
     });
   
