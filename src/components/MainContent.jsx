@@ -18,7 +18,6 @@ function MainContent({
 }) {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [decryptedNote, setDecryptedNote] = useState(null);
-  const [currentPassword, setCurrentPassword] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [lockedParentFolder, setLockedParentFolder] = useState(null);
   const editorRef = useRef(null);
@@ -219,7 +218,18 @@ function MainContent({
   useEffect(() => {
     setIsUnlocked(false);
     setDecryptedNote(null);
-    setCurrentPassword(null);
+  }, [note?.id]);
+
+  useEffect(() => {
+    const handleScopedUnlock = (event) => {
+      const unlockedNote = event.detail?.note;
+      if (!unlockedNote || unlockedNote.id !== note?.id) return;
+      setDecryptedNote(unlockedNote);
+      setIsUnlocked(true);
+    };
+
+    window.addEventListener('noteUnlockedForEditor', handleScopedUnlock);
+    return () => window.removeEventListener('noteUnlockedForEditor', handleScopedUnlock);
   }, [note?.id]);
 
   const handleUnlock = async (password) => {
@@ -228,10 +238,9 @@ function MainContent({
       const result = await apiService.unlockNote(note.id, password);
       if (!result.success) return false;
       setDecryptedNote(result.note);
-      setCurrentPassword(password);
       setIsUnlocked(true);
       return true;
-    } catch (err) {
+    } catch {
       return false;
     }
   };

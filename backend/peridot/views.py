@@ -115,27 +115,53 @@ def csrf_token(request):
 # Notes CRUD
 # ---------------------------------------------------------------------------
 
+def _looks_like_html(content: str) -> bool:
+    return bool(re.search(r"<\w+[^>]*>", (content or "").lstrip()[:64]))
+
+
+def _strip_markdown_line(line: str) -> str:
+    text = re.sub(r"^\s{0,3}#{1,6}\s+", "", line)
+    text = re.sub(r"^\s{0,3}[-*+]\s+\[[ xX]\]\s+", "", text)
+    text = re.sub(r"^\s{0,3}[-*+]\s+", "", text)
+    text = re.sub(r"^\s{0,3}\d+\.\s+", "", text)
+    text = re.sub(r"^\s{0,3}>\s?", "", text)
+    text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"(\*\*|__|~~|`|\*|_)", "", text)
+    return text.strip()
+
+
+def _extract_markdown_lines(content: str) -> list[str]:
+    return [line for line in (_strip_markdown_line(raw) for raw in content.splitlines()) if line]
+
+
 def _extract_title(content: str) -> str:
-    """Extract first-line text from HTML div content."""
+    """Extract a markdown-aware display title from note content."""
     if not content:
         return "Untitled"
-    match = re.search(r"<div[^>]*>(.*?)</div>", content, re.DOTALL)
-    if match:
-        text = re.sub(r"<[^>]+>", "", match.group(1)).strip()
+    if _looks_like_html(content):
+        match = re.search(r"<div[^>]*>(.*?)</div>", content, re.DOTALL)
+        if match:
+            text = re.sub(r"<[^>]+>", "", match.group(1)).strip()
+            return text or "Untitled"
+        text = re.sub(r"<[^>]+>", "", content).strip()
         return text or "Untitled"
-    text = re.sub(r"<[^>]+>", "", content).strip()
-    return text or "Untitled"
+    lines = _extract_markdown_lines(content)
+    return lines[0] if lines else "Untitled"
 
 
 def _extract_preview(content: str) -> str:
-    """Extract preview text (everything after the first div)."""
+    """Extract markdown-aware preview text after the title line."""
     if not content:
         return ""
-    divs = re.findall(r"<div[^>]*>(.*?)</div>", content, re.DOTALL)
-    if len(divs) > 1:
-        lines = [re.sub(r"<[^>]+>", "", d).strip() for d in divs[1:]]
-        return " ".join(l for l in lines if l)
-    return ""
+    if _looks_like_html(content):
+        divs = re.findall(r"<div[^>]*>(.*?)</div>", content, re.DOTALL)
+        if len(divs) > 1:
+            lines = [re.sub(r"<[^>]+>", "", d).strip() for d in divs[1:]]
+            return " ".join(l for l in lines if l)
+        return ""
+    lines = _extract_markdown_lines(content)
+    return " ".join(lines[1:])
 
 
 @api_view(["GET", "POST"])

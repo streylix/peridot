@@ -16,7 +16,7 @@ export async function encryptNote(note, password) {
 /**
  * Unlock a note for this session — backend decrypts and returns plaintext.
  * The database still holds the encrypted version.
- * Returns { success, note } where note.content is the decrypted HTML.
+ * Returns { success, note } where note.content is the decrypted markdown.
  */
 export async function decryptNote(note, password) {
   try {

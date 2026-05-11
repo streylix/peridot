@@ -52,7 +52,9 @@ class ApiService {
     });
     if (!resp.ok) {
       let msg = 'Invalid credentials';
-      try { msg = (await resp.json()).error || msg; } catch {}
+      try { msg = (await resp.json()).error || msg; } catch {
+        // Keep the default message when the response body is not JSON.
+      }
       throw new Error(msg);
     }
     const data = await resp.json();
@@ -61,7 +63,9 @@ class ApiService {
   }
 
   async logout() {
-    try { await this._fetch('/auth/logout/', { method: 'POST' }); } catch {}
+    try { await this._fetch('/auth/logout/', { method: 'POST' }); } catch {
+      // Logout should still clear local auth state if the server request fails.
+    }
     this._setToken(null);
     this._sessionPasswords.clear();
   }
@@ -113,7 +117,7 @@ class ApiService {
       const payload = { ...noteData };
 
       // If locked and we have a session password, send it so the backend can re-encrypt
-      if (existing.locked && noteData.content && !payload.password) {
+      if (existing.locked && noteData.content !== undefined && !payload.password) {
         const pw = this._sessionPasswords.get(noteId);
         if (pw) payload.password = pw;
       }
@@ -156,8 +160,6 @@ class ApiService {
       const err = await resp.json();
       throw new Error(err.error || 'Lock failed');
     }
-    // Store password in session for re-encryption on save
-    this._sessionPasswords.set(noteId, password);
     return resp.json();
   }
 
@@ -181,7 +183,7 @@ class ApiService {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || 'Invalid password');
     this._sessionPasswords.delete(noteId);
-    return data;
+    return data.note || data;
   }
 
   // ---------------------------------------------------------------------------

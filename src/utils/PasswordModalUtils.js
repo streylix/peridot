@@ -1,5 +1,4 @@
 import { apiService } from './ApiService.js';
-import { noteContentService } from './NoteContentService';
 import { noteImportExportService } from './NoteImportExportService';
 import { FolderService } from './folderUtils';
 
@@ -104,8 +103,7 @@ class PasswordModalUtils {
         case 'unlock': {
           const result = await apiService.unlockNote(this.noteId, password);
           if (!result.success) return { success: false, error: 'Invalid password' };
-          // Return the in-memory decrypted note so MainContent can display it
-          window.dispatchEvent(new CustomEvent('noteUpdate', { detail: { note: result.note } }));
+          window.dispatchEvent(new CustomEvent('noteUnlockedForEditor', { detail: { note: result.note } }));
           break;
         }
 
@@ -138,6 +136,9 @@ class PasswordModalUtils {
         case 'unlockFolder': {
           const result = await apiService.unlockNote(this.noteId, password);
           if (!result.success) return { success: false, error: result.error || 'Invalid password' };
+          if (result.note) {
+            window.dispatchEvent(new CustomEvent('noteUpdate', { detail: { note: result.note } }));
+          }
           window.dispatchEvent(new CustomEvent('folderUnlocked', { detail: { folderId: this.noteId } }));
           break;
         }

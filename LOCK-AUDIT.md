@@ -60,3 +60,17 @@ Scope: traced PasswordModal -> PasswordModalUtils -> encryption.js -> NoteUpdate
 - Note passwords: held in memory in `ApiService._sessionPasswords` (`src/utils/ApiService.js:14`), not persisted to OPFS/IndexedDB/localStorage in the current code.
 - Decrypted note contents: not intentionally persisted by StorageService, but can enter global React state on unlock via `PasswordModalUtils` (`src/utils/PasswordModalUtils.js:104`). That is the biggest current leak risk.
 - User preferences: theme, preferred file type, JSON encrypted export flag, skip password verification, and editor zoom are persisted in `localStorage`. These are not note secrets, except `skipPasswordVerification` weakens encrypted export behavior.
+
+## Resolution
+
+- Replaced backend title/preview extraction with markdown-aware helpers that preserve legacy HTML handling but derive `visibleTitle` from the first markdown line for create, save, lock, and permanent unlock paths.
+- Removed the global `noteUpdate` dispatch of decrypted note bodies from modal unlock. Temporary decrypted content now goes through a scoped `noteUnlockedForEditor` event consumed by `MainContent`, keeping the global notes array on the locked/server-serialized shape.
+- Normalized `ApiService.unlockNotePermanent()` so callers receive the serialized note object, and updated folder unlock to dispatch the returned folder with `isOpen: true` into React state without persisting the transient open state as an unlock.
+- Stopped caching a password during `lockNote`; session passwords are now stored only after a successful server unlock for save re-encryption.
+- Removed client-side password verification from encrypted download flows. Locked-note downloads now ask the backend to validate and decrypt for the requested export.
+- Removed the UI settings for client encrypted JSON export and password-verification bypass because server-side encrypted fields are not available to the browser.
+
+Deferred:
+- HTTPS enforcement outside local development is still deployment/configuration work.
+- Folder locking remains a UI access-control gate with an encrypted verification blob; child-note encryption for folders would need a separate migration/design.
+- The compatibility `PasswordStorageService` and `StorageService` shims still exist for older import sites.
