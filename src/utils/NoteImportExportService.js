@@ -83,14 +83,15 @@ class NoteImportExportService {
   isLegacyEncryptedNote(item) {
     if (!item || item.type === 'folder') return false;
     const keyParams = item.keyParams || item.key_params || {};
-    return item.encrypted === true
-      && (
-        Array.isArray(item.content)
-        || item.encryptedContent != null
-        || item.encrypted_content != null
-      )
-      && (item.iv != null || item.encIv != null || item.enc_iv != null)
-      && (keyParams.salt != null || item.salt != null);
+    const hasCipher = Array.isArray(item.content)
+      || item.encryptedContent != null
+      || item.encrypted_content != null;
+    const hasIv = item.iv != null || item.encIv != null || item.enc_iv != null;
+    const hasSalt = keyParams.salt != null || item.salt != null;
+    if (!(hasCipher && hasIv && hasSalt)) return false;
+    // Some older exports skipped the encrypted flag but still shipped the
+    // ciphertext + iv + keyParams — treat them as encrypted when locked.
+    return item.encrypted === true || item.locked === true;
   }
 
   // Older exports lost their iv/salt/iterations but still flag the note locked
@@ -648,7 +649,7 @@ class NoteImportExportService {
                 locked: true,
                 encrypted: true,
                 parentFolderId: item.parentFolderId || null,
-                visibleTitle: item.visibleTitle || item.visible_title || 'Untitled',
+                visibleTitle: (item.visibleTitle || item.visible_title || item.title || 'Untitled').trim(),
                 __legacyEncryptedImport: true
               });
               continue;

@@ -209,9 +209,12 @@ def _legacy_salt(data: dict) -> bytes:
 
 
 def _legacy_note_ciphertext(data: dict) -> bytes:
-    ciphertext = data.get("content")
-    if ciphertext is None:
-        ciphertext = data.get("encryptedContent", data.get("encrypted_content"))
+    # Prefer the dedicated encryptedContent field (some older exports kept
+    # plaintext content alongside the ciphertext). Fall back to content when
+    # it's the ciphertext array.
+    ciphertext = data.get("encryptedContent") or data.get("encrypted_content")
+    if ciphertext is None and isinstance(data.get("content"), list):
+        ciphertext = data.get("content")
     if ciphertext is None:
         raise ValueError("encrypted content is required")
     return _decode_legacy_bytes(ciphertext, "content")
@@ -225,10 +228,11 @@ def _legacy_iv(data: dict, field_name: str = "iv") -> bytes:
 
 
 def _legacy_visible_title(data: dict, fallback: str = "Untitled") -> str:
-    value = data.get("visibleTitle", data.get("visible_title"))
-    if value is None:
-        return fallback
-    return str(value)[:500]
+    for key in ("visibleTitle", "visible_title", "title"):
+        value = data.get(key)
+        if value is not None:
+            return str(value).strip()[:500] or fallback
+    return fallback
 
 
 def _legacy_preview(data: dict):
@@ -239,16 +243,18 @@ def _legacy_preview(data: dict):
 def _is_legacy_encrypted_note(data: dict) -> bool:
     if data.get("type", "note") == Note.ITEM_TYPE_FOLDER:
         return False
-    return bool(
-        data.get("encrypted") is True
-        and (
-            isinstance(data.get("content"), list)
-            or data.get("encryptedContent") is not None
-            or data.get("encrypted_content") is not None
-        )
-        and (data.get("iv") is not None or data.get("encIv") is not None or data.get("enc_iv") is not None)
-        and (_legacy_key_params(data).get("salt", data.get("salt")) is not None)
+    has_cipher = (
+        isinstance(data.get("content"), list)
+        or data.get("encryptedContent") is not None
+        or data.get("encrypted_content") is not None
     )
+    has_iv = data.get("iv") is not None or data.get("encIv") is not None or data.get("enc_iv") is not None
+    has_salt = _legacy_key_params(data).get("salt", data.get("salt")) is not None
+    if not (has_cipher and has_iv and has_salt):
+        return False
+    # Some older exports omitted the encrypted flag while still shipping the
+    # ciphertext + iv + keyParams. Treat them as encrypted when locked.
+    return data.get("encrypted") is True or data.get("locked") is True
 
 
 def _is_legacy_locked_folder(data: dict) -> bool:
