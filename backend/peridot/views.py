@@ -121,6 +121,40 @@ def _looks_like_html(content: str) -> bool:
     return bool(re.search(r"<\w+[^>]*>", (content or "").lstrip()[:64]))
 
 
+def _legacy_html_to_markdown(content: str) -> str:
+    """Convert pre-migration <div>-wrapped HTML content into plain markdown.
+
+    Legacy notes were stored as <div>line1</div><div>line2</div>... with inline
+    <img> and <a> tags. Convert to a markdown string the new editor renders
+    natively. Unrecognized tags are stripped; entities are decoded.
+    """
+    if not content:
+        return ""
+    text = content
+    text = re.sub(r"<img[^>]*alt=\"([^\"]*)\"[^>]*src=\"([^\"]+)\"[^>]*>", r"![\1](\2)", text)
+    text = re.sub(r"<img[^>]*src=\"([^\"]+)\"[^>]*alt=\"([^\"]*)\"[^>]*>", r"![\2](\1)", text)
+    text = re.sub(r"<img[^>]*src=\"([^\"]+)\"[^>]*>", r"![](\1)", text)
+    text = re.sub(r"<a[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>", r"[\2](\1)", text, flags=re.DOTALL)
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"</div>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<div[^>]*>", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", "", text)
+    import html
+    text = html.unescape(text)
+    # Collapse trailing whitespace per line and final trailing blanks.
+    lines = [line.rstrip() for line in text.splitlines()]
+    while lines and not lines[-1]:
+        lines.pop()
+    return "\n".join(lines)
+
+
+def _normalize_legacy_content(content: str) -> str:
+    """If a decrypted note is legacy HTML, convert it to markdown for storage."""
+    if isinstance(content, str) and _looks_like_html(content):
+        return _legacy_html_to_markdown(content)
+    return content
+
+
 def _strip_markdown_line(line: str) -> str:
     text = re.sub(r"^\s{0,3}#{1,6}\s+", "", line)
     text = re.sub(r"^\s{0,3}[-*+]\s+\[[ xX]\]\s+", "", text)
@@ -586,8 +620,10 @@ def note_unlock(request, note_id):
     except ValueError:
         return Response({"error": "Invalid password"}, status=status.HTTP_401_UNAUTHORIZED)
 
+    plaintext = _normalize_legacy_content(plaintext)
     data = NoteSerializer(note).data
     data["content"] = plaintext
+    data["visibleTitle"] = _extract_title(plaintext)
     data["encrypted"] = False
     return Response({"success": True, "note": data})
 
@@ -634,6 +670,7 @@ def note_unlock_permanent(request, note_id):
     except ValueError:
         return Response({"error": "Invalid password"}, status=status.HTTP_401_UNAUTHORIZED)
 
+    plaintext = _normalize_legacy_content(plaintext)
     note.content = plaintext
     note.visible_title = _extract_title(plaintext)
     note.preview_content = _extract_preview(plaintext)
