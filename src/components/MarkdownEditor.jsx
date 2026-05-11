@@ -55,6 +55,10 @@ class BulletWidget extends WidgetType {
   }
 }
 
+const LUCIDE_SQUARE = '<rect width="18" height="18" x="3" y="3" rx="2"/>';
+const LUCIDE_SQUARE_CHECK =
+  '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/>';
+
 class CheckboxWidget extends WidgetType {
   constructor(checked, from, to) {
     super();
@@ -67,19 +71,15 @@ class CheckboxWidget extends WidgetType {
   }
   toDOM(view) {
     const wrap = document.createElement('span');
-    wrap.className = 'cm-md-task';
-    const box = document.createElement('input');
-    box.type = 'checkbox';
-    box.checked = this.checked;
-    box.className = 'cm-md-task-box';
-    box.addEventListener('mousedown', (e) => {
+    wrap.className = `cm-md-task${this.checked ? ' is-checked' : ''}`;
+    wrap.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="cm-md-task-icon" aria-hidden="true">${this.checked ? LUCIDE_SQUARE_CHECK : LUCIDE_SQUARE}</svg>`;
+    wrap.addEventListener('mousedown', (e) => {
       e.preventDefault();
       const replacement = this.checked ? '[ ]' : '[x]';
       view.dispatch({
         changes: { from: this.from, to: this.to, insert: replacement },
       });
     });
-    wrap.appendChild(box);
     return wrap;
   }
   ignoreEvent() {
