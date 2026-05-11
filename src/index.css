@@ -276,29 +276,35 @@ header.full-width{
 }
 
 .cm-md-task {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  height: 1.6em;
   vertical-align: middle;
-  margin: 0 0.3em 0 0;
+  margin: 0 0.4em 0 0;
+  line-height: 1;
+  /* Pull the wrapper up half a checkbox height so the box centers on the
+     line's text baseline rather than sitting below it. */
+  transform: translateY(-0.05em);
 }
 
 .cm-md-task-box {
   appearance: none;
   display: inline-grid;
   place-content: center;
-  width: 1em;
-  height: 1em;
+  width: 1.25em;
+  height: 1.25em;
   margin: 0;
-  border: 1px solid rgba(10, 163, 79, 0.7);
-  border-radius: 3px;
+  border: 1.5px solid rgba(10, 163, 79, 0.7);
+  border-radius: 4px;
   background: rgba(255, 255, 255, 0.85);
   cursor: pointer;
-  vertical-align: middle;
+  flex-shrink: 0;
 }
 
 .cm-md-task-box::before {
   content: "";
-  width: 0.55em;
-  height: 0.55em;
+  width: 0.7em;
+  height: 0.7em;
   transform: scale(0);
   transition: transform 0.12s ease-in-out;
   clip-path: polygon(14% 44%, 0 59%, 39% 100%, 100% 18%, 84% 5%, 36% 69%);
