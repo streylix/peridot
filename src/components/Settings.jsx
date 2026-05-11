@@ -6,6 +6,7 @@ import { passwordStorage } from '../utils/PasswordStorageService';
 import { noteImportExportService } from '../utils/NoteImportExportService';
 import { noteSortingService } from '../utils/NoteSortingService';
 import { ZipImportHandler } from '../utils/ZipImportHandler';
+import { apiService } from '../utils/ApiService';
 import StorageAnalyzer from './StorageAnalyzer';
 import StorageDiagnostics from './StorageDiagnostics';
 import StorageBar from './StorageBar';
@@ -18,10 +19,19 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
   const [fileType, setFileType] = useState(() => localStorage.getItem('preferredFileType') || 'json');
   const [currentStorageType, setCurrentStorageType] = useState(storageService.getCurrentStorageType());
   const [availableStorageTypes, setAvailableStorageTypes] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [accountMessage, setAccountMessage] = useState('');
 
   useEffect(() => {
     setAvailableStorageTypes(storageService.getAvailableStorageTypes());
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    apiService.me().then(setCurrentUser).catch(() => setCurrentUser(null));
+  }, [isOpen]);
 
   const handleStorageTypeChange = async (type) => {
     try {
@@ -233,7 +243,79 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
     }
   };
 
+  const handleLogout = async () => {
+    await apiService.logout();
+    window.location.reload();
+  };
+
+  const handleChangePassword = async () => {
+    setAccountMessage('');
+    try {
+      await apiService.changePassword(currentPassword, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setAccountMessage('Password updated.');
+    } catch (error) {
+      setAccountMessage(error.message || 'Failed to change password');
+    }
+  };
+
   const settingsSections = [
+    {
+      label: 'User / Account',
+      items: [
+        {
+          content: <ItemPresets.SUBSECTION title="Account">
+            <div className="account-settings">
+              <ItemComponents.TEXT
+                label="Username"
+                subtext={currentUser?.username || 'Unavailable'}
+              />
+              <ItemComponents.TEXT
+                label="Email"
+                subtext={currentUser?.email || 'Not set'}
+              />
+              <ItemPresets.TEXT_BUTTON
+                label="Logout"
+                subtext="End this session on this device"
+                buttonText="Logout"
+                primary="warning"
+                onClick={handleLogout}
+              />
+            </div>
+          </ItemPresets.SUBSECTION>
+        },
+        {
+          content: <ItemPresets.SUBSECTION title="Change Password">
+            <div className="account-password-form">
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Current password"
+                autoComplete="current-password"
+              />
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="New password"
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                className="modal-button primary"
+                onClick={handleChangePassword}
+                disabled={!currentPassword || !newPassword}
+              >
+                Change Password
+              </button>
+              {accountMessage && <span className="account-settings-message">{accountMessage}</span>}
+            </div>
+          </ItemPresets.SUBSECTION>
+        },
+      ]
+    },
     {
       label: 'General',
       items: [

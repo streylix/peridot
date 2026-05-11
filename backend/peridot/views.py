@@ -75,6 +75,7 @@ def auth_me(request):
     return Response({
         "id": str(u.id),
         "username": u.username,
+        "email": getattr(u, "email", ""),
         "must_change_password": u.must_change_password,
     })
 

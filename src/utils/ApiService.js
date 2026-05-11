@@ -77,6 +77,16 @@ class ApiService {
     return resp.json();
   }
 
+  async changePassword(currentPassword, newPassword) {
+    const resp = await this._fetch('/auth/change_password/', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || 'Failed to change password');
+    return data;
+  }
+
   // ---------------------------------------------------------------------------
   // Notes CRUD (same interface as old StorageService)
   // ---------------------------------------------------------------------------
