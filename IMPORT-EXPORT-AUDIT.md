@@ -100,5 +100,21 @@ Scope: traced JSON/MD/TXT/PDF export and JSON/MD/TXT/ZIP import through `NoteImp
 - Removed the disabled PDF scale control and sends a fixed scale of `1`.
 
 Deferred:
-- A dedicated backend endpoint for faithful encrypted backup/restore was not added. Current client export can only round-trip plaintext content the client is allowed to see.
+- Superseded below: a dedicated backend endpoint was added for importing legacy client-encrypted JSON backups. Current client export still cannot produce faithful server-encrypted backups because encryption fields are intentionally not exposed to the browser.
 - The broad storage compatibility shims and older diagnostics UI still reference the legacy storage naming.
+
+## Legacy encrypted import resolution
+
+- Added `POST /api/notes/import_legacy_encrypted/` for pre-migration encrypted JSON items. The endpoint accepts legacy encrypted notes whose `encrypted=true` payload contains byte-array ciphertext in `content` or an equivalent encrypted-content field, plus IV, salt, and iterations.
+- Legacy note byte fields are decoded from JSON number arrays, with base64 also accepted for salt and other byte fields. The imported row stores `encrypted_content`, `enc_iv`, `enc_salt`, and `enc_iterations`, sets `locked=true`, `encrypted=true`, and leaves plaintext `content=NULL`.
+- Legacy encrypted note titles bypass markdown title extraction. `visibleTitle` is stored directly from the JSON, and `preview_content` is only populated from a non-encrypted preview field when the export provides one.
+- Legacy locked folders with `verificationData` now import into the folder verification columns: `ver_ciphertext`, `ver_iv`, `ver_salt`, and `ver_iterations`. The folder remains `locked=true`, with the display name taken from `visibleTitle` or the first content/title line.
+- The frontend JSON import path now detects legacy encrypted notes and locked folders before the plaintext validation path that rejects server-encrypted metadata-only exports. Detected legacy encrypted items are posted to the dedicated endpoint; plaintext notes and folders continue through the normal notes create path.
+- `backend/peridot/encryption.py` was verified against the legacy format: AES-GCM uses a 256-bit PBKDF2-SHA256 key, 12-byte IVs, the stored iteration count, and the standard ciphertext-plus-tag format compatible with Web Crypto AES-GCM. No additional algorithm marker was needed.
+
+Test scenario covered by the implementation:
+
+1. Import a legacy JSON backup with one plaintext note, one client-encrypted note with `locked=true`, and one locked folder.
+2. The plaintext note is normalized by the existing JSON import path and saved through `/api/notes/`.
+3. The encrypted note is routed to `/api/notes/import_legacy_encrypted/`, appears locked with its original `visibleTitle`, and unlocks through `/api/notes/<id>/unlock/` using the original password because the ciphertext, salt, iterations, and IV are preserved exactly.
+4. The locked folder is routed to the same legacy endpoint, appears locked with its plaintext display name, and unlocks through `/api/notes/<id>/unlock/` using the original password because the verification blob parameters are preserved exactly.

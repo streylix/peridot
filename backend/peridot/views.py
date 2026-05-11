@@ -1,3 +1,5 @@
+import base64
+import binascii
 import re
 
 import requests
@@ -164,6 +166,96 @@ def _extract_preview(content: str) -> str:
     return " ".join(lines[1:])
 
 
+def _decode_legacy_bytes(value, field_name: str) -> bytes:
+    """Decode legacy export byte fields from number arrays or base64 strings."""
+    if isinstance(value, list):
+        try:
+            return bytes(value)
+        except ValueError:
+            raise ValueError(f"{field_name} must contain byte values from 0 to 255")
+    if isinstance(value, str):
+        try:
+            return base64.b64decode(value, validate=True)
+        except (binascii.Error, ValueError):
+            raise ValueError(f"{field_name} must be valid base64")
+    raise ValueError(f"{field_name} must be a byte array or base64 string")
+
+
+def _legacy_key_params(data: dict) -> dict:
+    key_params = data.get("keyParams") or data.get("key_params") or {}
+    return key_params if isinstance(key_params, dict) else {}
+
+
+def _legacy_iterations(data: dict) -> int:
+    key_params = _legacy_key_params(data)
+    iterations = key_params.get("iterations", data.get("iterations"))
+    if iterations is None:
+        raise ValueError("iterations is required")
+    try:
+        iterations = int(iterations)
+    except (TypeError, ValueError):
+        raise ValueError("iterations must be an integer")
+    if iterations <= 0:
+        raise ValueError("iterations must be positive")
+    return iterations
+
+
+def _legacy_salt(data: dict) -> bytes:
+    key_params = _legacy_key_params(data)
+    salt = key_params.get("salt", data.get("salt"))
+    if salt is None:
+        raise ValueError("salt is required")
+    return _decode_legacy_bytes(salt, "salt")
+
+
+def _legacy_note_ciphertext(data: dict) -> bytes:
+    ciphertext = data.get("content")
+    if ciphertext is None:
+        ciphertext = data.get("encryptedContent", data.get("encrypted_content"))
+    if ciphertext is None:
+        raise ValueError("encrypted content is required")
+    return _decode_legacy_bytes(ciphertext, "content")
+
+
+def _legacy_iv(data: dict, field_name: str = "iv") -> bytes:
+    iv = data.get("iv") or data.get("encIv") or data.get("enc_iv")
+    if iv is None:
+        raise ValueError(f"{field_name} is required")
+    return _decode_legacy_bytes(iv, field_name)
+
+
+def _legacy_visible_title(data: dict, fallback: str = "Untitled") -> str:
+    value = data.get("visibleTitle", data.get("visible_title"))
+    if value is None:
+        return fallback
+    return str(value)[:500]
+
+
+def _legacy_preview(data: dict):
+    preview = data.get("previewContent", data.get("preview_content"))
+    return preview if isinstance(preview, str) else None
+
+
+def _is_legacy_encrypted_note(data: dict) -> bool:
+    if data.get("type", "note") == Note.ITEM_TYPE_FOLDER:
+        return False
+    return bool(
+        data.get("encrypted") is True
+        and (
+            isinstance(data.get("content"), list)
+            or data.get("encryptedContent") is not None
+            or data.get("encrypted_content") is not None
+        )
+        and (data.get("iv") is not None or data.get("encIv") is not None or data.get("enc_iv") is not None)
+        and (_legacy_key_params(data).get("salt", data.get("salt")) is not None)
+    )
+
+
+def _is_legacy_locked_folder(data: dict) -> bool:
+    verification = data.get("verificationData") or data.get("verification_data")
+    return data.get("type") == Note.ITEM_TYPE_FOLDER and data.get("locked") is True and isinstance(verification, dict)
+
+
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def notes_list(request):
@@ -196,6 +288,85 @@ def notes_list(request):
         caret_position=data.get("caretPosition"),
     )
     return Response(NoteSerializer(note).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def legacy_encrypted_import(request):
+    """Import pre-server-encryption JSON items without decrypting ciphertext."""
+    items = request.data if isinstance(request.data, list) else [request.data]
+    imported = []
+
+    for item in items:
+        if not isinstance(item, dict):
+            return Response({"error": "Each import item must be an object"}, status=status.HTTP_400_BAD_REQUEST)
+
+        note_id = item.get("id")
+        if not note_id:
+            return Response({"error": "id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        if Note.objects.filter(id=note_id, user=request.user).exists():
+            return Response({"error": f"Note {note_id} already exists"}, status=status.HTTP_409_CONFLICT)
+
+        try:
+            if _is_legacy_encrypted_note(item):
+                note = Note.objects.create(
+                    id=note_id,
+                    user=request.user,
+                    content=None,
+                    encrypted_content=_legacy_note_ciphertext(item),
+                    enc_iv=_legacy_iv(item),
+                    enc_salt=_legacy_salt(item),
+                    enc_iterations=_legacy_iterations(item),
+                    date_modified=item.get("dateModified") or timezone.now(),
+                    pinned=bool(item.get("pinned", False)),
+                    locked=True,
+                    encrypted=True,
+                    item_type=Note.ITEM_TYPE_NOTE,
+                    parent_folder_id=item.get("parentFolderId"),
+                    visible_title=_legacy_visible_title(item),
+                    preview_content=_legacy_preview(item),
+                    caret_position=item.get("caretPosition"),
+                )
+            elif _is_legacy_locked_folder(item):
+                verification = item.get("verificationData") or item.get("verification_data")
+                title_source = item.get("content") or item.get("title") or "Untitled Folder"
+                title = _legacy_visible_title(
+                    item,
+                    _extract_title(str(title_source)),
+                )
+                note = Note.objects.create(
+                    id=note_id,
+                    user=request.user,
+                    content=title,
+                    ver_ciphertext=_decode_legacy_bytes(
+                        verification.get("encryptedContent", verification.get("encrypted_content")),
+                        "verificationData.encryptedContent",
+                    ),
+                    ver_iv=_legacy_iv(verification, "verificationData.iv"),
+                    ver_salt=_legacy_salt(verification),
+                    ver_iterations=_legacy_iterations(verification),
+                    date_modified=item.get("dateModified") or timezone.now(),
+                    pinned=bool(item.get("pinned", False)),
+                    locked=True,
+                    encrypted=False,
+                    item_type=Note.ITEM_TYPE_FOLDER,
+                    parent_folder_id=item.get("parentFolderId"),
+                    visible_title=title,
+                    preview_content=None,
+                    is_open=False,
+                )
+            else:
+                return Response(
+                    {"error": "Item is not a supported legacy encrypted note or locked folder"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        imported.append(NoteSerializer(note).data)
+
+    data = imported if isinstance(request.data, list) else imported[0]
+    return Response(data, status=status.HTTP_201_CREATED)
 
 
 @api_view(["GET", "PUT", "DELETE"])

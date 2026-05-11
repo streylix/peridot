@@ -139,6 +139,16 @@ class ApiService {
     return resp.json();
   }
 
+  async importLegacyEncryptedItem(item) {
+    const resp = await this._fetch('/notes/import_legacy_encrypted/', {
+      method: 'POST',
+      body: JSON.stringify(item),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || `Failed to import encrypted item ${item.id}`);
+    return data;
+  }
+
   async deleteNote(noteId) {
     const resp = await this._fetch(`/notes/${noteId}/`, { method: 'DELETE' });
     if (!resp.ok && resp.status !== 404) throw new Error(`Failed to delete note ${noteId}`);

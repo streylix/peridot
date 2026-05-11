@@ -11,6 +11,7 @@ urlpatterns = [
 
     # Notes
     path("notes/", views.notes_list, name="notes-list"),
+    path("notes/import_legacy_encrypted/", views.legacy_encrypted_import, name="legacy-encrypted-import"),
     path("notes/<int:note_id>/", views.note_detail, name="note-detail"),
     path("notes/<int:note_id>/lock/", views.note_lock, name="note-lock"),
     path("notes/<int:note_id>/unlock/", views.note_unlock, name="note-unlock"),

@@ -1,3 +1,4 @@
+import base64
 import json
 import time
 
@@ -314,3 +315,71 @@ class NoteLockUnlockTests(TestCase):
         folder.refresh_from_db()
         self.assertEqual(folder.content, "New Locked Folder")
         self.assertFalse(folder.encrypted)
+
+    def test_import_legacy_encrypted_note_preserves_cipher_params_and_unlocks(self):
+        legacy = encrypt_content("<div>Legacy Secret</div><div>Body</div>", "legacy-pass")
+        resp = self.client.post("/api/notes/import_legacy_encrypted/", {
+            "id": 1700000001010,
+            "content": list(legacy["encrypted_content"]),
+            "iv": list(legacy["iv"]),
+            "keyParams": {
+                "salt": base64.b64encode(legacy["salt"]).decode("ascii"),
+                "iterations": legacy["iterations"],
+            },
+            "locked": True,
+            "encrypted": True,
+            "visibleTitle": "My locked note",
+            "dateModified": "2024-01-01T00:00:00Z",
+            "pinned": False,
+            "type": "note",
+            "parentFolderId": None,
+        }, format="json")
+
+        self.assertEqual(resp.status_code, 201)
+        self.assertTrue(resp.data["locked"])
+        self.assertTrue(resp.data["encrypted"])
+        self.assertIsNone(resp.data["content"])
+        self.assertEqual(resp.data["visibleTitle"], "My locked note")
+        self.assertIsNone(resp.data["previewContent"])
+
+        note = Note.objects.get(id=1700000001010)
+        self.assertEqual(bytes(note.encrypted_content), legacy["encrypted_content"])
+        self.assertEqual(bytes(note.enc_iv), legacy["iv"])
+        self.assertEqual(bytes(note.enc_salt), legacy["salt"])
+        self.assertEqual(note.enc_iterations, legacy["iterations"])
+
+        unlock = self.client.post(f"/api/notes/{note.id}/unlock/", {"password": "legacy-pass"}, format="json")
+        self.assertEqual(unlock.status_code, 200)
+        self.assertEqual(unlock.data["note"]["content"], "<div>Legacy Secret</div><div>Body</div>")
+
+    def test_import_legacy_locked_folder_preserves_verification_and_unlocks(self):
+        legacy = encrypt_verification("folder-pass")
+        resp = self.client.post("/api/notes/import_legacy_encrypted/", {
+            "id": 1700000001011,
+            "content": "Locked Folder",
+            "visibleTitle": "Locked Folder",
+            "dateModified": "2024-01-01T00:00:00Z",
+            "type": "folder",
+            "locked": True,
+            "verificationData": {
+                "encryptedContent": list(legacy["encrypted_content"]),
+                "iv": list(legacy["iv"]),
+                "keyParams": {
+                    "salt": list(legacy["salt"]),
+                    "iterations": legacy["iterations"],
+                },
+            },
+        }, format="json")
+
+        self.assertEqual(resp.status_code, 201)
+        self.assertTrue(resp.data["locked"])
+        self.assertEqual(resp.data["visibleTitle"], "Locked Folder")
+
+        folder = Note.objects.get(id=1700000001011)
+        self.assertEqual(bytes(folder.ver_ciphertext), legacy["encrypted_content"])
+        self.assertEqual(bytes(folder.ver_iv), legacy["iv"])
+        self.assertEqual(bytes(folder.ver_salt), legacy["salt"])
+
+        unlock = self.client.post(f"/api/notes/{folder.id}/unlock/", {"password": "folder-pass"}, format="json")
+        self.assertEqual(unlock.status_code, 200)
+        self.assertTrue(unlock.data["note"]["isOpen"])

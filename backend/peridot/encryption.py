@@ -1,5 +1,8 @@
 """
 Server-side AES-256-GCM encryption using PBKDF2-SHA256 key derivation.
+Matches the legacy client-side Web Crypto parameters used by JSON backups:
+256-bit AES-GCM key, 12-byte IVs, PBKDF2-SHA256, and ciphertext with tag
+appended in the standard AESGCM/Web Crypto format.
 Replaces the client-side Web Crypto API usage in the original frontend.
 """
 import os

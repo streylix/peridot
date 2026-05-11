@@ -98,6 +98,19 @@ describe('ApiService', () => {
     })
   })
 
+  describe('importLegacyEncryptedItem', () => {
+    it('POSTs encrypted legacy payload to the import endpoint', async () => {
+      const legacy = { id: 123, encrypted: true, locked: true, content: [1, 2, 3], iv: [4, 5, 6] }
+      global.fetch = mockFetch([{ ok: true, status: 201, json: async () => legacy }]) as any
+      const result = await apiService.importLegacyEncryptedItem(legacy)
+      expect(result).toEqual(legacy)
+      const calls = (fetch as any).mock.calls
+      expect(calls[0][0]).toBe('/api/notes/import_legacy_encrypted/')
+      expect(calls[0][1].method).toBe('POST')
+      expect(JSON.parse(calls[0][1].body)).toEqual(legacy)
+    })
+  })
+
   describe('deleteNote', () => {
     it('sends DELETE request', async () => {
       global.fetch = mockFetch([{ ok: true, status: 204, json: async () => ({}) }]) as any

@@ -80,6 +80,24 @@ class NoteImportExportService {
     return looksLikeLegacyHtml(content) ? this.legacyHtmlToMarkdown(content) : String(content);
   }
 
+  isLegacyEncryptedNote(item) {
+    if (!item || item.type === 'folder') return false;
+    const keyParams = item.keyParams || item.key_params || {};
+    return item.encrypted === true
+      && (
+        Array.isArray(item.content)
+        || item.encryptedContent != null
+        || item.encrypted_content != null
+      )
+      && (item.iv != null || item.encIv != null || item.enc_iv != null)
+      && (keyParams.salt != null || item.salt != null);
+  }
+
+  isLegacyLockedFolder(item) {
+    const verificationData = item?.verificationData || item?.verification_data;
+    return item?.type === 'folder' && item.locked === true && Boolean(verificationData);
+  }
+
   markdownToHtml(content = '') {
     const lines = String(content).split('\n');
     const html = [];
@@ -555,6 +573,22 @@ class NoteImportExportService {
   
           if (item.type === 'folder') {
             const folderTitle = item.visibleTitle || noteContentService.getFirstLine(item.content || item.title || '');
+            if (this.isLegacyLockedFolder(item)) {
+              validFolders.push({
+                ...item,
+                id: item.id || this.generateImportId(fileDate),
+                dateModified: item.dateModified || fileDate.toISOString(),
+                type: 'folder',
+                pinned: Boolean(item.pinned),
+                locked: true,
+                isOpen: false,
+                parentFolderId: item.parentFolderId || null,
+                visibleTitle: folderTitle || 'Untitled Folder',
+                __legacyEncryptedImport: true
+              });
+              continue;
+            }
+
             const processedFolder = {
               id: item.id || this.generateImportId(fileDate),
               content: folderTitle,
@@ -569,6 +603,22 @@ class NoteImportExportService {
   
             validFolders.push(processedFolder);
           } else {
+            if (this.isLegacyEncryptedNote(item)) {
+              validNotes.push({
+                ...item,
+                id: item.id || this.generateImportId(fileDate),
+                dateModified: item.dateModified || fileDate.toISOString(),
+                type: item.type || 'note',
+                pinned: Boolean(item.pinned),
+                locked: true,
+                encrypted: true,
+                parentFolderId: item.parentFolderId || null,
+                visibleTitle: item.visibleTitle || item.visible_title || 'Untitled',
+                __legacyEncryptedImport: true
+              });
+              continue;
+            }
+
             if (item.locked && item.encrypted && !item.content) {
               invalidItems.push({ item, reason: 'Server-encrypted JSON export does not include importable content' });
               continue;
@@ -695,7 +745,13 @@ class NoteImportExportService {
         // Save successfully parsed notes
         for (const note of importedNotes) {
           try {
-            await apiService.writeNote(note.id, note);
+            if (note.__legacyEncryptedImport) {
+              const legacyPayload = { ...note };
+              delete legacyPayload.__legacyEncryptedImport;
+              await apiService.importLegacyEncryptedItem(legacyPayload);
+            } else {
+              await apiService.writeNote(note.id, note);
+            }
             results.successful.push({
               id: note.id,
               filename: file.name
