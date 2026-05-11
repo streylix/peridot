@@ -308,54 +308,7 @@ def legacy_encrypted_import(request):
             return Response({"error": f"Note {note_id} already exists"}, status=status.HTTP_409_CONFLICT)
 
         try:
-            if item.get("legacyBrokenLocked"):
-                # Legacy export lost iv/salt/iterations; import as locked stub
-                # with the ciphertext bytes preserved so the metadata survives.
-                raw = item.get("content")
-                if isinstance(raw, str):
-                    try:
-                        ciphertext = bytes(int(x) for x in raw.split(",") if x.strip())
-                    except ValueError:
-                        ciphertext = None
-                else:
-                    ciphertext = None
-                note = Note.objects.create(
-                    id=note_id,
-                    user=request.user,
-                    content=None,
-                    encrypted_content=ciphertext,
-                    enc_iv=None,
-                    enc_salt=None,
-                    enc_iterations=None,
-                    date_modified=item.get("dateModified") or timezone.now(),
-                    pinned=bool(item.get("pinned", False)),
-                    locked=True,
-                    encrypted=True,
-                    item_type=Note.ITEM_TYPE_NOTE,
-                    parent_folder_id=item.get("parentFolderId"),
-                    visible_title=_legacy_visible_title(item),
-                    preview_content=None,
-                    caret_position=item.get("caretPosition"),
-                )
-            elif item.get("legacyEncryptedFolder"):
-                # Legacy fully-encrypted folder. Server-side folder model uses
-                # a verification blob; we cannot replay legacy folder crypto, so
-                # import as a locked folder stub preserving its title.
-                note = Note.objects.create(
-                    id=note_id,
-                    user=request.user,
-                    content=_legacy_visible_title(item, "Untitled Folder"),
-                    date_modified=item.get("dateModified") or timezone.now(),
-                    pinned=bool(item.get("pinned", False)),
-                    locked=True,
-                    encrypted=False,
-                    item_type=Note.ITEM_TYPE_FOLDER,
-                    parent_folder_id=item.get("parentFolderId"),
-                    visible_title=_legacy_visible_title(item, "Untitled Folder"),
-                    preview_content=None,
-                    is_open=False,
-                )
-            elif _is_legacy_encrypted_note(item):
+            if _is_legacy_encrypted_note(item):
                 note = Note.objects.create(
                     id=note_id,
                     user=request.user,
@@ -564,11 +517,6 @@ def note_unlock(request, note_id):
         return Response({"success": True, "note": data})
 
     # Note: decrypt
-    if not (note.enc_iv and note.enc_salt and note.enc_iterations and note.encrypted_content):
-        return Response(
-            {"error": "This note's encryption parameters were lost during a legacy export and cannot be decrypted."},
-            status=status.HTTP_410_GONE,
-        )
     try:
         plaintext = decrypt_content(
             bytes(note.encrypted_content),
