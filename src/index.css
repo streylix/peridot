@@ -288,20 +288,47 @@ header.full-width{
   vertical-align: middle;
   margin: 0 0.4em 0 0;
   line-height: 1;
+  /* Pull the wrapper up half a checkbox height so the box centers on the
+     line's text baseline rather than sitting below it. */
   transform: translateY(-0.05em);
-  cursor: pointer;
-  color: rgba(0, 0, 0, 0.55);
 }
 
-.cm-md-task.is-checked {
-  color: #0aa34f;
-}
-
-.cm-md-task-icon {
+.cm-md-task-box {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
   width: 1.25em;
   height: 1.25em;
+  margin: 0;
+  border: 1.5px solid rgba(10, 163, 79, 0.7);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
   flex-shrink: 0;
-  display: block;
+}
+
+.cm-md-task-box::before {
+  content: "";
+  width: 0.7em;
+  height: 0.7em;
+  transform: scale(0);
+  transition: transform 0.12s ease-in-out;
+  clip-path: polygon(14% 44%, 0 59%, 39% 100%, 100% 18%, 84% 5%, 36% 69%);
+  background: white;
+}
+
+.cm-md-task-box:checked {
+  background: #0aa34f;
+  border-color: #0aa34f;
+}
+
+.cm-md-task-box:checked::before {
+  transform: scale(1);
+}
+
+.cm-md-task-box:focus-visible {
+  outline: 2px solid rgba(10, 163, 79, 0.35);
+  outline-offset: 2px;
 }
 
 .dark-mode .md-editor-host .cm-content {
@@ -317,12 +344,14 @@ header.full-width{
   border-left-color: rgba(255,255,255,0.35);
 }
 
-.dark-mode .cm-md-task {
-  color: rgba(255, 255, 255, 0.6);
+.dark-mode .cm-md-task-box {
+  background: rgba(31, 31, 31, 0.95);
+  border-color: rgba(10, 163, 79, 0.85);
 }
 
-.dark-mode .cm-md-task.is-checked {
-  color: #2ee985;
+.dark-mode .cm-md-task-box:checked {
+  background: #0aa34f;
+  border-color: #2ee985;
 }
 
 #inner-note{
