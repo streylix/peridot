@@ -275,6 +275,12 @@ header.full-width{
   overflow: auto;
 }
 
+.cm-md-bullet {
+  color: rgba(127, 127, 127, 0.85);
+  font-weight: bold;
+  padding-right: 0.15em;
+}
+
 .cm-md-task {
   display: inline-flex;
   align-items: center;

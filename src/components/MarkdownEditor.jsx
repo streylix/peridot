@@ -36,6 +36,25 @@ const STYLE_NODE_NAMES = {
   FencedCode: 'cm-md-fenced',
 };
 
+class BulletWidget extends WidgetType {
+  constructor(marker) {
+    super();
+    this.marker = marker;
+  }
+  eq(other) {
+    return other.marker === this.marker;
+  }
+  toDOM() {
+    const span = document.createElement('span');
+    span.className = 'cm-md-bullet';
+    span.textContent = this.marker;
+    return span;
+  }
+  ignoreEvent() {
+    return true;
+  }
+}
+
 class CheckboxWidget extends WidgetType {
   constructor(checked, from, to) {
     super();
@@ -184,7 +203,15 @@ const livePreview = ViewPlugin.fromClass(
               const docText = view.state.doc.sliceString(to, to + 4);
               const ws = docText.match(/^[ \t]+/);
               if (ws) to += ws[0].length;
-              items.push(Decoration.replace({}).range(node.from, to));
+              if (name === 'ListMark') {
+                // Replace `- ` / `* ` / `+ ` with a bullet so unordered lists
+                // still render a visible marker when the cursor is elsewhere.
+                items.push(
+                  Decoration.replace({ widget: new BulletWidget('• ') }).range(node.from, to)
+                );
+              } else {
+                items.push(Decoration.replace({}).range(node.from, to));
+              }
             }
           }
 
