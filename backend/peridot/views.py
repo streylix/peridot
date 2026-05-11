@@ -143,11 +143,11 @@ def _extract_title(content: str) -> str:
         match = re.search(r"<div[^>]*>(.*?)</div>", content, re.DOTALL)
         if match:
             text = re.sub(r"<[^>]+>", "", match.group(1)).strip()
-            return text or "Untitled"
+            return (text or "Untitled")[:500]
         text = re.sub(r"<[^>]+>", "", content).strip()
-        return text or "Untitled"
+        return (text or "Untitled")[:500]
     lines = _extract_markdown_lines(content)
-    return lines[0] if lines else "Untitled"
+    return (lines[0] if lines else "Untitled")[:500]
 
 
 def _extract_preview(content: str) -> str:
