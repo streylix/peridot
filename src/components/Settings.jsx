@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Modal, ItemPresets, ItemComponents } from './Modal';
 import { storageService } from '../utils/StorageService';
 import { Sun, Moon, Bug, Save, Trash2, Upload, Monitor } from 'lucide-react';
-import { passwordStorage } from '../utils/PasswordStorageService';
 import { noteImportExportService } from '../utils/NoteImportExportService';
 import { noteSortingService } from '../utils/NoteSortingService';
 import { ZipImportHandler } from '../utils/ZipImportHandler';
@@ -49,30 +48,9 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
   localStorage.getItem('prioritizePinned') === 'true'
   );
   
-  const [jsonAsEncrypted, setJsonAsEncrypted] = useState(() => 
-    localStorage.getItem('jsonAsEncrypted') === 'true'
-  );
-
-  const [skipPasswordVerification, setSkipPasswordVerification] = useState(() =>
-    localStorage.getItem('skipPasswordVerification') === 'true'
-  );
-
   // const [autoCollapseLockedFolders, setAutoCollapseLockedFolders] = useState(() => 
   //   localStorage.getItem('autoCollapseLockedFolders') !== 'false'
   // );
-
-  const handleEncryptedJsonChange = (event) => {
-    const newValue = event.target.checked;
-    setJsonAsEncrypted(newValue);
-    localStorage.setItem('jsonAsEncrypted', newValue);
-  };
-
-  const handleSkipPasswordVerificationChange = (event) => {
-    const newValue = event.target.checked;
-    setSkipPasswordVerification(newValue);
-    localStorage.setItem('skipPasswordVerification', newValue);
-  }
-
 
   const handleFileTypeChange = (newType) => {
     setFileType(newType);
@@ -368,12 +346,6 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
         // },
         {
           content: <ItemPresets.SUBSECTION title="Download">
-            <ItemPresets.TEXT_SWITCH
-              label="Download JSON as encrypted"
-              subtext="When enabled, locked notes downloaded to JSON will remain in their encrypted state"
-              value={jsonAsEncrypted}
-              onChange={handleEncryptedJsonChange}
-            />
             <ItemPresets.TEXT_DROPDOWN
               label="Saved File Type"
               subtext="Note: Some attributes may be lost when using formats other than JSON"
@@ -438,16 +410,6 @@ function Settings({ isOpen, onClose, setNotes, onNoteSelect }) {
             <ItemComponents.TEXT
               label=""
               subtext="Changes to storage method will take effect immediately. Your notes will be migrated to the new storage type."
-            />
-          </ItemPresets.SUBSECTION>
-        },
-        {
-          content: <ItemPresets.SUBSECTION title="Security">
-            <ItemPresets.TEXT_SWITCH
-              label="Disable internal password confirmation"
-              subtext="If enabled, the system will not verify that their password matches the internal stored password before trying to decrypt the note"
-              value={skipPasswordVerification}
-              onChange={handleSkipPasswordVerificationChange}
             />
           </ItemPresets.SUBSECTION>
         },

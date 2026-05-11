@@ -1,3 +1,5 @@
+import { noteContentService } from './NoteContentService';
+
 class NoteSortingService {
   constructor() {
     this.defaultSortMethod = 'dateModified-desc';
@@ -102,17 +104,14 @@ class NoteSortingService {
     if (!item || !item.content) return 'Untitled';
 
     if (this.isFolder(item)) {
-      const match = item.content.match(/<div[^>]*>(.*?)<\/div>/);
-      return match ? match[1] : 'Untitled Folder';
+      return item.visibleTitle || noteContentService.getFirstLine(item.content) || 'Untitled Folder';
     }
 
     if (item.locked && item.visibleTitle) {
       return item.visibleTitle;
     }
 
-    // Extract first line from content
-    const match = item.content.match(/<div[^>]*>(.*?)<\/div>/);
-    return match ? match[1] : 'Untitled';
+    return noteContentService.getFirstLine(item.content);
   }
 
   sortByAlpha(notes, ascending) {

@@ -7,7 +7,7 @@ export class FolderService {
   static createFolder(name = 'Untitled Folder') {
     return {
       id: Date.now(),
-      content: `<div>${name}</div>`,
+      content: name,
       dateModified: new Date().toISOString(),
       type: 'folder',
       pinned: false,
@@ -61,7 +61,11 @@ export class FolderService {
         );
     };
 
-    if (fileType === 'json' || fileType === 'pdf') {
+    if (fileType === 'pdf') {
+      throw new Error('Folder PDF export is not supported');
+    }
+
+    if (fileType === 'json') {
       const folderContents = getFolderContents(folder.id);
       const allItems = [folder];
       const flatten = (items) => {
@@ -81,21 +85,22 @@ export class FolderService {
     }
 
     const zip = new JSZip();
-    const rootFolderName = folder.content?.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 'folder';
+    const rootFolderName = noteContentService.getFirstLine(folder.content || folder.visibleTitle || 'folder');
     const rootFolder = zip.folder(rootFolderName);
 
     const addToZip = async (items, parent) => {
       for (const item of items) {
         if (this.isFolder(item)) {
-          const name = item.content?.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 'Untitled Folder';
+          const name = noteContentService.getFirstLine(item.content || item.visibleTitle || 'Untitled Folder');
           const sub = parent.folder(name);
           await addToZip(notes.filter(n => n.parentFolderId === item.id), sub);
         } else if (item.locked && item.encrypted) {
           parent.file(`${item.visibleTitle}.json`, JSON.stringify(item, null, 2));
         } else {
           const noteContent = noteImportExportService.formatNoteContent(item, fileType);
+          const { extension } = noteImportExportService.getFileTypeInfo(fileType);
           const title = noteContentService.getFirstLine(item.content).replace(/[^a-z0-9]/gi, '_').toLowerCase();
-          parent.file(`${title}.${fileType}`, noteContent);
+          parent.file(`${title}.${extension}`, noteContent);
         }
       }
     };
@@ -114,18 +119,17 @@ export class FolderService {
   }
 
   static extractFolderName(folder) {
-    const matches = folder.content?.match(/<div[^>]*>(.*?)<\/div>/);
-    return matches ? matches[1].replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'untitled_folder';
+    return noteContentService
+      .getFirstLine(folder.content || folder.visibleTitle || 'Untitled Folder')
+      .replace(/[^a-z0-9]/gi, '_')
+      .toLowerCase();
   }
 
   static async renameItem(item, newName) {
     if (item.locked && !FolderService.isFolder(item)) throw new Error('Item is locked');
-    const div = document.createElement('div');
-    div.innerHTML = item.content;
-    const firstDiv = div.querySelector('div');
-    const updatedContent = firstDiv
-      ? (firstDiv.textContent = newName, div.innerHTML)
-      : newName;
+    const content = item.content || '';
+    const lines = content.split('\n');
+    const updatedContent = lines.length > 1 ? [newName, ...lines.slice(1)].join('\n') : newName;
     const updatedItem = { ...item, content: updatedContent, dateModified: new Date().toISOString() };
     await apiService.writeNote(item.id, updatedItem);
     return updatedItem;

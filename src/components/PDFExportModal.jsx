@@ -1,29 +1,14 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { useState } from 'react';
 import { Modal } from './Modal';
 import { ItemComponents, ItemPresets } from './Modal';
 
-function PDFExportModal({ isOpen, onClose, noteTitle, onExport }) {
+function PDFExportModal({ isOpen, onClose, onExport }) {
   const [settings, setSettings] = useState({
     includeTitle: true,
     pageSize: 'letter',
     isLandscape: false,
-    margin: 'default',
-    scale: 100
+    margin: 'default'
   });
-
-  const [isSliding, setIsSliding] = useState(false);
-  const sliderRef = useRef(null);
-
-  useEffect(() => {
-    if (sliderRef.current) {
-      const min = parseFloat(sliderRef.current.min);
-      const max = parseFloat(sliderRef.current.max);
-      const val = parseFloat(sliderRef.current.value);
-      const percentage = ((val - min) / (max - min)) * 100;
-      sliderRef.current.style.setProperty('--slider-value', `${percentage}%`);
-    }
-  }, [settings.scale]);
 
   const pageSizeOptions = [
     { value: 'letter', label: 'Letter' },
@@ -49,16 +34,11 @@ function PDFExportModal({ isOpen, onClose, noteTitle, onExport }) {
     const exportSettings = {
       ...settings,
       margin: marginSizes[settings.margin],
-      scale: settings.scale / 100
+      scale: 1
     };
 
     onExport(exportSettings);
     onClose();
-  };
-
-  const handleScaleChange = (e) => {
-    const newScale = parseInt(e.target.value);
-    setSettings({ ...settings, scale: newScale });
   };
 
   const sections = [
@@ -94,36 +74,6 @@ function PDFExportModal({ isOpen, onClose, noteTitle, onExport }) {
                 value={settings.margin}
                 options={marginOptions}
                 onChange={(value) => setSettings({ ...settings, margin: value })}
-              />,
-              <ItemComponents.CONTAINER
-                key="scale-container"
-                children={[
-                  <ItemComponents.TEXT
-                    key="scale-label"
-                    label={"Scale"}
-                    subtext={"Adjust the content size (Currently unavailable)"}
-                  />,
-                  <input
-                    key="scale-input"
-                    disabled
-                    ref={sliderRef}
-                    type="range"
-                    min="10"
-                    max="100"
-                    value={settings.scale}
-                    onChange={handleScaleChange}
-                    className={`range-input ${isSliding ? 'sliding' : ''}`}
-                    data-value={settings.scale}
-                    onMouseDown={() => setIsSliding(true)}
-                    onMouseUp={() => setIsSliding(false)}
-                    onMouseLeave={() => setIsSliding(false)}
-                  />,
-                  <div key="scale-value" className="scale-value-container">
-                    <ItemComponents.TEXT
-                      label={`${settings.scale}%`}
-                    />
-                  </div>,
-                ]}
               />,
               <ItemComponents.BUTTON
                 key="export-btn"

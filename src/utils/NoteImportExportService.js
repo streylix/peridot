@@ -1,10 +1,21 @@
-import { storageService } from './StorageService';
+import { apiService } from './ApiService';
 import { noteContentService } from './NoteContentService';
-import { passwordStorage } from './PasswordStorageService';
 import html2pdf from 'html2pdf.js';
+
+const looksLikeLegacyHtml = (content) =>
+  typeof content === 'string' && /<\w+[^>]*>/.test(content.trimStart().slice(0, 64));
+
+const escapeHtml = (value = '') =>
+  String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 
 class NoteImportExportService {
   constructor() {
+    this.generatedImportIds = new Set();
     this.supportedImportTypes = {
       'application/json': this.handleJsonImport.bind(this),
       'text/markdown': this.handleMarkdownImport.bind(this),
@@ -33,15 +44,138 @@ class NoteImportExportService {
     return `${title}.${fileType}`;
   }
 
-  jsonToText(content) {
-    content = content.replace(/<\/div>/gi, '\n');
-    content = content.replace(/<br\s*\/?>/gi, '');
-    let lines = content.split('\n');
-    lines.shift();
-    content = lines.join('\n');
-    content = content.replace(/<img[^>]+src="([^"]+)"[^>]*alt="([^"]*)".*?>/gi, '\n\n![$2]($1)\n\n');
-    content = content.replace(/<\/?div>/gi, '');
-    return content;
+  legacyHtmlToMarkdown(content = '') {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = content;
+
+    tempDiv.querySelectorAll('img').forEach(img => {
+      img.replaceWith(`![${img.getAttribute('alt') || ''}](${img.getAttribute('src') || ''})`);
+    });
+    tempDiv.querySelectorAll('a').forEach(link => {
+      link.replaceWith(`[${link.textContent || link.href}](${link.getAttribute('href') || ''})`);
+    });
+
+    const divs = Array.from(tempDiv.querySelectorAll('div'));
+    if (divs.length > 0) {
+      return divs.map(div => div.textContent.trim()).join('\n');
+    }
+    return tempDiv.textContent.trim();
+  }
+
+  markdownToPlainText(content = '') {
+    return String(content)
+      .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/^(\s{0,3})#{1,6}\s+/gm, '$1')
+      .replace(/^(\s{0,3})[-*+]\s+\[[ xX]\]\s+/gm, '$1')
+      .replace(/^(\s{0,3})[-*+]\s+/gm, '$1')
+      .replace(/^(\s{0,3})\d+\.\s+/gm, '$1')
+      .replace(/^(\s{0,3})>\s?/gm, '$1')
+      .replace(/(\*\*|__|~~|`|\*|_)/g, '')
+      .trim();
+  }
+
+  contentToMarkdown(content = '') {
+    if (!content) return '';
+    return looksLikeLegacyHtml(content) ? this.legacyHtmlToMarkdown(content) : String(content);
+  }
+
+  markdownToHtml(content = '') {
+    const lines = String(content).split('\n');
+    const html = [];
+    let inCodeBlock = false;
+    let listType = null;
+
+    const closeList = () => {
+      if (listType) {
+        html.push(`</${listType}>`);
+        listType = null;
+      }
+    };
+
+    const inline = (text) => escapeHtml(text)
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    lines.forEach(rawLine => {
+      if (/^\s*```/.test(rawLine)) {
+        closeList();
+        html.push(inCodeBlock ? '</code></pre>' : '<pre><code>');
+        inCodeBlock = !inCodeBlock;
+        return;
+      }
+
+      if (inCodeBlock) {
+        html.push(`${escapeHtml(rawLine)}\n`);
+        return;
+      }
+
+      const line = rawLine.trimEnd();
+      if (!line.trim()) {
+        closeList();
+        html.push('<br>');
+        return;
+      }
+
+      const heading = line.match(/^\s{0,3}(#{1,6})\s+(.+)$/);
+      if (heading) {
+        closeList();
+        const level = heading[1].length;
+        html.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+        return;
+      }
+
+      const checkbox = line.match(/^\s{0,3}[-*+]\s+\[([ xX])\]\s+(.+)$/);
+      if (checkbox) {
+        if (listType !== 'ul') {
+          closeList();
+          html.push('<ul>');
+          listType = 'ul';
+        }
+        const checked = checkbox[1].toLowerCase() === 'x' ? ' checked' : '';
+        html.push(`<li><input type="checkbox"${checked} disabled> ${inline(checkbox[2])}</li>`);
+        return;
+      }
+
+      const unordered = line.match(/^\s{0,3}[-*+]\s+(.+)$/);
+      if (unordered) {
+        if (listType !== 'ul') {
+          closeList();
+          html.push('<ul>');
+          listType = 'ul';
+        }
+        html.push(`<li>${inline(unordered[1])}</li>`);
+        return;
+      }
+
+      const ordered = line.match(/^\s{0,3}\d+\.\s+(.+)$/);
+      if (ordered) {
+        if (listType !== 'ol') {
+          closeList();
+          html.push('<ol>');
+          listType = 'ol';
+        }
+        html.push(`<li>${inline(ordered[1])}</li>`);
+        return;
+      }
+
+      closeList();
+      html.push(`<p>${inline(line)}</p>`);
+    });
+
+    closeList();
+    if (inCodeBlock) html.push('</code></pre>');
+    return html.join('');
+  }
+
+  markdownBodyWithoutTitle(content = '') {
+    const lines = String(content).split('\n');
+    const index = lines.findIndex(line => line.trim());
+    if (index === -1) return '';
+    return [...lines.slice(0, index), ...lines.slice(index + 1)].join('\n');
   }
 
   processContentForPdf(htmlContent) {
@@ -67,25 +201,6 @@ class NoteImportExportService {
   }
 
   createPdfContent(note, includeTitle = true) {
-    const jsonToText = (content) => {
-      
-        content = content.replace(/<\/div>/gi, '\n');
-        content = content.replace(/<br\s*\/?>/gi, '');
-      
-        let lines = content.split('\n');
-        lines.shift(); // Remove the first line
-      
-        content = lines.join('\n');
-      
-        // Replace <img> tags with Markdown image syntax and remove style attributes
-        content = content.replace(/<img[^>]+src="([^"]+)"[^>]*alt="([^"]*)".*?>/gi, '\n\n![$2]($1)\n\n');
-      
-        // Remove <div> tags but keep their content
-        content = content.replace(/<\/?div>/gi, '');
-      
-        return content;
-      };
-
     const container = document.createElement('div');
 
     if (includeTitle) {
@@ -101,29 +216,15 @@ class NoteImportExportService {
       container.appendChild(headerContainer);
     }
 
-    const processedContent = this.processContentForPdf(note.content);
     const contentContainer = document.createElement('div');
     contentContainer.style.cssText = 'font-size: 16px; color: #000000;';
-
-    const paragraphs = processedContent.split('\n');
-    paragraphs.shift();
-    
-    paragraphs.forEach(para => {
-      if (para.includes('<img')) {
-        const imgDiv = document.createElement('div');
-        imgDiv.innerHTML = para;
-        Array.from(imgDiv.getElementsByTagName('img')).forEach(img => {
-          img.style.cssText = 'max-width: 100%; height: auto; margin: 16px 0; display: block;';
-          img.crossOrigin = 'anonymous';
-        });
-        contentContainer.appendChild(imgDiv);
-      } else if (para) {
-        const p = document.createElement('div');
-        p.textContent = para;
-        contentContainer.appendChild(p);
-      } else if (!para) {
-        contentContainer.appendChild(document.createElement('br'));
-      }
+    const markdownContent = this.contentToMarkdown(note.content);
+    contentContainer.innerHTML = this.markdownToHtml(
+      includeTitle ? this.markdownBodyWithoutTitle(markdownContent) : markdownContent
+    );
+    Array.from(contentContainer.getElementsByTagName('img')).forEach(img => {
+      img.style.cssText = 'max-width: 100%; height: auto; margin: 16px 0; display: block;';
+      img.crossOrigin = 'anonymous';
     });
 
     container.appendChild(contentContainer);
@@ -179,12 +280,9 @@ class NoteImportExportService {
         } else {
           // Find the folder (should be first item in array)
           const folder = note.find(item => item.type === 'folder');
-          const folderName = folder ? 
-            (folder.visibleTitle || 
-             (typeof folder.content === 'string' ? 
-               folder.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] : null) || 
-             'folder') : 
-            'folder';
+          const folderName = folder
+            ? (folder.visibleTitle || noteContentService.getFirstLine(folder.content) || 'folder')
+            : 'folder';
           fileName = `${folderName}.json`;
         }
         
@@ -200,21 +298,12 @@ class NoteImportExportService {
   
       // Handle single note download
       let noteToExport = note;
-      let keepEncrypted = false;
       // Handle encrypted notes
+      if (isEncrypted && !password) {
+        throw new Error('Password required for encrypted note export');
+      }
       if (isEncrypted && password) {
-        if (!password) {
-          throw new Error('Password required for encrypted note');
-        }
-
-        // For JSON, check if we should keep encryption
-        if (fileType === 'json' && localStorage.getItem('jsonAsEncrypted') === 'true') {
-          keepEncrypted = true;
-          noteToExport = note;
-        } else {
-          // Decrypt for download
-          noteToExport = await this.decryptNoteForDownload(note, password);
-        }
+        noteToExport = await this.decryptNoteForDownload(note, password);
       }
 
       // Handle PDF export
@@ -275,8 +364,8 @@ class NoteImportExportService {
         }
       }
       // Handle other file types
-      const { mimeType } = this.getFileTypeInfo(fileType);
-      const fileName = this.getDownloadFilename(noteToExport, fileType === 'json' ? 'json' : fileType, keepEncrypted);
+      const { mimeType, extension } = this.getFileTypeInfo(fileType);
+      const fileName = this.getDownloadFilename(noteToExport, extension, false);
       // Format content based on file type
       const content = this.formatNoteContent(noteToExport, fileType);
       // Download file
@@ -301,46 +390,9 @@ class NoteImportExportService {
    * @private
    */
   async decryptNoteForDownload(note, password) {
-    try {
-      const verifyBypass = localStorage.getItem('skipPasswordVerification') === 'true'
-      const storedPassword = await passwordStorage.getPassword(note.id);
-      if (!verifyBypass){
-        if (!storedPassword || password !== storedPassword) {
-          throw new Error('Invalid password');
-        }
-      }
-
-      const { decryptNote } = await import('./encryption');
-      const decryptResult = await decryptNote(note, password, false);
-      
-      if (!decryptResult.success) {
-        throw new Error('Failed to decrypt note');
-      }
-
-      return decryptResult.note;
-    } catch (error) {
-      console.error('Decryption failed:', error);
-      throw error;
-    }
-  }
-
- /**
-   * Process embedded content in text (links, images, gifs)
-   * @param {string} content - Raw text content
-   * @returns {string} - Processed content with proper HTML formatting
-   */
- processEmbeddedContent(content) {
-    // Convert markdown image syntax to HTML
-    content = content.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1">');
-    
-    // Convert markdown links to HTML
-    content = content.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2">$1</a>');
-    
-    // Convert plain URLs to clickable links
-    const urlRegex = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
-    content = content.replace(urlRegex, '<a href="$1">$1</a>');
-
-    return content;
+    const result = await apiService.unlockNote(note.id, password);
+    if (!result.success || !result.note) throw new Error('Invalid password');
+    return result.note;
   }
 
   /**
@@ -351,11 +403,12 @@ class NoteImportExportService {
    * @returns {Object} - New note object
    */
   createNoteObject(content, title = '', fileDate = new Date(), originalNote = null) {
-    const timestamp = fileDate.getTime();
+    const timestamp = this.generateImportId(fileDate);
     
     return {
       id: originalNote?.id || timestamp,
       content: content,
+      visibleTitle: title || noteContentService.getFirstLine(content),
       dateModified: fileDate.toISOString(),
       dateCreated: 
         // Prefer metadata dateCreated 
@@ -370,83 +423,66 @@ class NoteImportExportService {
     };
   }
 
-  /**
-   * Format content with proper div wrapping and newline handling
-   * @param {string} content - Raw content
-   * @param {string} title - Note title
-   * @returns {string} - Formatted HTML content
-   */
-  formatContent(content, title) {
-    // Start with the title div
-    let formattedContent = `<div>${title}</div>`;
-    
-    // Split content into lines and process each
-    const lines = content.split('\n');
-    
-    // Add each line wrapped in a div, including empty lines
-    lines.forEach(line => {
-        if (line.length > 0){
-            formattedContent += `<div>${line}</div>`;
-        } else {
-            formattedContent += `<div><br></div>`;
-        }
-    });
-    
-    return formattedContent;
+  generateImportId(fileDate = new Date()) {
+    let id = fileDate.getTime();
+    while (this.generatedImportIds.has(id)) id += 1;
+    this.generatedImportIds.add(id);
+    return id;
   }
 
   formatNoteContent(note, fileType) {
     switch (fileType) {
       case 'md':
+        return this.contentToMarkdown(note.content);
+
       case 'text':
-        return this.jsonToText(note.content);
+        return this.markdownToPlainText(this.contentToMarkdown(note.content));
   
       case 'json':
+        if (note.locked && note.encrypted) {
+          return JSON.stringify({
+            schemaVersion: 2,
+            id: note.id,
+            dateModified: note.dateModified,
+            dateCreated: note.dateCreated,
+            type: note.type || 'note',
+            pinned: note.pinned,
+            locked: note.locked,
+            encrypted: note.encrypted,
+            visibleTitle: note.visibleTitle,
+            parentFolderId: note.parentFolderId,
+            exportNotice: 'Encrypted content is stored server-side and is not included in client JSON export. Export after password verification to include plaintext markdown content.'
+          }, null, 2);
+        }
+
         if (note.type === 'folder') {
-          // For folders, include the visibleTitle, handle both locked and unlocked states
           const exportData = {
+            schemaVersion: 2,
             id: note.id,
             content: note.content,
+            dateCreated: note.dateCreated,
             dateModified: note.dateModified,
             type: 'folder',
             pinned: note.pinned,
             locked: note.locked,
             isOpen: note.isOpen,
             parentFolderId: note.parentFolderId,
+            visibleTitle: note.visibleTitle || noteContentService.getFirstLine(note.content)
           };
-  
-          // If folder is locked, ensure we preserve the visibleTitle
-          if (note.locked) {
-            exportData.visibleTitle = note.visibleTitle;
-          } else {
-            // For unlocked folders, extract title from content if no visibleTitle exists
-            exportData.visibleTitle = note.visibleTitle || 
-                                    note.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1] || 
-                                    'Untitled Folder';
-          }
-  
           return JSON.stringify(exportData, null, 2);
-        } else if (note.locked && note.encrypted && localStorage.getItem('jsonAsEncrypted') === 'true') {
-          // For encrypted JSON, include all encryption-related fields
+        } else {
           return JSON.stringify({
+            schemaVersion: 2,
             id: note.id,
             content: note.content,
+            dateCreated: note.dateCreated,
             dateModified: note.dateModified,
+            type: note.type || 'note',
             pinned: note.pinned,
             locked: note.locked,
-            encrypted: note.encrypted,
-            keyParams: note.keyParams,
-            iv: note.iv,
+            caretPosition: note.caretPosition,
+            parentFolderId: note.parentFolderId,
             visibleTitle: note.visibleTitle
-          }, null, 2);
-        } else {
-          // For unencrypted JSON, clean export
-          return JSON.stringify({
-            id: note.id,
-            content: note.content,
-            dateModified: note.dateModified,
-            pinned: note.pinned,
-            locked: note.locked
           }, null, 2);
         }
   
@@ -512,76 +548,53 @@ class NoteImportExportService {
   
       for (const item of notesToProcess) {
         try {
-          if (typeof item !== 'object' || item === null || !item.content) {
-            invalidItems.push({ item, reason: 'Missing required content' });
+          if (typeof item !== 'object' || item === null) {
+            invalidItems.push({ item, reason: 'Invalid item' });
             continue;
           }
   
           if (item.type === 'folder') {
-            // Get the folder title from visibleTitle or extract from content
-            let folderTitle = item.visibleTitle;
-
-            if (!folderTitle && typeof item.content === 'string') {
-              const titleMatch = item.content.match(/<div[^>]*>(.*?)<\/div>/);
-              folderTitle = titleMatch ? titleMatch[1] : 'Untitled Folder';
-            }
-            
-            // Always ensure the folder's content is properly formatted HTML
+            const folderTitle = item.visibleTitle || noteContentService.getFirstLine(item.content || item.title || '');
             const processedFolder = {
-              id: item.id || fileDate.getTime(),
-              content: `<div>${folderTitle}</div>`,
+              id: item.id || this.generateImportId(fileDate),
+              content: folderTitle,
               dateModified: item.dateModified || fileDate.toISOString(),
               type: 'folder',
               pinned: Boolean(item.pinned),
-              locked: Boolean(item.locked),
+              locked: false,
               isOpen: Boolean(item.isOpen),
               parentFolderId: item.parentFolderId || null,
               visibleTitle: folderTitle
             };
-
-            // If folder is locked, preserve encryption-related fields
-            if (item.locked) {
-              processedFolder.iv = item.iv;
-              processedFolder.keyParams = item.keyParams;
-              processedFolder.encrypted = Boolean(item.encrypted);
-            }
   
             validFolders.push(processedFolder);
           } else {
+            if (item.locked && item.encrypted && !item.content) {
+              invalidItems.push({ item, reason: 'Server-encrypted JSON export does not include importable content' });
+              continue;
+            }
+
             // Process as a note
             const processedNote = {
-              id: item.id || fileDate.getTime(),
+              id: item.id || this.generateImportId(fileDate),
               dateModified: item.dateModified || fileDate.toISOString(),
               dateCreated: item.dateCreated || item.id || fileDate.toISOString(),
               pinned: Boolean(item.pinned),
               caretPosition: Number(item.caretPosition) || 0,
               parentFolderId: item.parentFolderId || null,
-              locked: Boolean(item.locked),
-              encrypted: Boolean(item.encrypted),
+              locked: false,
+              encrypted: false,
               visibleTitle: item.visibleTitle || item.title
             };
   
-            // Handle encrypted content
-            if (item.encrypted || item.encryptedContent) {
-              // Use encryptedContent if available, otherwise use content
-              processedNote.content = item.encryptedContent || item.content;
-              processedNote.keyParams = item.keyParams;
-              processedNote.iv = item.iv;
-            } else {
-              // Handle title in unencrypted content
-              let processedContent = this.sanitizeLegacyContent(item.content);
-              if (item.title && typeof item.title === 'string') {
-                if (processedContent.trim().startsWith('<div>')) {
-                  processedContent = processedContent.replace(
-                    /<div[^>]*>.*?<\/div>/, 
-                    `<div>${item.title}</div>`
-                  );
-                } else {
-                  processedContent = `<div>${item.title}</div>${processedContent}`;
-                }
-              }
-              processedNote.content = processedContent;
+            let processedContent = this.sanitizeLegacyContent(item.content || '');
+            if (looksLikeLegacyHtml(processedContent)) {
+              processedContent = this.legacyHtmlToMarkdown(processedContent);
             }
+            if (item.title && typeof item.title === 'string' && !processedContent.trim()) {
+              processedContent = item.title;
+            }
+            processedNote.content = processedContent;
   
             validNotes.push(processedNote);
           }
@@ -629,10 +642,8 @@ class NoteImportExportService {
    * @returns {Object} - Processed note object
    */
   async handleMarkdownImport(content, filename, fileDate) {
-    const processedContent = this.processEmbeddedContent(content);
-    const title = filename.replace(/\.md$/, '');
-    const formattedContent = this.formatContent(processedContent, title);
-    return [this.createNoteObject(formattedContent, title, fileDate)];
+    const title = filename.replace(/\.md$/i, '');
+    return [this.createNoteObject(content, title, fileDate)];
   }
 
   /**
@@ -643,10 +654,8 @@ class NoteImportExportService {
    * @returns {Object} - Processed note object
    */
   async handleTextImport(content, filename, fileDate) {
-    const processedContent = this.processEmbeddedContent(content);
-    const title = filename.replace(/\.txt$/, '');
-    const formattedContent = this.formatContent(processedContent, title);
-    return [this.createNoteObject(formattedContent, title, fileDate)];
+    const title = filename.replace(/\.txt$/i, '');
+    return [this.createNoteObject(content, title, fileDate)];
   }
 
   /**
@@ -661,6 +670,7 @@ class NoteImportExportService {
    * @returns {Promise<Object>} - Import results
    */
   async importNotes(files, { openLastImported = false, onSuccess, onError, setSelectedId, setNotes } = {}) {
+    this.generatedImportIds = new Set();
     const results = {
       successful: [],
       failed: [],
@@ -685,7 +695,7 @@ class NoteImportExportService {
         // Save successfully parsed notes
         for (const note of importedNotes) {
           try {
-            await storageService.writeNote(note.id, note);
+            await apiService.writeNote(note.id, note);
             results.successful.push({
               id: note.id,
               filename: file.name
@@ -708,7 +718,7 @@ class NoteImportExportService {
     }
   
     // Update notes list to reflect new ordering
-    const updatedNotes = await storageService.getAllNotes();
+    const updatedNotes = await apiService.getAllNotes();
     if (setNotes) {
       const sortedNotes = updatedNotes.sort((a, b) => {
         if (a.pinned && !b.pinned) return -1;

@@ -1,11 +1,15 @@
 import JSZip from 'jszip';
-import { storageService } from './StorageService';
+import { apiService } from './ApiService';
 import { noteSortingService } from './NoteSortingService';
+import { noteImportExportService } from './NoteImportExportService';
 
 export class ZipImportHandler {
+  static usedIds = new Set();
+
   static async processZipFile(file) {
 
     try {
+      this.usedIds = new Set();
       const zip = new JSZip();
       const zipContent = await zip.loadAsync(file);
 
@@ -39,7 +43,7 @@ export class ZipImportHandler {
           const folder = {
             id: this.generateUniqueIdFromDate(entry.date),
             type: 'folder',
-            content: `<div>${folderName}</div>`,
+            content: folderName,
             dateModified: entry.date ? entry.date.toISOString() : new Date().toISOString(),
             pinned: false,
             locked: false,
@@ -82,22 +86,15 @@ export class ZipImportHandler {
               for (const item of notesToProcess) {
                 note = {
                   id: item.id || this.generateUniqueIdFromDate(entry.date),
-                  content: item.content || content,
+                  content: noteImportExportService.contentToMarkdown(item.content || content),
                   dateModified: item.dateModified || (entry.date ? entry.date.toISOString() : new Date().toISOString()),
                   dateCreated: item.dateCreated || item.id || (entry.date ? entry.date.toISOString() : new Date().toISOString()),
                   pinned: item.pinned || false,
                   caretPosition: item.caretPosition || 0,
                   parentFolderId: folders.get(parentFolder)?.id || null,
-                  locked: item.locked || false,
-                  encrypted: item.encrypted || false
+                  locked: false,
+                  encrypted: false
                 };
-  
-                // Preserve encrypted note properties
-                if (item.encrypted) {
-                  note.keyParams = item.keyParams;
-                  note.iv = item.iv;
-                  note.visibleTitle = item.visibleTitle;
-                }
   
                 importedNotes.push(note);
               }
@@ -166,39 +163,17 @@ export class ZipImportHandler {
     return importedNotes;
   }
 
-  // Generate a unique ID based on the file's date, with a tiny random offset to prevent conflicts
+  // Generate a collision-checked ID based on the file's date.
   static generateUniqueIdFromDate(date) {
-    if (!date) return Date.now();
-    
-    // Use the date's timestamp and add a small random offset
-    return date.getTime() + Math.floor(Math.random() * 1000);
+    const base = date ? date.getTime() : Date.now();
+    let id = base;
+    while (this.usedIds.has(id)) id += 1;
+    this.usedIds.add(id);
+    return id;
   }
 
   static formatFileContent(content, fileName, fileExt) {
-    // Remove file extension
-    const title = fileName.replace(/\.[^/.]+$/, '');
-    
-    // Format content as HTML
-    let formattedContent = `<div>${title}</div>`;
-    
-    // Special handling for markdown
-    if (fileExt === 'md') {
-      // Replace markdown links and images
-      content = content.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1">');
-      content = content.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2">$1</a>');
-    }
-    
-    // Split content into lines and wrap each in a div
-    const lines = content.split('\n');
-    lines.forEach(line => {
-      if (line.trim().length > 0) {
-        formattedContent += `<div>${line}</div>`;
-      } else {
-        formattedContent += `<div><br></div>`;
-      }
-    });
-    
-    return formattedContent;
+    return fileExt === 'md' ? content : String(content);
   }
 
   static isZipFile(file) {
@@ -215,11 +190,11 @@ export class ZipImportHandler {
 
       // Save all imported notes
       await Promise.all(importedNotes.map(note => {
-        return storageService.writeNote(note.id, note);
+        return apiService.writeNote(note.id, note);
       }));
 
       // Update notes list
-      const allNotes = await storageService.getAllNotes();
+      const allNotes = await apiService.getAllNotes();
       
       // Sort notes before setting
       const sortedNotes = noteSortingService.sortNotes(allNotes);

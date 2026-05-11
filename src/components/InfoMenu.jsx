@@ -158,7 +158,7 @@ const InfoMenu = ({
     if (isFolder) {
       if (selectedItem.locked) {
         // For locked folders, open password modal
-        passwordModalUtils.openDownloadLockModal(selectedItem.id, selectedItem);
+        passwordModalUtils.openDownloadFolderModal(selectedItem.id, selectedItem);
         setIsOpen(false);
         return;
       }

@@ -85,3 +85,20 @@ Scope: traced JSON/MD/TXT/PDF export and JSON/MD/TXT/ZIP import through `NoteImp
 - Markdown import: works mechanically, but stores legacy HTML instead of markdown.
 - Text import: works mechanically, but stores legacy HTML instead of plain markdown-editor text.
 - ZIP import: works mechanically for simple archives, but imports content as legacy HTML and has collision risk.
+
+## Resolution
+
+- Markdown export now writes the stored markdown string directly for markdown-native notes, while legacy HTML content is converted to markdown first.
+- Plain-text export now intentionally strips common markdown syntax instead of dropping the first line through legacy `<div>` parsing.
+- PDF export now renders markdown to sanitized HTML for headings, lists, checkboxes, code blocks, links, and images. The body title line is removed only when the PDF title option consumes it.
+- Markdown and text import now store plain markdown/editor strings instead of wrapping lines in `<div>` elements or converting markdown links/images to HTML.
+- JSON export now uses a schema-versioned object with the round-trip metadata the client has available. Server-encrypted notes export a metadata-only notice unless the user provides the password and exports decrypted content.
+- JSON import is markdown-aware, accepts folders without plaintext note content, converts legacy HTML content to markdown, and rejects server-encrypted metadata-only exports that do not contain importable plaintext.
+- ZIP import now stores `.md` and `.txt` entries as markdown/plain text, preserves folder names as plain strings, and uses collision-checked generated IDs.
+- Folder ZIP export now uses markdown-aware folder titles and markdown-native note export, including `.txt` extensions for plain-text exports.
+- Folder PDF export now fails explicitly instead of silently downloading JSON.
+- Removed the disabled PDF scale control and sends a fixed scale of `1`.
+
+Deferred:
+- A dedicated backend endpoint for faithful encrypted backup/restore was not added. Current client export can only round-trip plaintext content the client is allowed to see.
+- The broad storage compatibility shims and older diagnostics UI still reference the legacy storage naming.

@@ -4,6 +4,7 @@ import NoteItem from './NoteItem';
 import { storageService } from '../utils/StorageService';
 import { FolderService } from '../utils/folderUtils';
 import { passwordModalUtils } from '../utils/PasswordModalUtils';
+import { noteContentService } from '../utils/NoteContentService';
 
 
 const FolderItem = React.memo(({
@@ -87,12 +88,7 @@ const FolderItem = React.memo(({
   };
 
   const title = useMemo(() => {
-    if (folder?.content?.match) {
-      const extractedTitle = folder.content.match(/<div[^>]*>(.*?)<\/div>/)?.[1];
-      folder.content = folder.visibleTitle;
-      return extractedTitle || folder.visibleTitle;
-    }
-    return folder.visibleTitle || 'Untitled Folder';
+    return folder.visibleTitle || noteContentService.getFirstLine(folder.content) || 'Untitled Folder';
   }, [folder?.content, folder?.visibleTitle]);
 
   const handleContextMenu = useCallback((e) => {

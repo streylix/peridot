@@ -1,5 +1,3 @@
-import html2pdf from 'html2pdf.js';
-
 const looksLikeHtml = (s) => typeof s === 'string' && /<\w+[^>]*>/.test(s.trimStart().slice(0, 32));
 
 const stripMdInline = (line) =>
