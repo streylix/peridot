@@ -20,8 +20,7 @@ const NoteItem = React.memo(({
     if (note.locked && note.visibleTitle) {
       return note.visibleTitle;
     }
-    note.visibleTitle = noteContentService.getFirstLine(note.content)
-    return note.visibleTitle;
+    return note.visibleTitle || noteContentService.getFirstLine(note.content) || 'Untitled';
   }, [note.content, note.locked, note.visibleTitle]);
 
   const preview = useMemo(() => {

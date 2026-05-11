@@ -144,6 +144,36 @@ class NoteCRUDTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["visibleTitle"], "Updated Title")
 
+    def test_update_note_preserves_non_content_derived_visible_title(self):
+        note = make_note(
+            self.user,
+            id=1700000000011,
+            content="I figured it out\nBody",
+            visible_title="8/22/2024",
+        )
+        resp = self.client.put(f"/api/notes/{note.id}/", {
+            "content": "I figured it out\nBody",
+            "dateModified": "2024-06-01T00:00:00Z",
+            "visibleTitle": "8/22/2024",
+        }, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["visibleTitle"], "8/22/2024")
+
+    def test_update_note_allows_explicit_visible_title_change(self):
+        note = make_note(
+            self.user,
+            id=1700000000012,
+            content="I figured it out\nBody",
+            visible_title="8/22/2024",
+        )
+        resp = self.client.put(f"/api/notes/{note.id}/", {
+            "content": "Renamed\nBody",
+            "dateModified": "2024-06-01T00:00:00Z",
+            "visibleTitle": "Renamed",
+        }, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["visibleTitle"], "Renamed")
+
     def test_delete_note(self):
         note = make_note(self.user, id=1700000000004)
         resp = self.client.delete(f"/api/notes/{note.id}/")
@@ -251,6 +281,37 @@ class NoteLockUnlockTests(TestCase):
         note.refresh_from_db()
         self.assertFalse(note.locked)
         self.assertEqual(note.content, "<div>Perm</div>")
+
+    def test_unlock_permanent_preserves_legacy_visible_title_through_noop_save(self):
+        legacy = encrypt_content("I figured it out\nBody", "legacy-pass")
+        note = make_note(
+            self.user,
+            id=1700000001012,
+            content=None,
+            locked=True,
+            encrypted=True,
+            encrypted_content=legacy["encrypted_content"],
+            enc_iv=legacy["iv"],
+            enc_salt=legacy["salt"],
+            enc_iterations=legacy["iterations"],
+            visible_title="8/22/2024",
+            preview_content="",
+        )
+
+        unlock = self.client.post(
+            f"/api/notes/{note.id}/unlock_permanent/",
+            {"password": "legacy-pass"},
+            format="json",
+        )
+        self.assertEqual(unlock.status_code, 200)
+        self.assertEqual(unlock.data["visibleTitle"], "8/22/2024")
+
+        save = self.client.put(f"/api/notes/{note.id}/", {
+            "content": "I figured it out\nBody",
+            "visibleTitle": "8/22/2024",
+        }, format="json")
+        self.assertEqual(save.status_code, 200)
+        self.assertEqual(save.data["visibleTitle"], "8/22/2024")
 
     def test_resave_locked_note_reencrypts(self):
         note = make_note(self.user, id=1700000001005, content="<div>Original</div>")

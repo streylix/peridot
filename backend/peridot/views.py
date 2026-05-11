@@ -186,6 +186,20 @@ def _extract_title(content: str) -> str:
     return (lines[0] if lines else "Untitled")[:500]
 
 
+def _visible_title_tracks_content(note: Note) -> bool:
+    title = (note.visible_title or "").strip()
+    if not title or title == "Untitled":
+        return True
+    if note.content is None:
+        return False
+    return title == _extract_title(note.content)
+
+
+def _refresh_visible_title_if_auto(note: Note, content: str) -> None:
+    if _visible_title_tracks_content(note):
+        note.visible_title = _extract_title(content)
+
+
 def _extract_preview(content: str) -> str:
     """Extract markdown-aware preview text after the title line."""
     if not content:
@@ -475,6 +489,7 @@ def note_detail(request, note_id):
     data = request.data
     content = data.get("content")
     password = data.get("password")
+    original_visible_title = note.visible_title
 
     if note.item_type == Note.ITEM_TYPE_FOLDER and content is not None:
         note.content = content
@@ -495,9 +510,13 @@ def note_detail(request, note_id):
         note.visible_title = _extract_title(content)
         note.preview_content = _extract_preview(content)
     elif content is not None and not note.locked:
+        _refresh_visible_title_if_auto(note, content)
         note.content = content
-        note.visible_title = _extract_title(content)
         note.preview_content = _extract_preview(content)
+
+    visible_title = data.get("visibleTitle", data.get("visible_title"))
+    if visible_title is not None and visible_title != original_visible_title:
+        note.visible_title = str(visible_title).strip()[:500] or "Untitled"
 
     # Apply non-content fields
     for field, model_field in [
