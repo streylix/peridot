@@ -93,6 +93,26 @@ class NoteImportExportService {
       && (keyParams.salt != null || item.salt != null);
   }
 
+  // Older exports lost their iv/salt/iterations but still flag the note locked
+  // with content as a comma-separated byte string. Import these as locked
+  // stubs so the metadata survives; the server cannot decrypt them without
+  // the lost parameters.
+  isLegacyBrokenLockedNote(item) {
+    if (!item || item.type === 'folder') return false;
+    if (item.locked !== true) return false;
+    const hasParams = (item.iv != null) || (item.keyParams && item.keyParams.salt != null);
+    if (hasParams) return false;
+    return typeof item.content === 'string' && /^[\d,\s]+$/.test(item.content.trim());
+  }
+
+  isLegacyEncryptedFolder(item) {
+    if (item?.type !== 'folder' || item.locked !== true) return false;
+    const keyParams = item.keyParams || item.key_params || {};
+    return (Array.isArray(item.content) || item.encryptedContent != null)
+      && (item.iv != null)
+      && (keyParams.salt != null || item.salt != null);
+  }
+
   isLegacyLockedFolder(item) {
     const verificationData = item?.verificationData || item?.verification_data;
     return item?.type === 'folder' && item.locked === true && Boolean(verificationData);
@@ -572,7 +592,22 @@ class NoteImportExportService {
           }
   
           if (item.type === 'folder') {
-            const folderTitle = item.visibleTitle || noteContentService.getFirstLine(item.content || item.title || '');
+            const folderTitle = item.visibleTitle || noteContentService.getFirstLine(typeof item.content === 'string' ? item.content : (item.title || ''));
+            if (this.isLegacyEncryptedFolder(item)) {
+              validFolders.push({
+                ...item,
+                id: item.id || this.generateImportId(fileDate),
+                dateModified: item.dateModified || fileDate.toISOString(),
+                type: 'folder',
+                pinned: Boolean(item.pinned),
+                locked: true,
+                isOpen: false,
+                parentFolderId: item.parentFolderId || null,
+                visibleTitle: folderTitle || 'Untitled Folder',
+                __legacyEncryptedFolderImport: true
+              });
+              continue;
+            }
             if (this.isLegacyLockedFolder(item)) {
               validFolders.push({
                 ...item,
@@ -615,6 +650,22 @@ class NoteImportExportService {
                 parentFolderId: item.parentFolderId || null,
                 visibleTitle: item.visibleTitle || item.visible_title || 'Untitled',
                 __legacyEncryptedImport: true
+              });
+              continue;
+            }
+
+            if (this.isLegacyBrokenLockedNote(item)) {
+              validNotes.push({
+                ...item,
+                id: item.id || this.generateImportId(fileDate),
+                dateModified: item.dateModified || fileDate.toISOString(),
+                type: 'note',
+                pinned: Boolean(item.pinned),
+                locked: true,
+                encrypted: true,
+                parentFolderId: item.parentFolderId || null,
+                visibleTitle: item.visibleTitle || item.visible_title || 'Untitled',
+                __legacyBrokenLockedImport: true
               });
               continue;
             }
@@ -742,15 +793,20 @@ class NoteImportExportService {
         const fileDate = new Date(file.lastModified || Date.now());
         const importedNotes = await handler(content, file.name, fileDate);
         
-        const legacyCount = importedNotes.filter(n => n.__legacyEncryptedImport).length;
-        console.log(`[import] ${importedNotes.length} items, ${legacyCount} legacy-encrypted`);
+        const legacyCount = importedNotes.filter(n =>
+          n.__legacyEncryptedImport || n.__legacyBrokenLockedImport || n.__legacyEncryptedFolderImport
+        ).length;
+        console.log(`[import] ${importedNotes.length} items, ${legacyCount} legacy-locked`);
         // Save successfully parsed notes
         for (const note of importedNotes) {
           try {
-            if (note.__legacyEncryptedImport) {
+            if (note.__legacyEncryptedImport || note.__legacyBrokenLockedImport || note.__legacyEncryptedFolderImport) {
               const legacyPayload = { ...note };
               delete legacyPayload.__legacyEncryptedImport;
-              console.log('[import] legacy POST', { id: note.id, title: note.visibleTitle });
+              delete legacyPayload.__legacyBrokenLockedImport;
+              delete legacyPayload.__legacyEncryptedFolderImport;
+              if (note.__legacyBrokenLockedImport) legacyPayload.legacyBrokenLocked = true;
+              if (note.__legacyEncryptedFolderImport) legacyPayload.legacyEncryptedFolder = true;
               await apiService.importLegacyEncryptedItem(legacyPayload);
             } else {
               await apiService.writeNote(note.id, note);
