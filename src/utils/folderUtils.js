@@ -130,9 +130,13 @@ export class FolderService {
     const content = item.content || '';
     const lines = content.split('\n');
     const updatedContent = lines.length > 1 ? [newName, ...lines.slice(1)].join('\n') : newName;
-    const updatedItem = { ...item, content: updatedContent, dateModified: new Date().toISOString() };
-    await apiService.writeNote(item.id, updatedItem);
-    return updatedItem;
+    const updatedItem = {
+      ...item,
+      content: updatedContent,
+      visibleTitle: newName,
+      dateModified: new Date().toISOString()
+    };
+    return apiService.writeNote(item.id, updatedItem);
   }
 
   static isFolder(item) {

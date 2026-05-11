@@ -171,6 +171,23 @@ class NoteCRUDTests(TestCase):
         self.assertEqual(resp.status_code, 201)
         self.assertEqual(resp.data["type"], "folder")
 
+    def test_update_folder_title_from_markdown_content(self):
+        folder = make_note(
+            self.user,
+            id=1700000000010,
+            content="Old Folder",
+            item_type="folder",
+            visible_title="Old Folder",
+        )
+        resp = self.client.put(f"/api/notes/{folder.id}/", {
+            "content": "New Folder",
+            "dateModified": "2026-05-11T00:00:00Z",
+            "type": "folder",
+        }, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["content"], "New Folder")
+        self.assertEqual(resp.data["visibleTitle"], "New Folder")
+
     def test_list_notes_only_own(self):
         make_note(self.user, id=1700000000007)
         make_note(self.user, id=1700000000008)
@@ -277,3 +294,23 @@ class NoteLockUnlockTests(TestCase):
         self.client.post(f"/api/notes/{folder.id}/lock/", {"password": "correct"}, format="json")
         resp = self.client.post(f"/api/notes/{folder.id}/unlock/", {"password": "wrong"}, format="json")
         self.assertEqual(resp.status_code, 401)
+
+    def test_rename_locked_folder_updates_plain_folder_content(self):
+        folder = make_note(
+            self.user,
+            id=1700000001009,
+            content="Old Locked Folder",
+            item_type="folder",
+            visible_title="Old Locked Folder",
+        )
+        self.client.post(f"/api/notes/{folder.id}/lock/", {"password": "fp"}, format="json")
+        resp = self.client.put(f"/api/notes/{folder.id}/", {
+            "content": "New Locked Folder",
+            "password": "fp",
+        }, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["content"], "New Locked Folder")
+        self.assertEqual(resp.data["visibleTitle"], "New Locked Folder")
+        folder.refresh_from_db()
+        self.assertEqual(folder.content, "New Locked Folder")
+        self.assertFalse(folder.encrypted)

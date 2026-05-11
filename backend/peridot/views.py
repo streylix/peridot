@@ -218,8 +218,11 @@ def note_detail(request, note_id):
     content = data.get("content")
     password = data.get("password")
 
-    # If note is locked and we got plaintext content + password → re-encrypt
-    if note.locked and content is not None and password:
+    if note.item_type == Note.ITEM_TYPE_FOLDER and content is not None:
+        note.content = content
+        note.visible_title = _extract_title(content)
+        note.preview_content = _extract_preview(content)
+    elif note.locked and content is not None and password:
         try:
             enc = encrypt_content(content, password)
         except Exception as e:
