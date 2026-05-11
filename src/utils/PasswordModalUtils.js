@@ -101,9 +101,12 @@ class PasswordModalUtils {
         }
 
         case 'unlock': {
-          const result = await apiService.unlockNote(this.noteId, password);
-          if (!result.success) return { success: false, error: 'Invalid password' };
-          window.dispatchEvent(new CustomEvent('noteUnlockedForEditor', { detail: { note: result.note } }));
+          // Unlock from the right-click / info menu is a permanent unlock — the
+          // user explicitly chose "Unlock" rather than tapping a locked-note
+          // password prompt for a one-off view. The locked-note view's inline
+          // prompt still uses session-only unlock via MainContent's handleUnlock.
+          const unlockedNote = await apiService.unlockNotePermanent(this.noteId, password);
+          window.dispatchEvent(new CustomEvent('noteUpdate', { detail: { note: unlockedNote } }));
           break;
         }
 
