@@ -1,10 +1,14 @@
 import React, { useEffect, useRef } from 'react';
-import { EditorState } from '@codemirror/state';
+import { EditorState, Annotation } from '@codemirror/state';
 import { EditorView, Decoration, ViewPlugin, WidgetType, keymap, placeholder } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
 import { GFM } from '@lezer/markdown';
 import { syntaxTree } from '@codemirror/language';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+
+// Marks transactions we initiate to load a note's content so the update listener
+// doesn't fire a save back to the server for the load itself.
+const syncLoad = Annotation.define();
 
 // Block-level markers — visibility tied to whether the cursor is on the same line.
 const BLOCK_MARK_NAMES = new Set(['HeaderMark', 'QuoteMark', 'ListMark']);
@@ -411,6 +415,8 @@ function MarkdownEditor({ note, onUpdateNote }) {
           livePreview,
           linkClickHandler,
           EditorView.updateListener.of((update) => {
+            const isSyncLoad = update.transactions.some(tr => tr.annotation(syncLoad));
+            if (isSyncLoad) return;
             if (update.docChanged) {
               debouncedSave(update.state.doc.toString());
             }
@@ -458,6 +464,7 @@ function MarkdownEditor({ note, onUpdateNote }) {
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: incoming },
       selection: { anchor: caretPosition },
+      annotations: syncLoad.of(true),
     });
     view.focus();
   }, [note?.id, note?.content]);
