@@ -249,6 +249,54 @@ header.full-width{
   overflow-x: hidden;
 }
 
+.md-editor-wrapper {
+  width: 100%;
+  display: block;
+}
+
+/* Let .main-content be the sole scroller — the host expands as content grows
+   so CodeMirror's auto scroll-into-view doesn't double-scroll. */
+.md-editor-host {
+  min-height: calc(100vh - 80px);
+}
+
+.md-editor-host .cm-editor {
+  outline: none;
+}
+
+.md-editor-host .cm-scroller {
+  /* Disable internal scrolling; the page-level scroller (.main-content) handles it. */
+  overflow: visible;
+  height: auto;
+  min-height: calc(100vh - 80px);
+}
+
+.cm-md-task {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0 0.3em 0 0;
+}
+
+.cm-md-task-box {
+  width: 1em;
+  height: 1em;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.dark-mode .md-editor-host .cm-content {
+  caret-color: #e6e6e6;
+}
+
+.dark-mode .md-editor-host .cm-scroller {
+  color: #e6e6e6;
+}
+
+.dark-mode .md-editor-host .cm-md-quote {
+  color: rgba(255,255,255,0.7);
+  border-left-color: rgba(255,255,255,0.35);
+}
+
 #inner-note{
   min-height: calc(100vh - 40px);
 }
@@ -1392,4 +1440,43 @@ input[type="range"]:disabled::-moz-range-thumb {
 
 .app-loading {
   min-height: 100vh;
+}
+
+.login-subtitle {
+  font-size: 0.85rem;
+  color: #666;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.dark-mode .login-container {
+  background: #1a1a1a;
+  color: #e6e6e6;
+}
+
+.dark-mode .login-card {
+  background: #242424;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+.dark-mode .login-title {
+  color: #e6e6e6;
+}
+
+.dark-mode .login-subtitle {
+  color: #aaa;
+}
+
+.dark-mode .login-input {
+  background: #1c1c1c;
+  border-color: #3a3a3a;
+  color: #e6e6e6;
+}
+
+.dark-mode .login-input::placeholder {
+  color: #888;
+}
+
+.dark-mode .app-loading {
+  background: #1a1a1a;
 }

@@ -79,6 +79,7 @@ DJANGO_APPS = [
 THIRD_PARTY_APPS = [
     "corsheaders",
     "rest_framework",
+    "rest_framework.authtoken",
 ]
 
 LOCAL_APPS = [
@@ -149,6 +150,7 @@ DATABASES = {
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "peridot.authentication.BearerTokenAuthentication",
         "peridot.authentication.CsrfExemptSessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
@@ -159,6 +161,10 @@ REST_FRAMEWORK = {
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
 SESSION_COOKIE_AGE = 86400 * 30  # 30 days
 SESSION_COOKIE_SAMESITE = "Lax"
+# Namespaced cookie names so multiple Django apps on the same host (e.g. via Tailscale)
+# don't clobber each other's sessions.
+SESSION_COOKIE_NAME = "peridot_sessionid"
+CSRF_COOKIE_NAME = "peridot_csrftoken"
 
 # Giphy proxy key (move out of frontend source)
 GIPHY_API_KEY = env("GIPHY_API_KEY", default="GkVHnnWLvZCSOlLfkGF1vyBilm4h4iCS")

@@ -6,4 +6,4 @@ from .models import AppUser
 class AppUserCreationForm(UserCreationForm):
     class Meta(UserCreationForm.Meta):
         model = AppUser
-        fields = ("email",)
+        fields = ("username",)

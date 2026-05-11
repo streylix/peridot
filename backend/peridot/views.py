@@ -3,6 +3,7 @@ import re
 import requests
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
+from rest_framework.authtoken.models import Token
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -26,18 +27,43 @@ from .serializers import NoteSerializer
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def auth_login(request):
-    email = request.data.get("email", "")
+    username = request.data.get("username", "")
     password = request.data.get("password", "")
-    user = authenticate(request, email=email, password=password)
+    new_password = request.data.get("newPassword", "")
+    user = authenticate(request, username=username, password=password)
     if user is None:
         return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    # Allow inline password change during login. Used when must_change_password
+    # is set so the client doesn't need a separate authenticated request.
+    if new_password:
+        if len(new_password) < 6:
+            return Response({"error": "New password must be at least 6 characters"}, status=status.HTTP_400_BAD_REQUEST)
+        if new_password == password:
+            return Response({"error": "New password must differ from current password"}, status=status.HTTP_400_BAD_REQUEST)
+        user.set_password(new_password)
+        user.must_change_password = False
+        user.save()
+        # Re-authenticate against the updated password so the session is bound
+        # to the new credentials.
+        user = authenticate(request, username=username, password=new_password)
+
     login(request, user)
-    return Response({"id": str(user.id), "email": user.email})
+    # Rotate token on login so previous tokens stop working.
+    Token.objects.filter(user=user).delete()
+    token = Token.objects.create(user=user)
+    return Response({
+        "id": str(user.id),
+        "username": user.username,
+        "must_change_password": user.must_change_password,
+        "token": token.key,
+    })
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def auth_logout(request):
+    Token.objects.filter(user=request.user).delete()
     logout(request)
     return Response({"ok": True})
 
@@ -46,7 +72,31 @@ def auth_logout(request):
 @permission_classes([IsAuthenticated])
 def auth_me(request):
     u = request.user
-    return Response({"id": str(u.id), "email": u.email})
+    return Response({
+        "id": str(u.id),
+        "username": u.username,
+        "must_change_password": u.must_change_password,
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def auth_change_password(request):
+    user = request.user
+    current = request.data.get("currentPassword", "")
+    new_password = request.data.get("newPassword", "")
+    if not user.check_password(current):
+        return Response({"error": "Current password is incorrect"}, status=status.HTTP_400_BAD_REQUEST)
+    if not new_password or len(new_password) < 6:
+        return Response({"error": "New password must be at least 6 characters"}, status=status.HTTP_400_BAD_REQUEST)
+    if new_password == current:
+        return Response({"error": "New password must differ from current password"}, status=status.HTTP_400_BAD_REQUEST)
+    user.set_password(new_password)
+    user.must_change_password = False
+    user.save()
+    # Re-login to refresh session after password change
+    login(request, user)
+    return Response({"ok": True})
 
 
 # ---------------------------------------------------------------------------

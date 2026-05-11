@@ -7,53 +7,33 @@
 
 const BASE = '/api';
 
+const TOKEN_KEY = 'peridot.authToken';
+
 class ApiService {
   constructor() {
     // In-memory session passwords for locked-but-unlocked notes.
     // Never persisted to disk/OPFS — clears on tab close.
     this._sessionPasswords = new Map();
+    this._token = (typeof localStorage !== 'undefined') ? localStorage.getItem(TOKEN_KEY) : null;
   }
 
-  // ---------------------------------------------------------------------------
-  // CSRF
-  // ---------------------------------------------------------------------------
-
-  _readCsrfCookie() {
-    const match = document.cookie.match(/csrftoken=([^;]+)/);
-    return match ? match[1] : null;
+  _setToken(token) {
+    this._token = token || null;
+    if (typeof localStorage === 'undefined') return;
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
   }
 
-  async getCsrfToken() {
-    // Always prefer the cookie value — Django validates against it
-    let token = this._readCsrfCookie();
-    if (token) return token;
-
-    // No cookie yet — hit the csrf endpoint to force Django to set it
-    try {
-      await fetch(`${BASE}/auth/csrf/`, { credentials: 'include' });
-      token = this._readCsrfCookie();
-      if (token) return token;
-    } catch (e) {
-      // ignore
-    }
-    return '';
-  }
-
-  async _headers(extra = {}) {
-    const csrf = await this.getCsrfToken();
-    return {
-      'Content-Type': 'application/json',
-      'X-CSRFToken': csrf,
-      ...extra,
-    };
+  _headers(extra = {}) {
+    const headers = { 'Content-Type': 'application/json', ...extra };
+    if (this._token) headers['Authorization'] = `Bearer ${this._token}`;
+    return headers;
   }
 
   async _fetch(path, options = {}) {
-    const headers = await this._headers(options.headers || {});
     const resp = await fetch(`${BASE}${path}`, {
       ...options,
-      headers,
-      credentials: 'include',
+      headers: this._headers(options.headers || {}),
     });
     return resp;
   }
@@ -62,23 +42,38 @@ class ApiService {
   // Auth
   // ---------------------------------------------------------------------------
 
-  async login(email, password) {
+  async login(username, password, newPassword) {
+    const body = newPassword
+      ? { username, password, newPassword }
+      : { username, password };
     const resp = await this._fetch('/auth/login/', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(body),
     });
-    if (!resp.ok) throw new Error('Invalid credentials');
-    return resp.json();
+    if (!resp.ok) {
+      let msg = 'Invalid credentials';
+      try { msg = (await resp.json()).error || msg; } catch {}
+      throw new Error(msg);
+    }
+    const data = await resp.json();
+    if (data.token) this._setToken(data.token);
+    return data;
   }
 
   async logout() {
-    await this._fetch('/auth/logout/', { method: 'POST' });
+    try { await this._fetch('/auth/logout/', { method: 'POST' }); } catch {}
+    this._setToken(null);
     this._sessionPasswords.clear();
   }
 
   async me() {
+    if (!this._token) return null;
     const resp = await this._fetch('/auth/me/');
-    if (resp.status === 403) return null;
+    if (resp.status === 401 || resp.status === 403) {
+      this._setToken(null);
+      return null;
+    }
+    if (!resp.ok) return null;
     return resp.json();
   }
 

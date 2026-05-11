@@ -68,36 +68,43 @@ function PDFExportModal({ isOpen, onClose, noteTitle, onExport }) {
           content: (
             <ItemComponents.SUBSECTION
             title={"Export to PDF"}
-            children={[  
+            children={[
               <ItemPresets.TEXT_SWITCH
+                key="include-title"
                 label={"Include File Name As Title"}
                 value={settings.includeTitle}
                 onChange={(e) => setSettings({ ...settings, includeTitle: e.target.checked })}
               />,
               <ItemPresets.TEXT_DROPDOWN
+                key="page-size"
                 label={"Page size"}
                 value={settings.pageSize}
                 options={pageSizeOptions}
                 onChange={(value) => setSettings({ ...settings, pageSize: value })}
               />,
               <ItemPresets.TEXT_SWITCH
+                key="landscape"
                 label={"Landscape"}
                 value={settings.isLandscape}
                 onChange={(e) => setSettings({ ...settings, isLandscape: e.target.checked })}
               />,
               <ItemPresets.TEXT_DROPDOWN
+                key="margin"
                 label={"Margin"}
                 value={settings.margin}
                 options={marginOptions}
                 onChange={(value) => setSettings({ ...settings, margin: value })}
               />,
               <ItemComponents.CONTAINER
+                key="scale-container"
                 children={[
                   <ItemComponents.TEXT
+                    key="scale-label"
                     label={"Scale"}
                     subtext={"Adjust the content size (Currently unavailable)"}
                   />,
                   <input
+                    key="scale-input"
                     disabled
                     ref={sliderRef}
                     type="range"
@@ -111,7 +118,7 @@ function PDFExportModal({ isOpen, onClose, noteTitle, onExport }) {
                     onMouseUp={() => setIsSliding(false)}
                     onMouseLeave={() => setIsSliding(false)}
                   />,
-                  <div className="scale-value-container">
+                  <div key="scale-value" className="scale-value-container">
                     <ItemComponents.TEXT
                       label={`${settings.scale}%`}
                     />
@@ -119,6 +126,7 @@ function PDFExportModal({ isOpen, onClose, noteTitle, onExport }) {
                 ]}
               />,
               <ItemComponents.BUTTON
+                key="export-btn"
                 primary="primary"
                 onClick={handleExport}
               >

@@ -1,4 +1,4 @@
-from rest_framework.authentication import SessionAuthentication
+from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 
 
 class CsrfExemptSessionAuthentication(SessionAuthentication):
@@ -10,3 +10,9 @@ class CsrfExemptSessionAuthentication(SessionAuthentication):
 
     def enforce_csrf(self, request):
         return  # skip CSRF check
+
+
+class BearerTokenAuthentication(TokenAuthentication):
+    """DRF TokenAuthentication but with the Authorization header keyword 'Bearer'."""
+
+    keyword = "Bearer"

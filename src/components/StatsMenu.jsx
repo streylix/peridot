@@ -37,21 +37,40 @@ const StatsMenu = ({ selectedId, notes }) => {
     }
   }, [isOpen]);
 
+  const stripMarkdown = (md) =>
+    md
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/`[^`]*`/g, ' ')
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/(\*\*|__|~~|`|\*|_)/g, '')
+      .replace(/^\s*#{1,6}\s*/gm, '')
+      .replace(/^\s*[-*+]\s+\[(?: |x|X)\]\s*/gm, '')
+      .replace(/^\s*[-*+]\s+/gm, '')
+      .replace(/^\s*\d+\.\s+/gm, '')
+      .replace(/^\s*>\s?/gm, '');
+
+  const looksLikeHtml = (s) => typeof s === 'string' && /<\w+[^>]*>/.test(s.trimStart().slice(0, 32));
+
   const countWordsAndChars = (content) => {
-      // Get the editor content div
-      const editorContent = document.querySelector('#inner-note');
-      if (!editorContent) {
-        return { words: 0, chars: 0 };
-      }
-  
-      // Get text content from the editor
-      const text = editorContent.textContent || '';
-      
-      // Count words and characters
-      const words = text.trim().split(/\s+/).filter(word => word.length > 0);
-      const chars = text.replace(/\s/g, '').length;
-  
-      return {words: words.length, chars};
+    if (!content) return { words: 0, chars: 0 };
+
+    // Prefer the live editor's doc (most up-to-date, even before save).
+    const view = typeof window !== 'undefined' ? window.__peridotCMView : null;
+    let text;
+    if (view) {
+      text = stripMarkdown(view.state.doc.toString());
+    } else if (looksLikeHtml(content)) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = content;
+      text = tmp.textContent || '';
+    } else {
+      text = stripMarkdown(content);
+    }
+
+    const words = text.trim().split(/\s+/).filter((w) => w.length > 0);
+    const chars = text.replace(/\s/g, '').length;
+    return { words: words.length, chars };
   };
 
   const formatDate = (dateString) => {

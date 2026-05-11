@@ -18,6 +18,15 @@
     "e2e:debug": "playwright test --debug"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.10.3",
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/language": "^6.12.3",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/view": "^6.41.1",
+    "@lezer/common": "^1.5.2",
+    "@lezer/highlight": "^1.2.3",
+    "@lezer/markdown": "^1.6.3",
+    "codemirror": "^6.0.2",
     "html2pdf.js": "^0.10.2",
     "jszip": "^3.10.1",
     "lucide-react": "^0.471.1",

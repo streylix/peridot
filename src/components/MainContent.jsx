@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import NoteEditor from './NoteEditor';
+import MarkdownEditor from './MarkdownEditor';
 import EmptyState from './EmptyState';
 import LockedWindow from './LockedWindow';
 import { noteImportExportService } from '../utils/NoteImportExportService';
@@ -275,11 +276,9 @@ function MainContent({
           note={note}
         />
       ) : (
-        <NoteEditor
+        <MarkdownEditor
           note={decryptedNote || note}
           onUpdateNote={handleUpdateNote}
-          gifToAdd={gifToAdd}
-          onGifAdded={onGifAdded}
         />
       )}
     </div>

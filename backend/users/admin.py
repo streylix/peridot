@@ -5,18 +5,18 @@ from .models import AppUser
 
 @admin.register(AppUser)
 class AppUserAdmin(UserAdmin):
-    ordering = ["email"]
-    list_display = ["email", "first_name", "last_name", "is_staff", "is_active", "date_joined"]
+    ordering = ["username"]
+    list_display = ["username", "first_name", "last_name", "is_staff", "is_active", "must_change_password", "date_joined"]
     fieldsets = (
-        (None, {"fields": ("email", "password")}),
+        (None, {"fields": ("username", "password")}),
         ("Personal info", {"fields": ("first_name", "last_name")}),
-        ("Permissions", {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")}),
+        ("Permissions", {"fields": ("is_active", "is_staff", "is_superuser", "must_change_password", "groups", "user_permissions")}),
         ("Important dates", {"fields": ("last_login", "date_joined")}),
     )
     add_fieldsets = (
         (None, {
             "classes": ("wide",),
-            "fields": ("email", "password1", "password2"),
+            "fields": ("username", "password1", "password2"),
         }),
     )
-    search_fields = ["email", "first_name", "last_name"]
+    search_fields = ["username", "first_name", "last_name"]
