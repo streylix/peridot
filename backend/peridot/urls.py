@@ -9,6 +9,11 @@ urlpatterns = [
     path("auth/change_password/", views.auth_change_password, name="auth-change-password"),
     path("auth/csrf/", views.csrf_token, name="csrf-token"),
 
+    # Audio
+    path("audio/transcribe/", views.audio_transcribe, name="audio-transcribe"),
+    path("audio/upload/", views.audio_upload, name="audio-upload"),
+    path("audio/<uuid:audio_id>/", views.audio_detail, name="audio-detail"),
+
     # Notes
     path("notes/", views.notes_list, name="notes-list"),
     path("notes/import_legacy_encrypted/", views.legacy_encrypted_import, name="legacy-encrypted-import"),

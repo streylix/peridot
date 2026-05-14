@@ -38,6 +38,26 @@ class ApiService {
     return resp;
   }
 
+  async _fetchForm(path, formData, options = {}) {
+    const headers = { ...(options.headers || {}) };
+    if (this._token) headers['Authorization'] = `Bearer ${this._token}`;
+    return fetch(`${BASE}${path}`, {
+      ...options,
+      method: options.method || 'POST',
+      body: formData,
+      headers,
+    });
+  }
+
+  async _fetchBlob(path, options = {}) {
+    const headers = { ...(options.headers || {}) };
+    if (this._token) headers['Authorization'] = `Bearer ${this._token}`;
+    return fetch(`${BASE}${path}`, {
+      ...options,
+      headers,
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Auth
   // ---------------------------------------------------------------------------
@@ -221,6 +241,36 @@ class ApiService {
     if (!resp.ok) return [];
     const data = await resp.json();
     return data.data || [];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Audio
+  // ---------------------------------------------------------------------------
+
+  async uploadVoiceNoteAudio(blob, duration) {
+    const form = new FormData();
+    form.append('audio', blob, 'voice-note.webm');
+    form.append('duration', String(duration || 0));
+    const resp = await this._fetchForm('/audio/upload/', form);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || 'Failed to save voice note audio');
+    return data;
+  }
+
+  async getVoiceNoteAudioObjectUrl(audioId) {
+    const resp = await this._fetchBlob(`/audio/${audioId}/`);
+    if (!resp.ok) throw new Error('Failed to load voice note audio');
+    return URL.createObjectURL(await resp.blob());
+  }
+
+  async transcribeAudio({ audioDataUrl, audioId }) {
+    const resp = await this._fetch('/audio/transcribe/', {
+      method: 'POST',
+      body: JSON.stringify(audioId ? { audioId } : { audioDataUrl }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || 'Failed to transcribe audio');
+    return data.transcript || '';
   }
 
   // ---------------------------------------------------------------------------

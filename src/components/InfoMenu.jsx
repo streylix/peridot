@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { CircleEllipsis, Lock, Pin, Gift, Trash2, Download, Edit2, FileText } from 'lucide-react';
+import { CircleEllipsis, Lock, Pin, Gift, Trash2, Download, Edit2, FileText, Mic } from 'lucide-react';
 import { passwordModalUtils } from '../utils/PasswordModalUtils';
 import { noteImportExportService } from '../utils/NoteImportExportService';
 import { FolderService } from '../utils/folderUtils';
@@ -12,6 +12,7 @@ const InfoMenu = ({
   onTogglePin,
   onDeleteNote,
   onGifModalOpen,
+  onVoiceNoteStart,
   position = null,
   onClose,
   downloadNoteId,
@@ -287,6 +288,19 @@ const InfoMenu = ({
       onClick: () => {
         if (selectedItem && !isFolder && onGifModalOpen) {
           onGifModalOpen();
+          setIsOpen(false);
+          if (onClose) onClose();
+        }
+      },
+      show: !position && !FolderService.isFolder(selectedItem) && !!selectedItem,
+      disabled: isFolder && !!selectedItem,
+    },
+    {
+      icon: Mic,
+      label: 'Add Voice Note',
+      onClick: () => {
+        if (selectedItem && !isFolder && onVoiceNoteStart) {
+          onVoiceNoteStart();
           setIsOpen(false);
           if (onClose) onClose();
         }

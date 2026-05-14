@@ -28,6 +28,7 @@ function Header({
   canGoBack, 
   onDebugClick, 
   onGifModalOpen,
+  onVoiceNoteStart,
   isDownloadable,
   setDownloadable,
   setDownloadNoteId,
@@ -152,6 +153,7 @@ function Header({
               onTogglePin={onTogglePin}
               onDeleteNote={onDeleteNote}
               onGifModalOpen={onGifModalOpen}
+              onVoiceNoteStart={onVoiceNoteStart}
               isDownloadable={isDownloadable}
               setPdfExportNote={setPdfExportNote}
               setIsPdfExportModalOpen={setIsPdfExportModalOpen}

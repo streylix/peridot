@@ -1,10 +1,13 @@
 import base64
 import binascii
+import os
 import re
+import tempfile
 
 import requests
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
+from django.http import FileResponse
 from rest_framework.authtoken.models import Token
 from django.utils import timezone
 from rest_framework import status
@@ -18,8 +21,105 @@ from .encryption import (
     encrypt_verification,
     verify_password,
 )
-from .models import Note
+from .models import Note, VoiceNoteAudio
 from .serializers import NoteSerializer
+
+_WHISPER_MODEL = None
+_WHISPER_MODEL_DEVICE = None
+
+_AUDIO_DATA_URL_RE = re.compile(r"^data:(audio/[-+.\w]+)(?:;[^,]*)?;base64,(.+)$", re.DOTALL)
+_AUDIO_SUFFIXES = {
+    "audio/webm": ".webm",
+    "audio/wav": ".wav",
+    "audio/wave": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/mp4": ".mp4",
+    "audio/ogg": ".ogg",
+}
+_MAX_TRANSCRIBE_BYTES = int(os.getenv("WHISPER_MAX_AUDIO_BYTES", str(512 * 1024 * 1024)))
+_MAX_VOICE_AUDIO_BYTES = int(os.getenv("VOICE_NOTE_MAX_AUDIO_BYTES", str(512 * 1024 * 1024)))
+
+
+def _whisper_preferred_device() -> str:
+    requested = os.getenv("WHISPER_DEVICE", "auto").strip().lower()
+    if requested == "cpu":
+        return "cpu"
+    try:
+        import torch
+    except Exception:
+        return "cpu"
+    if requested == "cuda":
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
+def _load_whisper_model(device: str):
+    import whisper
+    return whisper.load_model("base", device=device)
+
+
+def _get_whisper_model():
+    global _WHISPER_MODEL, _WHISPER_MODEL_DEVICE
+
+    device = _whisper_preferred_device()
+    if _WHISPER_MODEL is not None and _WHISPER_MODEL_DEVICE == device:
+        return _WHISPER_MODEL, _WHISPER_MODEL_DEVICE
+
+    try:
+        _WHISPER_MODEL = _load_whisper_model(device)
+        _WHISPER_MODEL_DEVICE = device
+    except Exception:
+        if device == "cpu":
+            raise
+        _WHISPER_MODEL = _load_whisper_model("cpu")
+        _WHISPER_MODEL_DEVICE = "cpu"
+
+    return _WHISPER_MODEL, _WHISPER_MODEL_DEVICE
+
+
+def _transcribe_with_whisper(audio_path: str):
+    global _WHISPER_MODEL, _WHISPER_MODEL_DEVICE
+
+    model, device = _get_whisper_model()
+    try:
+        return model.transcribe(audio_path, fp16=(device == "cuda"))
+    except Exception:
+        if device == "cpu":
+            raise
+        _WHISPER_MODEL = _load_whisper_model("cpu")
+        _WHISPER_MODEL_DEVICE = "cpu"
+        return _WHISPER_MODEL.transcribe(audio_path, fp16=False)
+
+
+def _decode_audio_data_url(data_url: str) -> tuple[bytes, str]:
+    if not isinstance(data_url, str):
+        raise ValueError("audioDataUrl is required")
+
+    match = _AUDIO_DATA_URL_RE.match(data_url)
+    if not match:
+        raise ValueError("audioDataUrl must be a base64 audio data URL")
+
+    mime_type, encoded = match.groups()
+    if not mime_type.startswith("audio/"):
+        raise ValueError("audioDataUrl must contain audio")
+
+    try:
+        audio_bytes = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError):
+        raise ValueError("audioDataUrl contains invalid base64")
+
+    if not audio_bytes:
+        raise ValueError("audioDataUrl is empty")
+    if len(audio_bytes) > _MAX_TRANSCRIBE_BYTES:
+        raise ValueError("audioDataUrl is too large")
+
+    return audio_bytes, _AUDIO_SUFFIXES.get(mime_type, ".audio")
+
+
+def _get_voice_audio_for_request(request, audio_id: str) -> VoiceNoteAudio:
+    return VoiceNoteAudio.objects.get(id=audio_id, user=request.user)
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +211,89 @@ def auth_change_password(request):
 def csrf_token(request):
     from django.middleware.csrf import get_token
     return Response({"csrfToken": get_token(request)})
+
+
+# ---------------------------------------------------------------------------
+# Audio
+# ---------------------------------------------------------------------------
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def audio_transcribe(request):
+    temp_path = None
+    try:
+        audio_id = request.data.get("audioId")
+        if audio_id:
+            audio = _get_voice_audio_for_request(request, audio_id)
+            temp_path = audio.audio.path
+        else:
+            try:
+                audio_bytes, suffix = _decode_audio_data_url(request.data.get("audioDataUrl"))
+            except ValueError as exc:
+                return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as audio_file:
+                audio_file.write(audio_bytes)
+                temp_path = audio_file.name
+
+        result = _transcribe_with_whisper(temp_path)
+        transcript = (result.get("text") or "").strip()
+        return Response({"transcript": transcript})
+    except VoiceNoteAudio.DoesNotExist:
+        return Response({"error": "Audio not found"}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as exc:
+        return Response(
+            {"error": f"Transcription failed: {exc}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    finally:
+        if temp_path and not request.data.get("audioId"):
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def audio_upload(request):
+    audio_file = request.FILES.get("audio")
+    if not audio_file:
+        return Response({"error": "audio file is required"}, status=status.HTTP_400_BAD_REQUEST)
+    if audio_file.size > _MAX_VOICE_AUDIO_BYTES:
+        return Response({"error": "audio file is too large"}, status=status.HTTP_400_BAD_REQUEST)
+
+    content_type = audio_file.content_type or "audio/webm"
+    suffix = _AUDIO_SUFFIXES.get(content_type, ".audio")
+    try:
+        duration = float(request.data.get("duration") or 0)
+    except (TypeError, ValueError):
+        duration = None
+    voice_audio = VoiceNoteAudio(
+        user=request.user,
+        content_type=content_type,
+        size=audio_file.size,
+        duration=duration,
+    )
+    voice_audio.audio.save(f"{voice_audio.id}{suffix}", audio_file, save=True)
+    return Response({
+        "id": str(voice_audio.id),
+        "contentType": voice_audio.content_type,
+        "size": voice_audio.size,
+        "duration": voice_audio.duration,
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def audio_detail(request, audio_id):
+    try:
+        audio = _get_voice_audio_for_request(request, audio_id)
+    except VoiceNoteAudio.DoesNotExist:
+        return Response({"error": "Audio not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    response = FileResponse(audio.audio.open("rb"), content_type=audio.content_type)
+    response["Content-Length"] = str(audio.size)
+    return response
 
 
 # ---------------------------------------------------------------------------

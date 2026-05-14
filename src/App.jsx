@@ -26,6 +26,7 @@ function App() {
   const [currentModal, setCurrentModal] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [gifToAdd, setGifToAdd] = useState(null);
+  const [voiceNoteRequest, setVoiceNoteRequest] = useState(null);
   const [notes, setNotes] = useState([]);
   const [isGifModalOpen, setIsGifModalOpen] = useState(false);
   const [downloadNoteId, setDownloadNoteId] = useState(null);
@@ -206,6 +207,10 @@ function App() {
     setGifToAdd(gifUrl);
   };
 
+  const handleStartVoiceNote = () => {
+    setVoiceNoteRequest({ id: Date.now() });
+  };
+
   const updateNote = async (updates, updateModified = true) => {
     await noteUpdateService.queueUpdate(selectedId, updates, updateModified);
   };
@@ -238,6 +243,7 @@ function App() {
         canGoBack={noteNavigation.canGoBack()}
         onDebugClick={() => setCurrentModal('small')}
         onGifModalOpen={handleGifModalOpen}
+        onVoiceNoteStart={handleStartVoiceNote}
         setPdfExportNote={setPdfExportNote}
         setIsPdfExportModalOpen={setIsPdfExportModalOpen}
         onToggleSidebar={handleToggleSidebar}
@@ -264,6 +270,8 @@ function App() {
           onUpdateNote={updateNote}
           gifToAdd={gifToAdd} 
           onGifAdded={setGifToAdd}
+          voiceNoteRequest={voiceNoteRequest}
+          onVoiceNoteRequestHandled={setVoiceNoteRequest}
           setNotes={setNotes}
           onNoteSelect={handleNoteSelect}
           notes={notes}

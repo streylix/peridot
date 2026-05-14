@@ -13,6 +13,8 @@ function MainContent({
   onUpdateNote, 
   gifToAdd, 
   onGifAdded, 
+  voiceNoteRequest,
+  onVoiceNoteRequestHandled,
   setNotes,
   onNoteSelect
 }) {
@@ -288,6 +290,8 @@ function MainContent({
         <MarkdownEditor
           note={decryptedNote || note}
           onUpdateNote={handleUpdateNote}
+          voiceNoteRequest={voiceNoteRequest}
+          onVoiceNoteRequestHandled={onVoiceNoteRequestHandled}
         />
       )}
     </div>

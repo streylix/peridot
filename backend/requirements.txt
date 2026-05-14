@@ -8,3 +8,4 @@ psycopg2-binary==2.9.9
 sqlparse==0.5.3
 whitenoise==6.9.0
 requests==2.32.3
+openai-whisper

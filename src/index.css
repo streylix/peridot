@@ -354,6 +354,310 @@ header.full-width{
   border-color: #2ee985;
 }
 
+.cm-voice-note {
+  display: grid;
+  grid-template-columns: 32px 32px 44px minmax(120px, 320px) 44px;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 520px);
+  padding: 8px 10px;
+  margin: 4px 0;
+  border: 1px solid rgba(10, 163, 79, 0.28);
+  border-radius: 6px;
+  background: rgba(10, 163, 79, 0.08);
+  color: #1f2937;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.cm-voice-note:has(.cm-voice-note-transcript-toggle) {
+  grid-template-columns: 32px 32px 44px minmax(120px, 320px) 44px 32px;
+}
+
+.cm-voice-note-play {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #0aa34f;
+  color: white;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cm-voice-note-play svg,
+.cm-voice-note-cancel svg,
+.cm-voice-note-menu-button svg,
+.cm-voice-note-transcript-toggle svg,
+.cm-voice-note-copy svg {
+  width: 16px;
+  height: 16px;
+}
+
+.cm-voice-note-menu-wrap {
+  position: relative;
+  width: 32px;
+  height: 32px;
+}
+
+.cm-voice-note-menu-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(31, 41, 55, 0.1);
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cm-voice-note-menu {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  z-index: 20;
+  display: none;
+  min-width: 96px;
+  padding: 4px;
+  border-radius: 6px;
+  background: white;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+
+.cm-voice-note-menu-wrap.is-open .cm-voice-note-menu {
+  display: block;
+}
+
+.cm-voice-note-menu button {
+  width: 100%;
+  min-height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.cm-voice-note-menu button:hover {
+  background: rgba(31, 41, 55, 0.08);
+}
+
+.cm-voice-note-menu button:last-child {
+  color: #dc2626;
+}
+
+.cm-voice-note-menu button:last-child:hover {
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.cm-voice-note-menu button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.cm-voice-note-transcript-toggle {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(31, 41, 55, 0.1);
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cm-voice-note-transcript-toggle:disabled {
+  cursor: default;
+  opacity: 0.25;
+}
+
+.cm-voice-note-transcript-panel {
+  display: none;
+  grid-column: 1 / -1;
+  position: relative;
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 10px 38px 10px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #1f2937;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.cm-voice-note.is-transcript-open .cm-voice-note-transcript-panel {
+  display: block;
+}
+
+.cm-voice-note-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: rgba(31, 41, 55, 0.08);
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s ease;
+}
+
+.cm-voice-note-transcript-panel:hover .cm-voice-note-copy,
+.cm-voice-note-copy:focus-visible {
+  opacity: 1;
+}
+
+.cm-voice-note-menu-button.is-loading::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(10, 163, 79, 0.25);
+  border-top-color: #0aa34f;
+  border-radius: 50%;
+  animation: voice-note-spin 0.8s linear infinite;
+}
+
+.cm-voice-note-menu-button.is-loading {
+  cursor: wait;
+}
+
+@keyframes voice-note-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.cm-voice-note-stop {
+  background: #dc2626;
+}
+
+.cm-voice-note-seek {
+  position: relative;
+  width: 100%;
+  height: 12px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(31, 41, 55, 0.18);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.cm-voice-note-progress {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: #0aa34f;
+  pointer-events: none;
+}
+
+.cm-voice-waveform {
+  width: 100%;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.cm-voice-waveform span {
+  flex: 1;
+  min-width: 2px;
+  height: 18%;
+  border-radius: 999px;
+  background: #0aa34f;
+  transition: height 80ms linear;
+}
+
+.cm-voice-note-cancel {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(31, 41, 55, 0.1);
+  color: inherit;
+  cursor: pointer;
+}
+
+.cm-voice-note-recording {
+  grid-template-columns: 32px minmax(120px, 320px) 44px 32px;
+  border-color: rgba(107, 114, 128, 0.28);
+  background: rgba(107, 114, 128, 0.12);
+}
+
+.cm-voice-note-recording .cm-voice-waveform span {
+  background: #dc2626;
+}
+
+.cm-voice-note-recording .cm-voice-note-current {
+  text-align: right;
+}
+
+.cm-voice-note-current,
+.cm-voice-note-total {
+  font-variant-numeric: tabular-nums;
+  color: rgba(31, 41, 55, 0.72);
+}
+
+.dark-mode .cm-voice-note {
+  background: rgba(10, 163, 79, 0.16);
+  border-color: rgba(46, 233, 133, 0.35);
+  color: #e6e6e6;
+}
+
+.dark-mode .cm-voice-note-current,
+.dark-mode .cm-voice-note-total {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.dark-mode .cm-voice-note-seek {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.dark-mode .cm-voice-note-cancel {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.dark-mode .cm-voice-note-menu-button {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.dark-mode .cm-voice-note-transcript-toggle {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.dark-mode .cm-voice-note-menu {
+  background: #262626;
+}
+
+.dark-mode .cm-voice-note-transcript-panel {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e6e6e6;
+}
+
+.dark-mode .cm-voice-note-recording {
+  border-color: rgba(156, 163, 175, 0.32);
+  background: rgba(156, 163, 175, 0.14);
+}
+
 #inner-note{
   min-height: calc(100vh - 40px);
 }

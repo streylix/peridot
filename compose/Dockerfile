@@ -1,5 +1,5 @@
 # --- Builder Stage ---
-FROM python:3.12-alpine AS builder
+FROM python:3.12-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -7,18 +7,19 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-RUN apk add --no-cache \
-    build-base \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     g++ \
-    libpq \
     libpq-dev \
     gettext \
     git \
-    openssl-dev \
+    openssl \
     libffi-dev \
     cargo \
-    rust \
-    cmake
+    rustc \
+    cmake \
+    ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN python -m venv /opt/venv
 
@@ -32,7 +33,7 @@ RUN pip install --no-cache-dir -r /requirements.dev.txt
 COPY ./backend /app
 
 # --- Runtime Stage ---
-FROM python:3.12-alpine
+FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -40,14 +41,15 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-RUN apk add --no-cache libpq gettext dos2unix
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    gettext \
+    dos2unix \
+    ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /app /app
 
 COPY ./compose/start.sh /start
 RUN dos2unix /start && chmod +x /start
-
-RUN adduser -u 5678 -D appuser
-RUN chown -R appuser /app && chown -R appuser /opt/venv
-USER appuser
