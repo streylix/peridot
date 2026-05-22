@@ -587,6 +587,7 @@ header.full-width{
 .cm-voice-note-cancel {
   width: 32px;
   height: 32px;
+  padding: 0;
   border: none;
   border-radius: 50%;
   display: inline-flex;
@@ -1845,4 +1846,49 @@ input[type="range"]:disabled::-moz-range-thumb {
 
 .dark-mode .app-loading {
   background: #1a1a1a;
+}
+
+/* ===== Embed mode (iOS WKWebView host) ===================================== */
+/* When the React app is loaded with ?embed=1 we render only the
+   MarkdownEditor — no sidebar, header, or modals — and stretch it to fill the
+   viewport so the iOS WKWebView gets a clean full-bleed editor surface.       */
+html:has(.embed-editor-host),
+html:has(.embed-loading),
+html:has(.embed-locked) {
+  background: #1e1e1e;
+}
+
+.embed-editor-host,
+.embed-loading,
+.embed-locked,
+.embed-error {
+  position: fixed;
+  inset: 0;
+  background: #1e1e1e;
+  color: #e6e6e6;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.embed-loading {
+  align-items: center;
+  justify-content: center;
+}
+
+.embed-error {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.embed-editor-host .md-editor-host {
+  flex: 1;
+  min-height: 0;
+}
+
+.embed-editor-host .cm-scroller {
+  padding-top: 16px;
+  padding-bottom: env(safe-area-inset-bottom, 16px);
 }

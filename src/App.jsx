@@ -9,6 +9,7 @@ import PDFExportModal from './components/PDFExportModal';
 import MainContent from './components/MainContent.jsx';
 import PasswordModal from './components/PasswordModal.jsx';
 import RenameModal from './components/RenameModal.jsx';
+import EmbedEditor from './components/EmbedEditor.jsx';
 
 import { encryptNote, decryptNote, reEncryptNote, permanentlyUnlockNote } from './utils/encryption';
 import { passwordStorage } from './utils/PasswordStorageService';
@@ -20,7 +21,13 @@ import { noteImportExportService } from './utils/NoteImportExportService.js';
 import { noteSortingService } from './utils/NoteSortingService.js';
 import { FolderService } from './utils/folderUtils.js';
 
-function App() {
+// Embed mode short-circuits all chrome — used by the iOS WKWebView so the
+// mobile app gets the exact same MarkdownEditor (and voice notes) as desktop.
+// Checked once at module load; the iOS host always loads a fresh page per note.
+const IS_EMBED = typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).get('embed') === '1';
+
+function AppFull() {
   const [isAuthenticated, setIsAuthenticated] = useState(null); // null = loading
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentModal, setCurrentModal] = useState(null);
@@ -320,6 +327,11 @@ function App() {
       />
     </div>
   );
+}
+
+function App() {
+  if (IS_EMBED) return <EmbedEditor />;
+  return <AppFull />;
 }
 
 export default App;
